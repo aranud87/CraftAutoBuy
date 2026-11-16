@@ -1,6 +1,10 @@
 # CraftAutoBuy
 
-**1.0.0 — Initial release**
+**1.0.1 — Version locale en cours d’essai**
+
+La dernière version stable reste **1.0.0 — Initial release**. Cette évolution
+ajoute une tentative de lecture des recettes à la connexion, avec une indication
+d'initialisation dans CAB. Son comportement dans le client reste à confirmer.
 
 CraftAutoBuy ajoute un catalogue de recettes fabricables dans la fenêtre des
 métiers de **World of Warcraft: Forever 1.60.1**. Il calcule les possibilités
@@ -19,11 +23,19 @@ fenêtre habituelle du métier courant.
 2. Le fichier doit se trouver à cet emplacement :
    `Interface/AddOns/CraftAutoBuy/CraftAutoBuy.toc`.
 3. Relance le jeu et active CraftAutoBuy dans la liste des addons.
-4. Ouvre chacun de tes métiers une fois pour remplir le catalogue. Rouvre un
-   métier pour actualiser ses recettes après en avoir appris de nouvelles.
+4. À la connexion, CAB tente de lire les recettes des métiers connus en
+   arrière-plan. Une indication d'initialisation affiche l'avancement dans CAB.
+   Si les données du jeu ne sont pas encore disponibles, CAB indique les métiers
+   en attente. Tu peux toujours ouvrir un métier pour actualiser ses recettes.
 
 Aucune dépendance n'est nécessaire. Le dossier de l'addon doit conserver son
 nom **CraftAutoBuy**, notamment pour charger son icône.
+
+Cette initialisation ne déclenche aucun achat ni aucune fabrication et ne
+demande pas de confirmer une fenêtre de rappel. Les composants de l'onglet
+**Stock** apparaissent après la première lecture des recettes. La banque est
+indépendante : l'initialisation ne lit pas une banque fermée et ne remplace pas
+la première visite nécessaire pour en mémoriser le contenu.
 
 ## Acheter puis fabriquer
 

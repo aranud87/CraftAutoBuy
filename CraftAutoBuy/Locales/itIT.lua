@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("itIT", {
+    INITIALIZING_RECIPES = "Inizializzazione delle ricette in secondo piano… (%d/%d professioni)",
+    INITIALIZATION_WAITING = "Lettura delle ricette in attesa dei dati del gioco: %s.",
+    STOCK_INITIALIZING = "I reagenti appariranno dopo la prima lettura delle ricette.",
     STOP_BATCH = "Ferma",
     STOP_BATCH_HELP = "Richiede l’interruzione del lotto in corso. Gli oggetti già creati vengono conservati.",
     CANCEL_OPERATION_HELP = "Abbandona l’operazione in corso. Un ordine già inviato al mercante potrebbe ancora arrivare.",

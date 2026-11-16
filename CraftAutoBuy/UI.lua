@@ -694,7 +694,9 @@ local function renderList()
     widgets.empty:SetShown(#entries == 0)
     if #entries == 0 then
         local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
-        widgets.empty:SetText(L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or ""))
+        local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
+        widgets.empty:SetText(initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
+            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or "")))
     end
 end
 
@@ -944,6 +946,7 @@ end
 function UI.Show()
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then return false end
     if not UI.Install() then return false end
+    if ns.Bootstrap then ns.Bootstrap.Wake() end
     local previousPage
     if ns.StockUI and ns.StockUI.IsActive() then previousPage = ns.StockUI.NativeTabSelected() end
     if not UI.IsActive() then

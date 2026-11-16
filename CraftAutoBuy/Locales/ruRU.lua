@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("ruRU", {
+    INITIALIZING_RECIPES = "Инициализация рецептов в фоновом режиме… (%d/%d профессий)",
+    INITIALIZATION_WAITING = "Ожидание данных игры для чтения рецептов: %s.",
+    STOCK_INITIALIZING = "Реагенты появятся после первого чтения рецептов.",
     STOP_BATCH = "Остановить",
     STOP_BATCH_HELP = "Запрашивает остановку текущей партии. Уже созданные предметы сохраняются.",
     CANCEL_OPERATION_HELP = "Отменяет текущую операцию. Заказ, уже отправленный торговцу, ещё может быть получен.",

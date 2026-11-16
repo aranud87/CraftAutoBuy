@@ -5,6 +5,9 @@ local _, ns = ...
 -- Add another Locales/<code>.lua file and its TOC entry before VendorData.lua
 -- to translate the addon without changing its logic.
 ns.Locale.RegisterLocale("frFR", {
+    INITIALIZING_RECIPES = "Initialisation des recettes en arrière-plan… (%d/%d métiers)",
+    INITIALIZATION_WAITING = "Lecture des recettes en attente des données du jeu : %s.",
+    STOCK_INITIALIZING = "Les composants apparaîtront après la première lecture des recettes.",
     STOP_BATCH = "Arrêter",
     STOP_BATCH_HELP = "Demande l’arrêt du lot en cours. Les objets déjà fabriqués sont conservés.",
     CANCEL_OPERATION_HELP = "Abandonne l’opération en cours. Une commande déjà envoyée au vendeur peut encore arriver.",

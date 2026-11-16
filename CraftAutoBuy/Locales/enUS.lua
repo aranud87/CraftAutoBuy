@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- English is the fallback for unavailable languages and untranslated keys.
 ns.Locale.RegisterLocale("enUS", {
+    INITIALIZING_RECIPES = "Initializing recipes in the background… (%d/%d professions)",
+    INITIALIZATION_WAITING = "Recipe reading is waiting for game data: %s.",
+    STOCK_INITIALIZING = "Reagents will appear after recipes are read for the first time.",
     STOP_BATCH = "Stop",
     STOP_BATCH_HELP = "Request that the current batch stop. Items already crafted are kept.",
     CANCEL_OPERATION_HELP = "Abandon the current operation. An order already sent to the merchant may still arrive.",

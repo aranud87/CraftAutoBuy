@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("zhCN", {
+    INITIALIZING_RECIPES = "正在后台初始化配方…（%d/%d 个专业）",
+    INITIALIZATION_WAITING = "正在等待游戏数据以读取配方：%s。",
+    STOCK_INITIALIZING = "首次读取配方后会显示材料。",
     STOP_BATCH = "停止",
     STOP_BATCH_HELP = "请求停止当前制造批次。已制造的物品会保留。",
     CANCEL_OPERATION_HELP = "放弃当前操作。已经发送给商人的订单仍可能送达。",

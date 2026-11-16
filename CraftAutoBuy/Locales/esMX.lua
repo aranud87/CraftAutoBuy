@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("esMX", {
+    INITIALIZING_RECIPES = "Inicializando las recetas en segundo plano… (%d/%d profesiones)",
+    INITIALIZATION_WAITING = "La lectura de recetas está esperando datos del juego: %s.",
+    STOCK_INITIALIZING = "Los componentes aparecerán después de la primera lectura de las recetas.",
     STOP_BATCH = "Detener",
     STOP_BATCH_HELP = "Solicita detener el lote en curso. Conservas los objetos ya fabricados.",
     CANCEL_OPERATION_HELP = "Abandona la operación en curso. Un pedido ya enviado al vendedor todavía puede llegar.",
