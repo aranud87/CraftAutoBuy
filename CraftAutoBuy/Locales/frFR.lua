@@ -5,6 +5,16 @@ local _, ns = ...
 -- Add another Locales/<code>.lua file and its TOC entry before VendorData.lua
 -- to translate the addon without changing its logic.
 ns.Locale.RegisterLocale("frFR", {
+    CATALOG_FAVORITES = "Favoris",
+    CATALOG_FILTER_BANK = "Banque",
+    CATALOG_FILTER_BANK_HELP = "Inclut les composants mémorisés de la banque personnelle dans le calcul des recettes fabricables. Les favoris restent visibles.",
+    CATALOG_FILTER_PROGRESSION = "Progression",
+    CATALOG_FILTER_PROGRESSION_HELP = "Affiche uniquement les recettes fabricables pouvant faire progresser le métier. Les favoris restent visibles.",
+    CATALOG_COLLAPSE_ALL = "Tout réduire",
+    CATALOG_EXPAND_ALL = "Tout développer",
+    CATALOG_NO_RESULTS = "Aucune recette fabricable ne correspond aux filtres ou à la recherche.",
+    CATALOG_BANK_EXCLUDED = "Banque exclue du calcul.",
+    CATALOG_UNCATEGORIZED = "Sans catégorie",
     INITIALIZATION_HIDE_BUTTON = "Masquer",
     INITIALIZATION_TITLE = "Initialisation de CraftAutoBuy",
     INITIALIZATION_BACKGROUND_HELP = "Chargement initial des recettes. Tu peux masquer cette fenêtre et continuer à jouer : la lecture se poursuit en arrière-plan. La fenêtre se fermera automatiquement.",

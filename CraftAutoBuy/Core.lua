@@ -107,13 +107,25 @@ local function invalidateCatalogue()
     if ns.Catalogue then ns.Catalogue.Invalidate() end
 end
 
+local function catalogueIncludesBank()
+    -- An active project keeps the source choice made at its originating click,
+    -- even when CAB is hidden or the player returns to the native profession.
+    if ns.job then return ns.job.catalogueIncludeBank ~= false end
+    if ns.pendingStart then return ns.pendingStart.catalogueIncludeBank ~= false end
+    return not ns.catalogueActive or not ns.CatalogueView or ns.CatalogueView.Get().includeBank ~= false
+end
+
 local function planningStock(recipes)
-    if bankOverride or (ns.job and ns.job.ignoreBank) or (ns.pendingStart and ns.pendingStart.ignoreBank) then
+    if not catalogueIncludesBank() or bankOverride or (ns.job and ns.job.ignoreBank)
+        or (ns.pendingStart and ns.pendingStart.ignoreBank) then
         return ns.API.Inventory(recipes), {}
     end
     if ns.Bank then return ns.Bank.Snapshot(recipes) end
     return ns.API.Inventory(recipes), {}
 end
+-- CAB's component projection uses the same source decision as its Max and
+-- action plan; a separate physical snapshot may still describe stored stock.
+ns.PlanningStock = planningStock
 
 local function bankMessage()
     return ns.Bank and ns.Bank.Message(ns.plan)
@@ -336,10 +348,12 @@ local function prepareJob()
         ns.Refresh()
         return false
     end
+    local includeBank = catalogueIncludesBank()
     ns.job = {
         recipeID = ns.selectedID, remaining = ns.quantity, total = ns.quantity,
         recipes = activeRecipes(), professionKey = ns.selectedProfessionKey or ns.professionKey, running = false,
         ignoreBank = bankOverride ~= nil, bankApproval = bankOverride,
+        catalogueIncludeBank = includeBank,
     }
     ns.Refresh()
     return true
@@ -743,6 +757,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
             requiresMerchant = ns.plan and next(ns.plan.purchases) ~= nil,
             ignoreBank = bankOverride ~= nil or (ns.job and ns.job.ignoreBank),
             bankApproval = bankOverride or (ns.job and ns.job.bankApproval),
+            catalogueIncludeBank = catalogueIncludesBank(),
             purchaseOnly = purchaseOnlyIntent,
         }
         if ns.pendingStart.requiresMerchant and not ns.Merchant.IsOpen() then
@@ -1063,10 +1078,16 @@ function ns.OnEvent(event, ...)
         end
     elseif event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
         if ns.Catalogue then ns.Catalogue.Load() end
+        if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata() end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
         if ns.API.IsOwnProfession() then scanAttempts = 0; rescanAt = now() + 0.2 end
         if ns.UI and ns.UI.Install then ns.UI.Install() end
         if ns.StockUI then ns.StockUI.Install() end
+        ns.Refresh()
+    elseif event == "TRADE_SKILL_FAVORITES_CHANGED" then
+        -- Favorite changes only update browsing metadata. They neither open a
+        -- profession nor schedule another scan/purchase/cast.
+        if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata(...) end
         ns.Refresh()
     elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DETAILS_UPDATE"
         or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" or event == "NEW_RECIPE_LEARNED" then
@@ -1219,7 +1240,8 @@ end)
 
 for _, event in ipairs({
     "ADDON_LOADED", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
-    "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_DETAILS_UPDATE", "NEW_RECIPE_LEARNED", "BAG_UPDATE_DELAYED",
+    "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_DETAILS_UPDATE", "TRADE_SKILL_FAVORITES_CHANGED",
+    "NEW_RECIPE_LEARNED", "BAG_UPDATE_DELAYED",
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "PLAYER_MONEY", "PLAYER_ENTERING_WORLD", "SKILL_LINES_CHANGED",
     "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "BAG_UPDATE",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED",

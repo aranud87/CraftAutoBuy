@@ -1,6 +1,10 @@
 # CraftAutoBuy
 
-**1.0.1 — Version stable**
+**1.1.0 — En développement, pour une pull request en brouillon**
+
+Cette branche prépare **l'onglet CAB v2**. La version stable publiée reste
+**1.0.1**. Le comportement et le rendu de la 1.1.0 restent à confirmer dans
+WoW Forever avant publication.
 
 La version 1.0.1 initialise automatiquement le catalogue des recettes au premier
 lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
@@ -15,6 +19,42 @@ L'onglet **CraftAutoBuy**, à droite de la fenêtre, regroupe les recettes des
 métiers connus. L'onglet **Stock** sépare les composants en sacs et en banque.
 Les commandes d'achat et de fabrication sont également disponibles dans la
 fenêtre habituelle du métier courant.
+
+## L'onglet CAB v2
+
+La liste CAB regroupe les recettes fabricables de tous les métiers connus,
+avec deux filtres toujours visibles :
+
+- **Banque**, activé par défaut : prend en compte le stock personnel mémorisé.
+  En le décochant, les recettes devenues non fabricables disparaissent de leur
+  métier. Si une fabrication reste possible sans banque, la recette reste
+  affichée avec sa nouvelle quantité. Le relevé bancaire continue à être conservé.
+- **Progression**, désactivé par défaut : en le cochant, seules les recettes
+  à la fois fabricables et capables de faire progresser le métier restent
+  affichées dans les sections de métier.
+
+La section **Favoris** reprend les favoris du jeu. Ils restent visibles même
+sans composants ou sans gain de compétence ; leur quantité et leur couleur
+suivent la prise en compte de la banque. Une recette non réalisable apparaît
+en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
+La recherche s'applique aussi aux favoris.
+
+Les recettes sont regroupées par métier, puis par catégories et sous-catégories
+connues du jeu. Les en-têtes se réduisent ou se développent individuellement ;
+**Tout réduire** et **Tout développer** agissent sur toute la liste. Les
+catégories sans recette visible sont masquées.
+
+Les filtres, les sections repliées, la dernière recette sélectionnée et la
+position dans la liste sont mémorisés par personnage, puis restaurés à la
+réouverture, après `/reload` et à la reconnexion, lorsque les recettes sont
+encore disponibles. L'absence de données natives de favoris ou de catégories
+pendant leur chargement n'est pas interprétée comme une suppression définitive.
+Si ces informations ne sont pas encore disponibles après la mise à jour,
+ouvre le métier correspondant une première fois pour les actualiser.
+
+Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
+directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
+restent pris en compte dans les deux positions de ce filtre.
 
 ## Installation
 
@@ -115,8 +155,9 @@ pas incluses. Avant toute première lecture, l'addon demande d'ouvrir la banque.
 Une lecture incomplète conserve les informations précédentes avec une indication
 de vérification nécessaire ; rouvre la banque pour actualiser le relevé.
 
-Quand la quantité choisie nécessite des composants en banque, tu peux aller les
-récupérer. Si les sacs et les achats permettent une autre solution, le bouton
+Avec le filtre **Banque** activé, quand la quantité choisie nécessite des
+composants en banque, tu peux aller les récupérer. Si les sacs et les achats
+permettent une autre solution, le bouton
 d'action propose **Continuer sans banque** avec confirmation du nouveau devis,
 des lots et du surplus. Ce choix concerne seulement le projet en cours ; il
 n'est pas une préférence permanente. Annuler cette confirmation ne dépense rien.

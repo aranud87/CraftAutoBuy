@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("itIT", {
+    CATALOG_FAVORITES = "Preferiti",
+    CATALOG_FILTER_BANK = "Banca",
+    CATALOG_FILTER_BANK_HELP = "Include i reagenti memorizzati della banca personale nel calcolo delle ricette realizzabili. I preferiti restano visibili.",
+    CATALOG_FILTER_PROGRESSION = "Avanzamento",
+    CATALOG_FILTER_PROGRESSION_HELP = "Mostra solo le ricette realizzabili che possono aumentare la competenza nella professione. I preferiti restano visibili.",
+    CATALOG_COLLAPSE_ALL = "Comprimi tutto",
+    CATALOG_EXPAND_ALL = "Espandi tutto",
+    CATALOG_NO_RESULTS = "Nessuna ricetta realizzabile corrisponde ai filtri o alla ricerca.",
+    CATALOG_BANK_EXCLUDED = "Banca esclusa dal calcolo.",
+    CATALOG_UNCATEGORIZED = "Senza categoria",
     INITIALIZATION_HIDE_BUTTON = "Nascondi",
     INITIALIZATION_TITLE = "Inizializzazione di CraftAutoBuy",
     INITIALIZATION_BACKGROUND_HELP = "Caricamento iniziale delle ricette. Puoi nascondere questa finestra e continuare a giocare: la lettura prosegue in secondo piano. La finestra si chiuderà automaticamente.",

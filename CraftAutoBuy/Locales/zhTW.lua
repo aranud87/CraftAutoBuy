@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("zhTW", {
+    CATALOG_FAVORITES = "收藏",
+    CATALOG_FILTER_BANK = "銀行",
+    CATALOG_FILTER_BANK_HELP = "計算可製作配方時納入已記錄的個人銀行材料。收藏的配方仍會顯示。",
+    CATALOG_FILTER_PROGRESSION = "技能提升",
+    CATALOG_FILTER_PROGRESSION_HELP = "只顯示能夠製作且可能提升專業技能的配方。收藏的配方仍會顯示。",
+    CATALOG_COLLAPSE_ALL = "全部收合",
+    CATALOG_EXPAND_ALL = "全部展開",
+    CATALOG_NO_RESULTS = "沒有符合目前篩選或搜尋條件的可製作配方。",
+    CATALOG_BANK_EXCLUDED = "計算時不納入銀行材料。",
+    CATALOG_UNCATEGORIZED = "未分類",
     INITIALIZATION_HIDE_BUTTON = "隱藏",
     INITIALIZATION_TITLE = "CraftAutoBuy 初始化",
     INITIALIZATION_BACKGROUND_HELP = "首次載入配方。你可以隱藏此視窗並繼續遊戲：讀取會在背景繼續進行。視窗會自動關閉。",

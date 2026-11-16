@@ -40,6 +40,21 @@ local function recipeBank(current, id)
     return current.bank
 end
 
+local function recipeStock(current, id)
+    local job = ns.job
+    if job and job.catalogueIncludeBank == false and job.recipeID == id and job.professionKey == current.key then
+        -- Returning to the native page must not advertise bank ingredients for
+        -- the bag-only project the player already started from CAB. Other
+        -- recipes retain the native page's usual bank-aware projection.
+        if not current.jobInventory then
+            if ns.PlanningStock then current.jobInventory, current.jobBank = ns.PlanningStock(current.recipes)
+            else current.jobInventory, current.jobBank = ns.API.Inventory(current.recipes), {} end
+        end
+        return current.jobInventory, current.jobBank
+    end
+    return current.inventory, recipeBank(current, id)
+end
+
 function NativeUI.FormatQuantity(owned, potential, required, colored)
     local extra = ""
     if potential > owned then
@@ -129,14 +144,15 @@ local function recipeCount(id)
     local recipe = current and current.recipes[id]
     if not recipe or recipe.supported == false then return nil end
     if current.counts[id] == nil then
-        local count, plan = ns.Planner.MaxCrafts(current.recipes, current.inventory, ns.vendorItems, id, LIMIT, recipeBank(current, id))
+        local inventory, bank = recipeStock(current, id)
+        local count, plan = ns.Planner.MaxCrafts(current.recipes, inventory, ns.vendorItems, id, LIMIT, bank)
         current.counts[id] = count
         if plan and next(plan.bankWithdrawals or {}) then
             current.bankMessages[id] = ns.Bank and ns.Bank.Message(plan) or L.BANK_NOTICE
             -- The preferred plan can withdraw vials or an intermediate even
             -- though bags + PNJ can make the same displayed quantity. Blue
             -- describes a necessary withdrawal, not that preference.
-            local bagsPlan = ns.Planner.Plan(current.recipes, current.inventory, ns.vendorItems, id, count)
+            local bagsPlan = ns.Planner.Plan(current.recipes, inventory, ns.vendorItems, id, count)
             current.needsBank[id] = not bagsPlan.craftable
         end
     end
@@ -156,8 +172,9 @@ local function projection(id)
             quote = crafts and ns.NativeCraft.GetQuote(id)
             if not crafts and ns.selectedID == id then crafts, quote = ns.quantity, ns.quote end
         end
-        current.projections[id] = NativeUI.Project(id, current.recipes, current.inventory, ns.vendorItems, crafts,
-            quote and quote.purchaseQuantities, recipeBank(current, id)) or false
+        local inventory, bank = recipeStock(current, id)
+        current.projections[id] = NativeUI.Project(id, current.recipes, inventory, ns.vendorItems, crafts,
+            quote and quote.purchaseQuantities, bank) or false
     end
     return current.projections[id] or nil
 end

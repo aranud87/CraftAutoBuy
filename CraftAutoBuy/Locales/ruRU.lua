@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("ruRU", {
+    CATALOG_FAVORITES = "Избранное",
+    CATALOG_FILTER_BANK = "Банк",
+    CATALOG_FILTER_BANK_HELP = "Учитывать сохранённые реагенты личного банка при расчёте доступных рецептов. Избранное остаётся видимым.",
+    CATALOG_FILTER_PROGRESSION = "Рост навыка",
+    CATALOG_FILTER_PROGRESSION_HELP = "Показывать только доступные для изготовления рецепты, способные повысить навык профессии. Избранное остаётся видимым.",
+    CATALOG_COLLAPSE_ALL = "Свернуть всё",
+    CATALOG_EXPAND_ALL = "Развернуть всё",
+    CATALOG_NO_RESULTS = "Нет доступных для изготовления рецептов, соответствующих фильтрам или поиску.",
+    CATALOG_BANK_EXCLUDED = "Банк не учитывается в расчёте.",
+    CATALOG_UNCATEGORIZED = "Без категории",
     INITIALIZATION_HIDE_BUTTON = "Скрыть",
     INITIALIZATION_TITLE = "Инициализация CraftAutoBuy",
     INITIALIZATION_BACKGROUND_HELP = "Первоначальная загрузка рецептов. Можно скрыть это окно и продолжать играть: чтение продолжится в фоновом режиме. Окно закроется автоматически.",

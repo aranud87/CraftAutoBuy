@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("ptBR", {
+    CATALOG_FAVORITES = "Favoritos",
+    CATALOG_FILTER_BANK = "Banco",
+    CATALOG_FILTER_BANK_HELP = "Inclui os reagentes registrados do banco pessoal no cálculo das receitas fabricáveis. Os favoritos continuam visíveis.",
+    CATALOG_FILTER_PROGRESSION = "Progressão",
+    CATALOG_FILTER_PROGRESSION_HELP = "Mostra apenas receitas fabricáveis que podem aumentar a perícia da profissão. Os favoritos continuam visíveis.",
+    CATALOG_COLLAPSE_ALL = "Recolher tudo",
+    CATALOG_EXPAND_ALL = "Expandir tudo",
+    CATALOG_NO_RESULTS = "Nenhuma receita fabricável corresponde aos filtros ou à busca.",
+    CATALOG_BANK_EXCLUDED = "Banco excluído do cálculo.",
+    CATALOG_UNCATEGORIZED = "Sem categoria",
     INITIALIZATION_HIDE_BUTTON = "Ocultar",
     INITIALIZATION_TITLE = "Inicialização do CraftAutoBuy",
     INITIALIZATION_BACKGROUND_HELP = "Carregamento inicial das receitas. Você pode ocultar esta janela e continuar jogando: a leitura prossegue em segundo plano. A janela será fechada automaticamente.",

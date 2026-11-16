@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("deDE", {
+    CATALOG_FAVORITES = "Favoriten",
+    CATALOG_FILTER_BANK = "Bank",
+    CATALOG_FILTER_BANK_HELP = "Gespeicherte Reagenzien aus der persönlichen Bank bei der Berechnung herstellbarer Rezepte berücksichtigen. Favoriten bleiben sichtbar.",
+    CATALOG_FILTER_PROGRESSION = "Fortschritt",
+    CATALOG_FILTER_PROGRESSION_HELP = "Nur herstellbare Rezepte anzeigen, die die Berufsfertigkeit erhöhen können. Favoriten bleiben sichtbar.",
+    CATALOG_COLLAPSE_ALL = "Alle einklappen",
+    CATALOG_EXPAND_ALL = "Alle ausklappen",
+    CATALOG_NO_RESULTS = "Keine herstellbaren Rezepte entsprechen den aktuellen Filtern oder der Suche.",
+    CATALOG_BANK_EXCLUDED = "Bank wird bei der Berechnung nicht berücksichtigt.",
+    CATALOG_UNCATEGORIZED = "Ohne Kategorie",
     INITIALIZATION_HIDE_BUTTON = "Ausblenden",
     INITIALIZATION_TITLE = "Initialisierung von CraftAutoBuy",
     INITIALIZATION_BACKGROUND_HELP = "Rezepte werden erstmals geladen. Du kannst dieses Fenster ausblenden und weiterspielen: Das Einlesen läuft im Hintergrund weiter. Das Fenster schließt sich automatisch.",

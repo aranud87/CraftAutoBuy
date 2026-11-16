@@ -230,6 +230,71 @@ local function unsupported(recipe, reason)
     return recipe
 end
 
+local function ordinaryBoolean(value)
+    return type(value) == "boolean" and not (issecretvalue and issecretvalue(value))
+end
+
+-- Optional metadata is read independently of schematics. A cold recipe-info
+-- result is contextual (including false learned/favorite/skill-up fields), so
+-- only the current, ready, personal profession can authoritatively clear it.
+-- A positive native favorite is useful even before its profession is opened.
+function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo)
+    local metadata = {}
+    if not positiveInteger(recipeID) or not C_TradeSkillUI then return metadata end
+    for _, name in ipairs({"IsTradeSkillLinked", "IsTradeSkillGuild", "IsTradeSkillGuildMember", "IsNPCCrafting"}) do
+        if C_TradeSkillUI[name] then
+            local ok, external = call(C_TradeSkillUI[name])
+            if not ok or not ordinaryBoolean(external) or external then return metadata end
+        end
+    end
+    local own = API.IsOwnProfession()
+    local scoped = own and API.GetProfessionKey() == professionKey
+        and not (ns.IsProfessionClosed and ns.IsProfessionClosed())
+    local info = suppliedInfo
+    if not info and scoped then
+        local ok, value = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
+        if ok and type(value) == "table" and not (issecretvalue and issecretvalue(value)) then info = value end
+    end
+    scoped = scoped and type(info) == "table" and not (issecretvalue and issecretvalue(info))
+        and ordinaryBoolean(info.learned) and info.learned
+        and (info.recipeID == nil or positiveInteger(info.recipeID) and info.recipeID == recipeID)
+    if scoped and C_TradeSkillUI.IsRecipeInSkillLine then
+        local ok, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, professionKey)
+        scoped = ok and ordinaryBoolean(belongs) and belongs
+    end
+    local ok, favorite = call(C_TradeSkillUI.IsRecipeFavorite, recipeID)
+    if ok and ordinaryBoolean(favorite) and (scoped or favorite) then
+        metadata.favorite = favorite
+    elseif scoped and ordinaryBoolean(info.favorite) then
+        metadata.favorite = info.favorite
+    end
+    if not scoped then return metadata end
+    if ordinaryBoolean(info.canSkillUp) then metadata.canSkillUp = info.canSkillUp end
+    if ordinaryBoolean(info.disabled) and info.disabled then metadata.canSkillUp = false end
+    if nonnegativeInteger(info.relativeDifficulty) and info.relativeDifficulty <= 3 then
+        metadata.relativeDifficulty = info.relativeDifficulty
+    end
+    if nonnegativeInteger(info.numSkillUps) then metadata.numSkillUps = info.numSkillUps end
+    local categoryID, path, seen = info.categoryID, {}, {}
+    while positiveInteger(categoryID) and not seen[categoryID] and #path < 16 do
+        seen[categoryID] = true
+        local categoryOK, category = call(C_TradeSkillUI.GetCategoryInfo, categoryID)
+        if not categoryOK or type(category) ~= "table" or (issecretvalue and issecretvalue(category))
+            or type(category.name) ~= "string" or (issecretvalue and issecretvalue(category.name))
+            or category.name == "" then return metadata end
+        table.insert(path, 1, {id = categoryID, name = category.name,
+            sortIndex = nonnegativeInteger(category.uiOrder) and category.uiOrder or nil})
+        local parent = category.parentCategoryID
+        if parent == nil or nonnegativeInteger(parent) and parent == 0 then
+            metadata.categoryPath = path
+            return metadata
+        end
+        if not positiveInteger(parent) then return metadata end
+        categoryID = parent
+    end
+    return metadata
+end
+
 local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
     local recipe = {
         id = recipeID, name = info.name or L.RECIPE_FALLBACK:format(recipeID),
@@ -248,6 +313,7 @@ local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
         recipe.relativeDifficulty = info.relativeDifficulty
     end
     if nonnegativeInteger(info.numSkillUps) then recipe.numSkillUps = info.numSkillUps end
+    for field, value in pairs(API.GetRecipeMetadata(recipeID, professionKey, info)) do recipe[field] = value end
     if not info.learned then return unsupported(recipe, L.RECIPE_NOT_LEARNED) end
     if info.isRecraft or info.isDummyRecipe or info.isGatheringRecipe
         or info.isEnchantingRecipe or info.isSalvageRecipe then

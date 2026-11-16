@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("enGB", {
+    CATALOG_FAVORITES = "Favourites",
+    CATALOG_FILTER_BANK = "Bank",
+    CATALOG_FILTER_BANK_HELP = "Include remembered personal-bank reagents when calculating craftable recipes. Favourites remain visible.",
+    CATALOG_FILTER_PROGRESSION = "Skill gains",
+    CATALOG_FILTER_PROGRESSION_HELP = "Show only craftable recipes that can increase profession skill. Favourites remain visible.",
+    CATALOG_COLLAPSE_ALL = "Collapse all",
+    CATALOG_EXPAND_ALL = "Expand all",
+    CATALOG_NO_RESULTS = "No craftable recipes match the current filters or search.",
+    CATALOG_BANK_EXCLUDED = "Bank excluded from the calculation.",
+    CATALOG_UNCATEGORIZED = "Uncategorised",
     INITIALIZATION_HIDE_BUTTON = "Hide",
     INITIALIZATION_TITLE = "CraftAutoBuy initialisation",
     INITIALIZATION_BACKGROUND_HELP = "Initial recipe loading. You can hide this window and keep playing: scanning continues in the background. The window will close automatically.",

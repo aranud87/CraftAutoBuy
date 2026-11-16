@@ -2,6 +2,16 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("koKR", {
+    CATALOG_FAVORITES = "즐겨찾기",
+    CATALOG_FILTER_BANK = "은행",
+    CATALOG_FILTER_BANK_HELP = "제작 가능한 제조법을 계산할 때 저장된 개인 은행 재료를 포함합니다. 즐겨찾기는 계속 표시됩니다.",
+    CATALOG_FILTER_PROGRESSION = "숙련도 향상",
+    CATALOG_FILTER_PROGRESSION_HELP = "제작할 수 있고 전문 기술 숙련도를 올릴 수 있는 제조법만 표시합니다. 즐겨찾기는 계속 표시됩니다.",
+    CATALOG_COLLAPSE_ALL = "모두 접기",
+    CATALOG_EXPAND_ALL = "모두 펼치기",
+    CATALOG_NO_RESULTS = "현재 필터나 검색 조건에 맞는 제작 가능한 제조법이 없습니다.",
+    CATALOG_BANK_EXCLUDED = "계산에서 은행을 제외합니다.",
+    CATALOG_UNCATEGORIZED = "분류 없음",
     INITIALIZATION_HIDE_BUTTON = "숨기기",
     INITIALIZATION_TITLE = "CraftAutoBuy 초기화",
     INITIALIZATION_BACKGROUND_HELP = "제작법을 처음 불러오는 중입니다. 이 창을 숨기고 계속 플레이하셔도 읽기는 백그라운드에서 계속됩니다. 창은 자동으로 닫힙니다.",
