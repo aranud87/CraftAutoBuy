@@ -1,11 +1,10 @@
 # CraftAutoBuy
 
-**1.0.1 — Version locale en cours d’essai**
+**1.0.1 — Version stable**
 
-La dernière version stable reste **1.0.0 — Initial release**. Cette évolution
-ajoute une tentative de lecture des recettes à la connexion, avec une indication
-d'initialisation dans CAB. La nouvelle lecture au démarrage reste à essayer
-dans le client ; la version stable 1.0.0 n'est pas remplacée.
+La version 1.0.1 initialise automatiquement le catalogue des recettes au premier
+lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
+tu peux la masquer et continuer à jouer pendant le chargement.
 
 CraftAutoBuy ajoute un catalogue de recettes fabricables dans la fenêtre des
 métiers de **World of Warcraft: Forever 1.60.1**. Il calcule les possibilités
