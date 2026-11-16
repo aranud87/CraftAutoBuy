@@ -39,16 +39,18 @@ suivent la prise en compte de la banque. Une recette non réalisable apparaît
 en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
 La recherche s'applique aussi aux favoris.
 
-Les recettes sont regroupées par métier, puis par catégories et sous-catégories
-connues du jeu. Les en-têtes se réduisent ou se développent individuellement ;
-**Tout réduire** et **Tout développer** agissent sur toute la liste. Les
-catégories sans recette visible sont masquées.
+La liste utilise un seul niveau de sections : **Favoris**, puis un en-tête
+par métier, par exemple **Alchimie** ou **Cuisine**. Les recettes apparaissent
+directement sous leur métier, sans catégories ni sous-catégories imbriquées.
+Chaque en-tête se réduit ou se développe individuellement ; **Tout réduire**
+et **Tout développer** agissent sur ces sections principales. Les métiers
+sans recette visible sont masqués.
 
 Les filtres, les sections repliées, la dernière recette sélectionnée et la
 position dans la liste sont mémorisés par personnage, puis restaurés à la
 réouverture, après `/reload` et à la reconnexion, lorsque les recettes sont
-encore disponibles. L'absence de données natives de favoris ou de catégories
-pendant leur chargement n'est pas interprétée comme une suppression définitive.
+encore disponibles. L'absence de données natives de favoris pendant leur
+chargement n'est pas interprétée comme une suppression définitive.
 Si ces informations ne sont pas encore disponibles après la mise à jour,
 ouvre le métier correspondant une première fois pour les actualiser.
 

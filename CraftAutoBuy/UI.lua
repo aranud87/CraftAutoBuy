@@ -432,9 +432,14 @@ function UI.Install()
     panel:Hide()
     panel.RecipeRows, panel.CategoryRows, panel.ReagentButtons = rows, categories, reagents
 
-    widgets.search = CreateFrame("EditBox", "CraftAutoBuySearchBox", panel, "SearchBoxTemplate")
+    -- Use the book's free header strip for search and filters. The section
+    -- controls stay above the list, leaving the recipe detail unobstructed.
+    widgets.toolbar = CreateFrame("Frame", nil, panel)
+    widgets.toolbar:SetSize(632, 24)
+    widgets.toolbar:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, 28)
+    widgets.search = CreateFrame("EditBox", "CraftAutoBuySearchBox", widgets.toolbar, "SearchBoxTemplate")
     widgets.search:SetSize(267, 20)
-    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, -8)
+    widgets.search:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 0, 0)
     widgets.search:SetAutoFocus(false)
     widgets.search:SetMaxLetters(80)
     widgets.search:SetScript("OnTextChanged", function(self)
@@ -450,13 +455,27 @@ function UI.Install()
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     panel.SearchBox = widgets.search
+    panel.Toolbar = widgets.toolbar
+
+    widgets.filterRow = CreateFrame("Frame", nil, widgets.toolbar)
+    widgets.filterRow:SetSize(327, 24)
+    widgets.filterRow:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 305, 2)
 
     local function filter(name, text, help, x)
-        local control = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-        control:SetSize(24, 24)
-        control:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -32)
-        control.Label = label(control, "GameFontHighlightSmall", 25, -6, 104, 16, text)
-        control:SetHitRectInsets(0, -102, 0, 0)
+        local control = CreateFrame("CheckButton", nil, widgets.filterRow, "UICheckButtonTemplate")
+        control:SetSize(22, 22)
+        control:SetPoint("LEFT", widgets.filterRow, "LEFT", x, 0)
+        local caption = control.Text or control.text or control:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        caption:ClearAllPoints()
+        caption:SetPoint("LEFT", control, "RIGHT", 3, 0)
+        caption:SetSize(130, 18)
+        caption:SetFontObject("GameFontHighlightSmall")
+        caption:SetJustifyH("LEFT")
+        caption:SetJustifyV("MIDDLE")
+        caption:SetWordWrap(false)
+        caption:SetText(text)
+        control.Label = caption
+        control:SetHitRectInsets(0, -131, 0, 0)
         control:SetScript("OnClick", function(self)
             if self.enabled == false then return end
             if name == "includeBank" and (ns.job or ns.pendingStart or ns.bankConfirmation or ns.Merchant.IsBusy()) then
@@ -471,14 +490,16 @@ function UI.Install()
         control:SetScript("OnLeave", tooltipHide)
         return control
     end
-    widgets.bankFilter = filter("includeBank", L.CATALOG_FILTER_BANK, L.CATALOG_FILTER_BANK_HELP, 3)
-    widgets.progressionFilter = filter("progressionOnly", L.CATALOG_FILTER_PROGRESSION, L.CATALOG_FILTER_PROGRESSION_HELP, 137)
-    widgets.collapseAll = button(nil, panel, L.CATALOG_COLLAPSE_ALL, 130, 3, -59, function()
+    widgets.bankFilter = filter("includeBank", L.CATALOG_FILTER_BANK, L.CATALOG_FILTER_BANK_HELP, 0)
+    widgets.progressionFilter = filter("progressionOnly", L.CATALOG_FILTER_PROGRESSION, L.CATALOG_FILTER_PROGRESSION_HELP, 160)
+    widgets.collapseAll = button(nil, panel, L.CATALOG_COLLAPSE_ALL, 129, 9, -8, function()
         local keys = ns.Catalogue and ns.Catalogue.SectionKeys and ns.Catalogue.SectionKeys() or groupKeys
-        for key in pairs(keys) do setCollapsed(key, true) end
+        for key in pairs(keys) do
+            if key == "favorites" or key:match("^profession:") then setCollapsed(key, true) end
+        end
         UI.Render()
     end)
-    widgets.expandAll = button(nil, panel, L.CATALOG_EXPAND_ALL, 130, 137, -59, function()
+    widgets.expandAll = button(nil, panel, L.CATALOG_EXPAND_ALL, 129, 147, -8, function()
         -- Also expand remembered sections currently hidden by a search/filter.
         local keys = {}
         for key in pairs(view().collapsed) do keys[#keys + 1] = key end
@@ -496,14 +517,14 @@ function UI.Install()
     panel.CollapseAllButton, panel.ExpandAllButton = widgets.collapseAll, widgets.expandAll
 
     local listBackground = panel:CreateTexture(nil, "ARTWORK")
-    listBackground:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -87)
-    listBackground:SetSize(288, 423)
+    listBackground:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -34)
+    listBackground:SetSize(288, 476)
     listBackground:SetAtlas("Professions-background-summarylist")
     widgets.listScroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    widgets.listScroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 3, -92)
-    widgets.listScroll:SetSize(267, 411)
+    widgets.listScroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 3, -39)
+    widgets.listScroll:SetSize(267, 464)
     widgets.listContent = CreateFrame("Frame", nil, widgets.listScroll)
-    widgets.listContent:SetSize(267, 411)
+    widgets.listContent:SetSize(267, 464)
     widgets.listScroll:SetScrollChild(widgets.listContent)
     widgets.listScroll:HookScript("OnVerticalScroll", function(_, offset)
         -- Clamping a temporary filtered list must not overwrite the last
@@ -763,48 +784,39 @@ local function renderList()
     local visible, roots, professions = {}, {}, {}
     groupKeys = {favorites = true}
     if #favorites > 0 then
-        roots[#roots + 1] = {key = "favorites", name = L.CATALOG_FAVORITES, entries = favorites, children = {}, favorite = true}
+        roots[#roots + 1] = {key = "favorites", name = L.CATALOG_FAVORITES, entries = favorites, favorite = true}
     end
     for _, entry in ipairs(entries) do
         local key = entry.groupProfessionKey or entry.professionKey
         local node = professions[key]
         if not node then
-            node = {key = "profession:" .. key, name = entry.professionName, professionKey = key, entries = {}, children = {}, byID = {}}
+            node = {key = "profession:" .. key, name = entry.professionName, professionKey = key, entries = {}}
             professions[key] = node
             roots[#roots + 1] = node
         end
-        for _, part in ipairs(entry.categoryPath or {}) do
-            local categoryKey = "category:" .. key .. ":" .. part.id
-            local child = node.byID[categoryKey]
-            if not child then
-                child = {key = categoryKey, name = part.name, sortIndex = part.sortIndex, professionKey = key, entries = {}, children = {}, byID = {}}
-                node.byID[categoryKey] = child
-                node.children[#node.children + 1] = child
-            end
-            node = child
-        end
+        -- The profession is the only header. Native category metadata must
+        -- never add another Cuisine heading or nested sections to this view.
         node.entries[#node.entries + 1] = entry
     end
     local function collect(node)
         groupKeys[node.key] = true
         for _, entry in ipairs(node.entries) do visible[entry.professionKey .. ":" .. entry.recipeID] = true end
-        table.sort(node.children, function(a, b)
-            local ao, bo = a.sortIndex or math.huge, b.sortIndex or math.huge
-            if ao ~= bo then return ao < bo end
+        table.sort(node.entries, function(a, b)
+            if node.favorite and a.professionName ~= b.professionName then return a.professionName < b.professionName end
             if a.name ~= b.name then return a.name < b.name end
-            return a.key < b.key
+            if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
+            return a.professionKey < b.professionKey
         end)
-        for _, child in ipairs(node.children) do collect(child) end
     end
     for _, node in ipairs(roots) do collect(node) end
-    local function renderGroup(node, depth)
+    local function renderGroup(node)
         categoryCount = categoryCount + 1
         local category = categories[categoryCount] or makeCategory(categoryCount)
         category.professionKey, category.groupKey = node.professionKey, node.key
         category:ClearAllPoints()
-        category:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", depth * 12, -y)
-        category:SetWidth(265 - depth * 12)
-        category.Label:SetWidth(230 - depth * 12)
+        category:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 0, -y)
+        category:SetWidth(265)
+        category.Label:SetWidth(230)
         category.Label:SetText(node.name or L.CATALOG_UNCATEGORIZED)
         category.Label:SetTextColor(1, .82, 0)
         if category.CollapseButton and category.CollapseButton.UpdateCollapsedState then
@@ -835,15 +847,14 @@ local function renderList()
             row:Show()
             y = y + (node.favorite and 36 or 20)
         end
-        for _, child in ipairs(node.children) do renderGroup(child, math.min(depth + 1, 8)) end
     end
-    for _, node in ipairs(roots) do renderGroup(node, 0) end
+    for _, node in ipairs(roots) do renderGroup(node) end
     for index = rowCount + 1, #rows do rows[index].entry = nil; rows[index]:Hide() end
     for index = categoryCount + 1, #categories do categories[index]:Hide() end
-    widgets.listContent:SetHeight(math.max(411, y))
+    widgets.listContent:SetHeight(math.max(464, y))
     restoringScroll = true
     local offset = search ~= "" and searchScroll or state.scroll or 0
-    widgets.listScroll:SetVerticalScroll(math.min(offset, math.max(0, y - 411)))
+    widgets.listScroll:SetVerticalScroll(math.min(offset, math.max(0, y - 464)))
     restoringScroll = false
     widgets.empty:SetShown(#entries == 0 and #favorites == 0)
     if #entries == 0 and #favorites == 0 then
