@@ -31,7 +31,10 @@ avec deux filtres toujours visibles :
   affichée avec sa nouvelle quantité. Le relevé bancaire continue à être conservé.
 - **Progression**, désactivé par défaut : en le cochant, seules les recettes
   à la fois fabricables et capables de faire progresser le métier restent
-  affichées dans les sections de métier.
+  affichées dans les sections de métier : difficultés orange, jaune ou verte
+  selon le jeu. Les recettes de difficulté grise sont exclues. Une chance de
+  progression ne garantit pas un point à chaque fabrication. Cette règle
+  native s'applique à tous les métiers, sans exclusion manuelle de recettes.
 
 La section **Favoris** reprend les favoris du jeu. Ils restent visibles même
 sans composants ou sans gain de compétence ; leur quantité et leur couleur
@@ -99,6 +102,9 @@ son catalogue natif complet.
 3. Si CAB doit charger le métier, clique **Charger le métier**. Cela charge ses
    données avec son sort du grimoire, sans achat ni fabrication. Si le chargement
    est indisponible, clique sur l'onglet du métier à droite, puis reviens dans CAB.
+   Cette étape est normale après `/reload` ou après avoir ouvert un autre métier,
+   même si le catalogue est mémorisé. Le bouton disparaît lorsque le métier de
+   la recette est chargé ; aucun sort de métier n'est lancé automatiquement.
 4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter**. Avec
    l'achat automatique activé, ouvre un marchand qui les vend et clique dessus.
    Le devis porte sur l'ensemble des fournitures nécessaires à la quantité choisie.

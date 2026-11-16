@@ -289,6 +289,11 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
         for id, recipe in pairs(entry.recipes) do
             local metadata = ns.API.GetRecipeMetadata and ns.API.GetRecipeMetadata(id, key) or {}
             if nativeEvent and id == recipeSpellID then metadata.favorite = isFavorite end
+            if metadata.progressionRead == true then
+                for _, field in ipairs({"canSkillUp", "relativeDifficulty", "numSkillUps"}) do
+                    if recipe[field] ~= metadata[field] then recipe[field], changed = metadata[field], true end
+                end
+            end
             for _, field in ipairs({"favorite", "canSkillUp", "relativeDifficulty", "numSkillUps"}) do
                 if metadata[field] ~= nil and recipe[field] ~= metadata[field] then
                     recipe[field], changed = metadata[field], true
@@ -312,6 +317,17 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
     end
     if changed then Catalogue.Invalidate() end
     return changed
+end
+
+-- Native recipe rows only display a skill-gain chevron for canSkillUp plus
+-- Optimal (0), Medium (1) or Easy (2). Forever can report canSkillUp=true and
+-- numSkillUps=1 even for Trivial (3), so neither flag/count alone is evidence
+-- that a craft can advance this character's current profession.
+-- Source: Blizzard_ProfessionsRecipeList.lua, Init, skillUpAtlas selection.
+function Catalogue.CanSkillUp(recipe)
+    return type(recipe) == "table" and not (issecretvalue and issecretvalue(recipe))
+        and not (issecretvalue and issecretvalue(recipe.canSkillUp)) and recipe.canSkillUp == true
+        and nonnegativeInteger(recipe.relativeDifficulty) and recipe.relativeDifficulty <= 2
 end
 
 local function rebuildRows(includeBank)
@@ -383,7 +399,7 @@ local function filteredRows(search, options, favorites)
     local result = {}
     for _, row in ipairs(rows[cacheKey]) do
         local show = favorites and row.favorite or not favorites and row.count > 0
-            and (not options or not options.progressionOnly or row.recipe.canSkillUp == true)
+            and (not options or not options.progressionOnly or Catalogue.CanSkillUp(row.recipe))
         if show and (needle == "" or string.find(searchText(row.name .. " " .. row.professionName), needle, 1, true)) then
             result[#result + 1] = row
         end

@@ -269,6 +269,10 @@ function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo)
         metadata.favorite = info.favorite
     end
     if not scoped then return metadata end
+    -- A current learned recipe is authoritative even when one optional field
+    -- is absent. Consumers must replace this tuple, not keep an old difficulty
+    -- beside a newly read canSkillUp flag.
+    metadata.progressionRead = true
     if ordinaryBoolean(info.canSkillUp) then metadata.canSkillUp = info.canSkillUp end
     if ordinaryBoolean(info.disabled) and info.disabled then metadata.canSkillUp = false end
     if nonnegativeInteger(info.relativeDifficulty) and info.relativeDifficulty <= 3 then

@@ -438,8 +438,10 @@ function UI.Install()
     widgets.toolbar:SetSize(632, 24)
     widgets.toolbar:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, 28)
     widgets.search = CreateFrame("EditBox", "CraftAutoBuySearchBox", widgets.toolbar, "SearchBoxTemplate")
-    widgets.search:SetSize(267, 20)
-    widgets.search:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 0, 0)
+    -- SearchBoxTemplate draws its left border five pixels outside the EditBox.
+    -- Reserve that inset and vertical padding inside the toolbar's bounds.
+    widgets.search:SetSize(262, 20)
+    widgets.search:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 5, -2)
     widgets.search:SetAutoFocus(false)
     widgets.search:SetMaxLetters(80)
     widgets.search:SetScript("OnTextChanged", function(self)
@@ -459,7 +461,7 @@ function UI.Install()
 
     widgets.filterRow = CreateFrame("Frame", nil, widgets.toolbar)
     widgets.filterRow:SetSize(327, 24)
-    widgets.filterRow:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 305, 2)
+    widgets.filterRow:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 305, 0)
 
     local function filter(name, text, help, x)
         local control = CreateFrame("CheckButton", nil, widgets.filterRow, "UICheckButtonTemplate")
