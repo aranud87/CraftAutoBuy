@@ -5,6 +5,9 @@ local _, ns = ...
 -- Add another Locales/<code>.lua file and its TOC entry before VendorData.lua
 -- to translate the addon without changing its logic.
 ns.Locale.RegisterLocale("frFR", {
+    INITIALIZATION_HIDE_BUTTON = "Masquer",
+    INITIALIZATION_TITLE = "Initialisation de CraftAutoBuy",
+    INITIALIZATION_BACKGROUND_HELP = "Chargement initial des recettes. Tu peux masquer cette fenêtre et continuer à jouer : la lecture se poursuit en arrière-plan. La fenêtre se fermera automatiquement.",
     INITIALIZING_RECIPES = "Initialisation des recettes en arrière-plan… (%d/%d métiers)",
     INITIALIZATION_WAITING = "Lecture des recettes en attente des données du jeu : %s.",
     STOCK_INITIALIZING = "Les composants apparaîtront après la première lecture des recettes.",

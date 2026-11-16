@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- English is the fallback for unavailable languages and untranslated keys.
 ns.Locale.RegisterLocale("enUS", {
+    INITIALIZATION_HIDE_BUTTON = "Hide",
+    INITIALIZATION_TITLE = "CraftAutoBuy initialization",
+    INITIALIZATION_BACKGROUND_HELP = "Initial recipe loading. You can hide this window and keep playing: scanning continues in the background. The window will close automatically.",
     INITIALIZING_RECIPES = "Initializing recipes in the background… (%d/%d professions)",
     INITIALIZATION_WAITING = "Recipe reading is waiting for game data: %s.",
     STOCK_INITIALIZING = "Reagents will appear after recipes are read for the first time.",

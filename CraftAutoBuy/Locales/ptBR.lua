@@ -2,6 +2,9 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("ptBR", {
+    INITIALIZATION_HIDE_BUTTON = "Ocultar",
+    INITIALIZATION_TITLE = "Inicialização do CraftAutoBuy",
+    INITIALIZATION_BACKGROUND_HELP = "Carregamento inicial das receitas. Você pode ocultar esta janela e continuar jogando: a leitura prossegue em segundo plano. A janela será fechada automaticamente.",
     INITIALIZING_RECIPES = "Inicializando as receitas em segundo plano… (%d/%d profissões)",
     INITIALIZATION_WAITING = "Leitura de receitas aguardando os dados do jogo: %s.",
     STOCK_INITIALIZING = "Os reagentes aparecerão após a primeira leitura das receitas.",

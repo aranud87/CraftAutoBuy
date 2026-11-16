@@ -1051,6 +1051,7 @@ function ns.OnEvent(event, ...)
             if ns.Catalogue then ns.Catalogue.Load() end
             if ns.Stock then ns.Stock.Init() end
             if ns.Bootstrap then ns.Bootstrap.Init() end
+            if ns.BootstrapUI then ns.BootstrapUI.Init() end
         elseif not initialized then return end
         if ns.NativeCraft then ns.NativeCraft.Install() end
         if ns.NativeUI then ns.NativeUI.Install() end
@@ -1166,6 +1167,7 @@ frame:SetScript("OnUpdate", function()
     local time = now()
     if rescanAt and time >= rescanAt then rescanAt = nil; ns.Scan() end
     if ns.Bootstrap then ns.Bootstrap.Tick(time) end
+    if ns.BootstrapUI then ns.BootstrapUI.Update(time) end
     if time - lastSelectionCheck < 0.2 then return end
     lastSelectionCheck = time
     ns.Merchant.Tick(time)
@@ -1251,6 +1253,14 @@ SlashCmdList.CRAFTAUTOBUY = function(message)
             return total
         end
         local cached = ns.Catalogue and ns.Catalogue.GetRecipes(key)
+        -- With no native profession open, report the whole saved catalogue.
+        -- Counting GetRecipes(nil) hides successful background discovery.
+        if not key and ns.Catalogue and ns.API.GetProfessions then
+            cached = {}
+            for _, profession in ipairs(ns.API.GetProfessions()) do
+                for id, recipe in pairs(ns.Catalogue.GetRecipes(profession.key)) do cached[id] = recipe end
+            end
+        end
         local visible = ns.Catalogue and ns.Catalogue.Rows and #ns.Catalogue.Rows() or 0
         ns.Print(L.DEBUG_CATALOGUE:format(tostring(key), tostring(parent), count(ns.recipes), count(cached), visible))
         if ns.Bootstrap then

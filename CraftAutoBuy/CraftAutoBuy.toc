@@ -41,6 +41,7 @@ Stock.lua
 Merchant.lua
 Core.lua
 Bootstrap.lua
+BootstrapUI.lua
 ActionButtons.lua
 Sidebar.lua
 BookArt.lua

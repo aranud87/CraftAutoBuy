@@ -25,18 +25,25 @@ fenêtre habituelle du métier courant.
    `Interface/AddOns/CraftAutoBuy/CraftAutoBuy.toc`.
 3. Relance le jeu et active CraftAutoBuy dans la liste des addons.
 4. À la connexion, CAB tente de lire les recettes des métiers connus en
-   arrière-plan. Une indication d'initialisation affiche l'avancement dans CAB.
+   arrière-plan. À la première initialisation, une petite fenêtre de progression
+   s'affiche. Elle laisse le jeu utilisable et se ferme automatiquement à la fin.
    Si les données du jeu ne sont pas encore disponibles, CAB indique les métiers
    en attente. Tu peux toujours ouvrir un métier pour actualiser ses recettes.
 
 Aucune dépendance n'est nécessaire. Le dossier de l'addon doit conserver son
 nom **CraftAutoBuy**, notamment pour charger son icône.
 
-Cette initialisation ne déclenche aucun achat ni aucune fabrication et ne
-demande pas de confirmer une fenêtre de rappel. Les composants de l'onglet
-**Stock** apparaissent après la première lecture des recettes. La banque est
-indépendante : l'initialisation ne lit pas une banque fermée et ne remplace pas
-la première visite nécessaire pour en mémoriser le contenu.
+Le bouton **Masquer**, la croix et **Échap** masquent cette fenêtre pour la
+session en cours ; la lecture continue en arrière-plan et tu peux jouer
+normalement. La fenêtre ne se réaffiche pas lorsque l'initialisation du
+catalogue est complète. Elle sert à suivre le chargement, sans confirmation
+obligatoire ni tutoriel.
+
+Cette initialisation ne déclenche aucun achat ni aucune fabrication. Les
+composants de l'onglet **Stock** apparaissent après la première lecture des
+recettes. La banque est indépendante : l'initialisation ne lit pas une banque
+fermée et ne remplace pas la première visite nécessaire pour en mémoriser le
+contenu.
 
 La lecture en arrière-plan est prévue pour **Forever 1.60.1, build 70938**.
 Sur un autre build, ouvre les métiers normalement pour remplir le catalogue.

@@ -110,7 +110,11 @@ end
 
 function Bootstrap.GetState()
     ensureState()
+    local workTotal = current and (current.total or 0) * 2 or 0
+    local workDone = current and (current.phase == "verify"
+        and (current.total + (current.verifyCursor or 1) - 1) or (current.progress or 0)) or 0
     return {complete = state.complete, done = done, total = total, waiting = waiting,
+        workDone = workDone, workTotal = workTotal,
         professionKey = current and current.professionKey or lastKey,
         recipeID = current and current.ids and current.ids[current.cursor] or lastRecipe,
         progress = current and current.progress or lastProgress or 0,
