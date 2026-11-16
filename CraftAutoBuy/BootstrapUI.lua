@@ -44,15 +44,16 @@ local function create()
     frame = CreateFrame("Frame", NAME, UIParent, "BackdropTemplate")
     frame:Hide()
     frame:SetSize(WIDTH, 192)
-    frame:SetPoint("TOP", UIParent, "TOP", 0, -140)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -120)
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
     -- Only the close controls receive input. Scanning does not block the game.
     frame:EnableMouse(false)
-    frame:SetBackdrop({bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    frame:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 24,
+        edgeSize = 24,
         insets = {left = 7, right = 7, top = 7, bottom = 7}})
+    frame:SetBackdropColor(0.04, 0.04, 0.04, 1)
     frame:SetScript("OnHide", function()
         if not automaticHide then dismissed = true end
     end)
