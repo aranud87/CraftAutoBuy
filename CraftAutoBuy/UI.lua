@@ -6,7 +6,7 @@ ns.UI = UI
 -- A profession-style page selected by the final side tab. Its catalogue does
 -- not depend on Blizzard's current profession or native ingredient filters.
 local book, panel, returnPage
-local switching, rendering = false, false
+local switching, rendering, installed = false, false, false
 local widgets, rows, categories, reagents, collapsed = {}, {}, {}, {}, {}
 local fallbackView = {includeBank = true, progressionOnly = false, collapsed = collapsed, scroll = 0}
 local restoringScroll, selectionRestored, groupKeys, searchScroll = false, false, {}, 0
@@ -417,8 +417,10 @@ end
 
 function UI.Install()
     if panel then
-        if ns.Sidebar then ns.Sidebar.Install() end
-        return true
+        if installed and ns.Sidebar then ns.Sidebar.Install() end
+        -- A frame allocated before an installation error is not a complete
+        -- page. Do not render missing widgets after that first client error.
+        return installed
     end
     if not ProfessionsFrame then return false end
     book = ProfessionsFrame
@@ -484,7 +486,9 @@ function UI.Install()
         UI.Render()
     end)
     for _, control in ipairs({widgets.collapseAll, widgets.expandAll}) do
-        control:SetFontObject("GameFontNormalSmall")
+        control:SetNormalFontObject("GameFontNormalSmall")
+        control:SetHighlightFontObject("GameFontHighlightSmall")
+        control:SetDisabledFontObject("GameFontDisableSmall")
         control:SetScript("OnEnter", function(self) tooltip(self, self:GetText(), "") end)
         control:SetScript("OnLeave", tooltipHide)
     end
@@ -651,6 +655,7 @@ function UI.Install()
     book:HookScript("OnHide", function()
         if ns.pendingStart and UI.IsActive() then panel:Hide() else deactivate(false, false) end
     end)
+    installed = true
     if ns.Sidebar then ns.Sidebar.Install() end
     return true
 end
