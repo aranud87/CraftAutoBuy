@@ -409,9 +409,18 @@ local function backgroundKnownProfession(key)
 end
 
 local function backgroundSpellIDs(key)
-    local ok, spells = call(C_TradeSkillUI.GetProfessionSpells, key)
-    local total = ok and arraySize(spells)
-    if not total or total == 0 then return nil, nil, L.RECIPES_LOADING end
+    -- Forever exposes schematics and IsSpellKnown before a profession opens,
+    -- but its contextual recipe list is empty and GetRecipeInfo.learned is
+    -- false at cold login. Enumerate the pinned client-data index instead.
+    local index = ns.RecipeIndex
+    local ok, _, build, _, interface = call(GetBuildInfo)
+    if type(index) ~= "table" or index.schema ~= 1 or not ok
+        or (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
+        or tonumber(build) ~= index.build or interface ~= index.interface
+        or type(index.professions) ~= "table" then return nil, nil, L.CATALOG_VERIFY_HELP end
+    local spells = index.professions[key]
+    local total = arraySize(spells)
+    if total == nil then return nil, nil, L.CATALOG_VERIFY_HELP end
     local ids, seen = {}, {}
     for index = 1, total do
         local id = spells[index]
@@ -426,10 +435,15 @@ function API.BeginBackgroundScan(key)
     if not allowed then return nil, reason end
     local parent, why = backgroundKnownProfession(key)
     if not parent then return nil, why end
-    local ids, idSet, failure = backgroundSpellIDs(key)
+    if not C_SpellBook or type(C_SpellBook.IsSpellKnown) ~= "function"
+        or not Enum or not Enum.SpellBookSpellBank or Enum.SpellBookSpellBank.Player == nil then
+        return nil, L.PROFESSION_API_UNAVAILABLE
+    end
+    local ids, idSet, failure = backgroundSpellIDs(parent)
     if not ids then return nil, failure end
     return {professionKey = key, parentProfessionKey = parent, ids = ids,
-        idSet = idSet, cursor = 1, progress = 0, total = #ids, recipes = {}}
+        idSet = idSet, cursor = 1, progress = 0, total = #ids, recipes = {}, known = {},
+        phase = "read", verifyCursor = 1}
 end
 
 local function backgroundRecipe(job, id)
@@ -439,15 +453,20 @@ local function backgroundRecipe(job, id)
         if not ok then return nil, L.LOADING_RECIPE end
         if value ~= nil then
             if type(value) ~= "table" or (issecretvalue and issecretvalue(value))
-                or (issecretvalue and issecretvalue(value.learned)) or value.learned ~= true
+                or (issecretvalue and issecretvalue(value.learned))
+                or (value.learned ~= nil and type(value.learned) ~= "boolean")
                 or (value.recipeID ~= nil and (not positiveInteger(value.recipeID) or value.recipeID ~= id)) then
                 return nil, L.LOADING_RECIPE
             end
-            info = {}
-            for key, field in pairs(value) do info[key] = field end
+            -- Cold contextual metadata cannot override the independently
+            -- verified learned spell or provide reliable progression flags.
+            if value.learned == true then
+                info = {}
+                for key, field in pairs(value) do info[key] = field end
+            end
             for _, key in ipairs({"isRecraft", "isDummyRecipe", "isGatheringRecipe", "isEnchantingRecipe",
                 "isSalvageRecipe", "supportsQualities", "canCreateMultiple"}) do
-                local field = info[key]
+                local field = info and info[key]
                 if field ~= nil and ((issecretvalue and issecretvalue(field)) or type(field) ~= "boolean") then
                     return nil, L.LOADING_RECIPE
                 end
@@ -459,21 +478,19 @@ local function backgroundRecipe(job, id)
         if not ok then return nil, L.LOADING_PROFESSION end
         if profession ~= nil then
             if type(profession) ~= "table" or (issecretvalue and issecretvalue(profession))
-                or not positiveInteger(profession.professionID)
+                or not nonnegativeInteger(profession.professionID)
                 or (profession.parentProfessionID ~= nil and not nonnegativeInteger(profession.parentProfessionID)) then
                 return nil, L.LOADING_PROFESSION
             end
             local parent = positiveInteger(profession.parentProfessionID) and profession.parentProfessionID or profession.professionID
-            if parent ~= job.parentProfessionKey then
+            if parent > 0 and parent ~= job.parentProfessionKey then
                 return nil, L.RECIPE_OTHER_PROFESSION
             end
         end
     end
     local schematic
     local needsName = not info or type(info.name) ~= "string" or (issecretvalue and issecretvalue(info.name)) or info.name == ""
-    local knownUnsupported = info and (info.isRecraft or info.isDummyRecipe or info.isGatheringRecipe
-        or info.isEnchantingRecipe or info.isSalvageRecipe or info.supportsQualities)
-    if needsName or not knownUnsupported then
+    do
         local ok, value = call(C_TradeSkillUI.GetRecipeSchematic, id, false)
         if not ok or type(value) ~= "table" or (issecretvalue and issecretvalue(value))
             or (value.recipeID ~= nil and (not positiveInteger(value.recipeID) or value.recipeID ~= id)) then
@@ -485,8 +502,8 @@ local function backgroundRecipe(job, id)
         if type(schematic.name) ~= "string" or (issecretvalue and issecretvalue(schematic.name)) or schematic.name == ""
             or (schematic.isRecraft ~= nil and ((issecretvalue and issecretvalue(schematic.isRecraft))
                 or type(schematic.isRecraft) ~= "boolean")) then return nil, L.LOADING_RECIPE end
-        -- GetProfessionSpells was explicitly scoped to this learned profession.
-        -- The schematic supplies the actual name, output and mandatory slots.
+        -- The client-data index supplies membership, IsSpellKnown supplies
+        -- ownership, and the live schematic supplies name, output and slots.
         info = info or {learned = true, isRecraft = schematic.isRecraft}
         info.name = schematic.name
     end
@@ -502,11 +519,24 @@ local function failBackgroundScan(job, reason)
     return nil, false, job.failed
 end
 
+local function completeBackgroundScan(job)
+    -- A client callback during the last read can change or close the source.
+    -- Recheck ownership before publishing even an empty or unsupported map.
+    local allowed, reason = backgroundContext()
+    if not allowed then return failBackgroundScan(job, reason) end
+    local parent, why = backgroundKnownProfession(job.professionKey)
+    if parent ~= job.parentProfessionKey then return failBackgroundScan(job, why or L.PROFESSION_CHANGED) end
+    job.complete = true
+    return job.recipes, true
+end
+
 function API.StepBackgroundScan(job, limit)
     if type(job) ~= "table" or not positiveInteger(job.professionKey)
-        or not positiveInteger(job.total) or not positiveInteger(job.cursor)
+        or not nonnegativeInteger(job.total) or not positiveInteger(job.cursor)
         or job.cursor > job.total + 1 or type(job.ids) ~= "table"
-        or type(job.idSet) ~= "table" or type(job.recipes) ~= "table" then
+        or type(job.idSet) ~= "table" or type(job.recipes) ~= "table"
+        or type(job.known) ~= "table" or not positiveInteger(job.verifyCursor)
+        or (job.phase ~= "read" and job.phase ~= "verify") then
         return nil, false, L.RECIPES_LOADING
     end
     if job.failed then return nil, false, job.failed end
@@ -519,32 +549,46 @@ function API.StepBackgroundScan(job, limit)
     if not parent or parent ~= job.parentProfessionKey then
         return failBackgroundScan(job, why or L.PROFESSION_CHANGED)
     end
-    local processed = 0
-    while job.cursor <= job.total and processed < limit do
-        local id = job.ids[job.cursor]
-        if not positiveInteger(id) or not job.idSet[id] then return failBackgroundScan(job, L.RECIPES_LOADING) end
-        local recipe, failure = backgroundRecipe(job, id)
-        if not recipe then return failBackgroundScan(job, failure) end
-        job.recipes[id] = recipe
-        job.cursor, processed = job.cursor + 1, processed + 1
-        job.progress = job.cursor - 1
-    end
-    if job.cursor <= job.total then return nil, false end
-    -- A growing or shrinking list during the read is not a complete snapshot.
-    -- Restart from a new enumeration instead of saving a silently partial map.
-    local ids, idSet = backgroundSpellIDs(job.professionKey)
+    -- Validate the index independently of the active profession. No client
+    -- calls are made per candidate here; both live passes below share a budget.
+    local ids, idSet = backgroundSpellIDs(job.parentProfessionKey)
     if not ids or #ids ~= job.total then return failBackgroundScan(job, L.RECIPES_LOADING) end
-    for id in pairs(job.idSet) do
-        if not idSet[id] or type(job.recipes[id]) ~= "table" then return failBackgroundScan(job, L.RECIPES_LOADING) end
+    for position, id in ipairs(job.ids) do
+        if ids[position] ~= id or not job.idSet[id] or not idSet[id] then
+            return failBackgroundScan(job, L.RECIPES_LOADING)
+        end
     end
-    allowed, reason = backgroundContext()
-    if not allowed then return failBackgroundScan(job, reason) end
-    parent, why = backgroundKnownProfession(job.professionKey)
-    if not parent or parent ~= job.parentProfessionKey then
-        return failBackgroundScan(job, why or L.PROFESSION_CHANGED)
+    local processed = 0
+    while processed < limit do
+        if job.phase == "read" and job.cursor > job.total then job.phase = "verify" end
+        local cursor = job.phase == "read" and job.cursor or job.verifyCursor
+        if cursor > job.total then
+            return completeBackgroundScan(job)
+        end
+        local id = job.ids[cursor]
+        local ok, known = call(C_SpellBook and C_SpellBook.IsSpellKnown, id, Enum.SpellBookSpellBank.Player)
+        if not ok or (issecretvalue and issecretvalue(known)) or type(known) ~= "boolean" then
+            return failBackgroundScan(job, L.RECIPES_LOADING)
+        end
+        if job.phase == "read" then
+            job.known[id] = known
+            if known then
+                local recipe, failure = backgroundRecipe(job, id)
+                if not recipe then return failBackgroundScan(job, failure) end
+                job.recipes[id] = recipe
+            end
+            job.cursor = cursor + 1
+            job.progress = cursor
+        else
+            if known ~= job.known[id] then return failBackgroundScan(job, L.RECIPES_LOADING) end
+            job.verifyCursor = cursor + 1
+        end
+        processed = processed + 1
     end
-    job.complete = true
-    return job.recipes, true
+    if job.phase == "verify" and job.verifyCursor > job.total then
+        return completeBackgroundScan(job)
+    end
+    return nil, false
 end
 
 local function itemCount(itemID, includeBank)

@@ -33,6 +33,7 @@ Locales/zhCN.lua
 Locales/zhTW.lua
 VendorData.lua
 Planner.lua
+RecipeIndex.lua
 API.lua
 Bank.lua
 Catalogue.lua

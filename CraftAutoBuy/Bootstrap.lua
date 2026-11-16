@@ -27,6 +27,7 @@ end
 
 local function busy()
     return ns.job or ns.pendingStart or ns.bankConfirmation
+        or (type(IsLoggedIn) == "function" and not IsLoggedIn())
         or (ns.InCombat and ns.InCombat())
         or (InCombatLockdown and InCombatLockdown())
         or (ns.Merchant and ns.Merchant.IsBusy and ns.Merchant.IsBusy())

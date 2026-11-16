@@ -123,6 +123,7 @@ function Catalogue.Load()
                     records[key] = {schema = Catalogue.SCHEMA,
                         parentKey = parent, learnedCount = integer(entry.learnedCount) and entry.learnedCount or nil,
                         background = entry.background == true,
+                        backgroundBuild = integer(entry.backgroundBuild) and entry.backgroundBuild or nil,
                         version = type(entry.version) == "string" and entry.version or "unknown",
                         name = type(entry.name) == "string" and entry.name ~= "" and entry.name or ns.API.ProfessionName(key),
                         recipes = recipes}
@@ -162,6 +163,7 @@ function Catalogue.Record(key, recipes, background)
     end
     records[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parent,
         background = background == true,
+        backgroundBuild = background and ns.RecipeIndex and ns.RecipeIndex.build or nil,
         learnedCount = learnedCount,
         name = ns.API.ProfessionName(key), recipes = copied}
     Catalogue.Invalidate()
@@ -195,7 +197,9 @@ function Catalogue.MissingProfessions()
     local missing = {}
     local scanned = {}
     for key, entry in pairs(records) do
-        if next(entry.recipes) or (entry.learnedCount or 0) > 0 then
+        local completeBackground = entry.background and ns.RecipeIndex
+            and entry.backgroundBuild == ns.RecipeIndex.build
+        if next(entry.recipes) or (entry.learnedCount or 0) > 0 or completeBackground then
             scanned[key], scanned[parentKey(key, entry)] = true, true
         end
     end

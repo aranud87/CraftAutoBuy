@@ -4,7 +4,8 @@
 
 La dernière version stable reste **1.0.0 — Initial release**. Cette évolution
 ajoute une tentative de lecture des recettes à la connexion, avec une indication
-d'initialisation dans CAB. Son comportement dans le client reste à confirmer.
+d'initialisation dans CAB. La nouvelle lecture au démarrage reste à essayer
+dans le client ; la version stable 1.0.0 n'est pas remplacée.
 
 CraftAutoBuy ajoute un catalogue de recettes fabricables dans la fenêtre des
 métiers de **World of Warcraft: Forever 1.60.1**. Il calcule les possibilités
@@ -36,6 +37,11 @@ demande pas de confirmer une fenêtre de rappel. Les composants de l'onglet
 **Stock** apparaissent après la première lecture des recettes. La banque est
 indépendante : l'initialisation ne lit pas une banque fermée et ne remplace pas
 la première visite nécessaire pour en mémoriser le contenu.
+
+La lecture en arrière-plan est prévue pour **Forever 1.60.1, build 70938**.
+Sur un autre build, ouvre les métiers normalement pour remplir le catalogue.
+L'ouverture normale d'un métier remplace ensuite les données lues en fond par
+son catalogue natif complet.
 
 ## Acheter puis fabriquer
 
