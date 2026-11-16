@@ -2,6 +2,12 @@ local _, ns = ...
 
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("zhTW", {
+    INITIALIZATION_HIDE_BUTTON = "隱藏",
+    INITIALIZATION_TITLE = "CraftAutoBuy 初始化",
+    INITIALIZATION_BACKGROUND_HELP = "首次載入配方。你可以隱藏此視窗並繼續遊戲：讀取會在背景繼續進行。視窗會自動關閉。",
+    INITIALIZING_RECIPES = "正在背景初始化配方…（%d/%d 個專業）",
+    INITIALIZATION_WAITING = "正在等待遊戲資料以讀取配方：%s。",
+    STOCK_INITIALIZING = "首次讀取配方後會顯示材料。",
     STOP_BATCH = "停止",
     STOP_BATCH_HELP = "請求停止目前製造批次。已製造的物品會保留。",
     CANCEL_OPERATION_HELP = "放棄目前操作。已經傳送給商人的訂單仍可能送達。",

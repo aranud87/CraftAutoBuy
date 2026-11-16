@@ -232,18 +232,22 @@ function StockUI.Render()
     local bags, bank, bankKnown, missing = {}, {}, false, {}
     if ns.Stock then bags, bank, bankKnown, missing = ns.Stock.Rows(search) end
     local bankOpen = ns.Stock and ns.Stock.IsBankOpen and ns.Stock.IsBankOpen()
-    renderColumn(widgets.bags, bags or {}, search ~= "" and L.STOCK_NO_RESULTS or L.STOCK_EMPTY_BAGS)
+    local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
+    local empty = initializing and L.STOCK_INITIALIZING or nil
+    renderColumn(widgets.bags, bags or {}, search ~= "" and L.STOCK_NO_RESULTS or empty or L.STOCK_EMPTY_BAGS)
     renderColumn(widgets.bank, bankKnown and bank or {}, not bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)
-        or (search ~= "" and L.STOCK_NO_RESULTS or L.STOCK_EMPTY_BANK))
+        or (search ~= "" and L.STOCK_NO_RESULTS or empty or L.STOCK_EMPTY_BANK))
     local names = {}
     for _, profession in ipairs(missing or {}) do names[#names + 1] = profession.name end
-    widgets.missing:SetText(#names > 0 and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or "")
+    widgets.missing:SetText(initializing
+        or (#names > 0 and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or ""))
     rendering = false
 end
 
 function StockUI.Show()
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then return false end
     if not StockUI.Install() then return false end
+    if ns.Bootstrap then ns.Bootstrap.Wake() end
     if ns.CancelPendingStart then ns.CancelPendingStart() end
     local previousPage
     if ns.UI and ns.UI.IsActive() then previousPage = ns.UI.NativeTabSelected() end

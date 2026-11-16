@@ -2,6 +2,12 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("deDE", {
+    INITIALIZATION_HIDE_BUTTON = "Ausblenden",
+    INITIALIZATION_TITLE = "Initialisierung von CraftAutoBuy",
+    INITIALIZATION_BACKGROUND_HELP = "Rezepte werden erstmals geladen. Du kannst dieses Fenster ausblenden und weiterspielen: Das Einlesen läuft im Hintergrund weiter. Das Fenster schließt sich automatisch.",
+    INITIALIZING_RECIPES = "Rezepte werden im Hintergrund eingelesen… (%d/%d Berufe)",
+    INITIALIZATION_WAITING = "Warte auf Spieldaten zum Einlesen der Rezepte: %s.",
+    STOCK_INITIALIZING = "Reagenzien erscheinen nach dem ersten Einlesen der Rezepte.",
     STOP_BATCH = "Stoppen",
     STOP_BATCH_HELP = "Fordert das Anhalten der laufenden Herstellung an. Bereits hergestellte Gegenstände bleiben erhalten.",
     CANCEL_OPERATION_HELP = "Verwirft den laufenden Vorgang. Eine bereits an den Händler gesendete Bestellung kann noch eintreffen.",

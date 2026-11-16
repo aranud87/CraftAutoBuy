@@ -2,6 +2,12 @@ local _, ns = ...
 
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("enGB", {
+    INITIALIZATION_HIDE_BUTTON = "Hide",
+    INITIALIZATION_TITLE = "CraftAutoBuy initialisation",
+    INITIALIZATION_BACKGROUND_HELP = "Initial recipe loading. You can hide this window and keep playing: scanning continues in the background. The window will close automatically.",
+    INITIALIZING_RECIPES = "Initialising recipes in the background… (%d/%d professions)",
+    INITIALIZATION_WAITING = "Recipe reading is waiting for game data: %s.",
+    STOCK_INITIALIZING = "Reagents will appear after recipes are read for the first time.",
     STOP_BATCH = "Stop",
     STOP_BATCH_HELP = "Request that the current batch stop. Items already crafted are kept.",
     CANCEL_OPERATION_HELP = "Abandon the current operation. An order already sent to the merchant may still arrive.",

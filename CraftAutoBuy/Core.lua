@@ -283,6 +283,7 @@ function ns.Scan(preserveSelection)
         ns.recipes = recipes
         ns.professionKey = ns.API.GetProfessionKey()
         if ns.Catalogue then ns.Catalogue.Record(ns.professionKey, recipes) end
+        if ns.Bootstrap then ns.Bootstrap.Wake() end
         -- A known catalogue may use the base profession while the freshly
         -- opened source identifies its child skill line. Adopt only a verified
         -- recipe of that same profession, preserving the user's chosen lot.
@@ -1049,6 +1050,8 @@ function ns.OnEvent(event, ...)
             for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do ns.vendorItems[id] = enabled end
             if ns.Catalogue then ns.Catalogue.Load() end
             if ns.Stock then ns.Stock.Init() end
+            if ns.Bootstrap then ns.Bootstrap.Init() end
+            if ns.BootstrapUI then ns.BootstrapUI.Init() end
         elseif not initialized then return end
         if ns.NativeCraft then ns.NativeCraft.Install() end
         if ns.NativeUI then ns.NativeUI.Install() end
@@ -1060,6 +1063,7 @@ function ns.OnEvent(event, ...)
         end
     elseif event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
         if ns.Catalogue then ns.Catalogue.Load() end
+        if ns.Bootstrap then ns.Bootstrap.Wake() end
         if ns.API.IsOwnProfession() then scanAttempts = 0; rescanAt = now() + 0.2 end
         if ns.UI and ns.UI.Install then ns.UI.Install() end
         if ns.StockUI then ns.StockUI.Install() end
@@ -1162,6 +1166,8 @@ frame:SetScript("OnEvent", function(_, event, ...) ns.OnEvent(event, ...) end)
 frame:SetScript("OnUpdate", function()
     local time = now()
     if rescanAt and time >= rescanAt then rescanAt = nil; ns.Scan() end
+    if ns.Bootstrap then ns.Bootstrap.Tick(time) end
+    if ns.BootstrapUI then ns.BootstrapUI.Update(time) end
     if time - lastSelectionCheck < 0.2 then return end
     lastSelectionCheck = time
     ns.Merchant.Tick(time)
@@ -1247,8 +1253,26 @@ SlashCmdList.CRAFTAUTOBUY = function(message)
             return total
         end
         local cached = ns.Catalogue and ns.Catalogue.GetRecipes(key)
+        -- With no native profession open, report the whole saved catalogue.
+        -- Counting GetRecipes(nil) hides successful background discovery.
+        if not key and ns.Catalogue and ns.API.GetProfessions then
+            cached = {}
+            for _, profession in ipairs(ns.API.GetProfessions()) do
+                for id, recipe in pairs(ns.Catalogue.GetRecipes(profession.key)) do cached[id] = recipe end
+            end
+        end
         local visible = ns.Catalogue and ns.Catalogue.Rows and #ns.Catalogue.Rows() or 0
         ns.Print(L.DEBUG_CATALOGUE:format(tostring(key), tostring(parent), count(ns.recipes), count(cached), visible))
+        if ns.Bootstrap then
+            local status = ns.Bootstrap.StatusText()
+            if status then ns.Print(status) end
+            local discovery = ns.Bootstrap.GetState()
+            if status and discovery.lastReason then
+                local progress = string.format("%s (%d/%d)", tostring(discovery.professionKey),
+                    discovery.progress or 0, discovery.recipeTotal or 0)
+                ns.Print(L.DEBUG_RECIPE:format(tostring(discovery.recipeID), progress, discovery.lastReason))
+            end
+        end
         if ns.scanError then ns.Print(ns.scanError) end
     elseif command == "vendor" and tonumber(arg) then
         local id = math.floor(tonumber(arg))

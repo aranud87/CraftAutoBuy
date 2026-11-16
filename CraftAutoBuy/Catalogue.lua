@@ -122,6 +122,8 @@ function Catalogue.Load()
                 if recipes then
                     records[key] = {schema = Catalogue.SCHEMA,
                         parentKey = parent, learnedCount = integer(entry.learnedCount) and entry.learnedCount or nil,
+                        background = entry.background == true,
+                        backgroundBuild = integer(entry.backgroundBuild) and entry.backgroundBuild or nil,
                         version = type(entry.version) == "string" and entry.version or "unknown",
                         name = type(entry.name) == "string" and entry.name ~= "" and entry.name or ns.API.ProfessionName(key),
                         recipes = recipes}
@@ -142,7 +144,7 @@ end
 
 -- Only call after API.ScanRecipes has returned a complete, current own scan.
 -- Replacing the map removes forgotten recipes and old intermediate producers.
-function Catalogue.Record(key, recipes)
+function Catalogue.Record(key, recipes, background)
     ensureLoaded()
     if not integer(key) then return false end
     local copied = copyRecipes(recipes, key)
@@ -153,7 +155,15 @@ function Catalogue.Record(key, recipes)
     for _, recipe in pairs(recipes) do
         if recipe.learned ~= false then learnedCount = learnedCount + 1 end
     end
-    records[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parentKey(key),
+    local parent = parentKey(key)
+    -- A first background read can use the base profession ID. A complete
+    -- native child read is authoritative and must not be hidden by that cache.
+    if not background and parent ~= key and records[parent] and records[parent].background then
+        records[parent] = nil
+    end
+    records[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parent,
+        background = background == true,
+        backgroundBuild = background and ns.RecipeIndex and ns.RecipeIndex.build or nil,
         learnedCount = learnedCount,
         name = ns.API.ProfessionName(key), recipes = copied}
     Catalogue.Invalidate()
@@ -187,7 +197,9 @@ function Catalogue.MissingProfessions()
     local missing = {}
     local scanned = {}
     for key, entry in pairs(records) do
-        if next(entry.recipes) or (entry.learnedCount or 0) > 0 then
+        local completeBackground = entry.background and ns.RecipeIndex
+            and entry.backgroundBuild == ns.RecipeIndex.build
+        if next(entry.recipes) or (entry.learnedCount or 0) > 0 or completeBackground then
             scanned[key], scanned[parentKey(key, entry)] = true, true
         end
     end
