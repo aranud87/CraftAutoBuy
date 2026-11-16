@@ -1,0 +1,571 @@
+local _, ns = ...
+local L = ns.L
+local API = {}
+ns.API = API
+
+-- Signatures verified against Blizzard's WoW Forever (Camelot) UI source.
+-- This adapter deliberately handles ordinary item recipes in the open profession.
+local function ordinaryNumber(value)
+    return type(value) == "number" and not (issecretvalue and issecretvalue(value))
+        and value == value and value > -math.huge and value < math.huge
+end
+
+local function positiveInteger(value)
+    return ordinaryNumber(value) and value > 0 and value == math.floor(value)
+end
+
+local function nonnegativeInteger(value)
+    return ordinaryNumber(value) and value >= 0 and value == math.floor(value)
+end
+
+local function call(func, ...)
+    if type(func) ~= "function" then return false end
+    return pcall(func, ...)
+end
+
+-- Client arrays are dense. A hole while data is incomplete must fail the
+-- complete read, rather than let ipairs silently omit a recipe or ingredient.
+local function arraySize(value)
+    if type(value) ~= "table" or (issecretvalue and issecretvalue(value)) then return nil end
+    local count = 0
+    for index in pairs(value) do
+        -- Table keys themselves cannot be secret values.
+        if type(index) ~= "number" or index < 1 or index >= math.huge
+            or index ~= math.floor(index) then return nil end
+        count = count + 1
+    end
+    for index = 1, count do if value[index] == nil then return nil end end
+    return count
+end
+
+local craftObserver, craftDispatch
+local function observeCraftRejections()
+    if craftObserver or type(CreateFrame) ~= "function" then return end
+    craftObserver = CreateFrame("Frame")
+    for _, event in ipairs({"ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN"}) do
+        pcall(craftObserver.RegisterEvent, craftObserver, event)
+    end
+    craftObserver:SetScript("OnEvent", function(_, event, source, functionName)
+        -- These client events are synchronous. Attribute only a CraftRecipe
+        -- rejection inside our own dispatch, never an unrelated addon's error.
+        if craftDispatch and type(functionName) == "string"
+            and not (issecretvalue and issecretvalue(functionName))
+            and functionName:find("CraftRecipe", 1, true) then
+            craftDispatch.blocked = true
+        end
+    end)
+end
+
+function API.GetForm()
+    return ProfessionsFrame and ProfessionsFrame.CraftingPage
+        and ProfessionsFrame.CraftingPage.SchematicForm
+end
+
+function API.SelectedRecipeID()
+    local form = API.GetForm()
+    if not form or type(form.GetRecipeInfo) ~= "function" then return nil end
+    local ok, info = pcall(form.GetRecipeInfo, form)
+    if ok and type(info) == "table" and positiveInteger(info.recipeID) then
+        return info.recipeID
+    end
+end
+
+function API.GetProfessionKey()
+    if not C_TradeSkillUI then return nil end
+    local ok, info = call(C_TradeSkillUI.GetChildProfessionInfo)
+    if ok and type(info) == "table" and positiveInteger(info.professionID) then
+        return info.professionID
+    end
+    ok, info = call(C_TradeSkillUI.GetBaseProfessionInfo)
+    if ok and type(info) == "table" and positiveInteger(info.professionID) then
+        return info.professionID
+    end
+end
+
+-- The active recipe skill line can be a child (for example classic alchemy
+-- 2485) while GetProfessionInfo and the native tabs identify its parent (171).
+-- Keep GetProfessionKey unchanged for recipe membership checks; normalize only
+-- when matching known professions, naming them or opening their native window.
+function API.GetProfessionParentKey(key)
+    if not positiveInteger(key) then return nil end
+    if not C_TradeSkillUI then return key end
+    local ok, info = call(C_TradeSkillUI.GetChildProfessionInfo)
+    if ok and type(info) == "table" and info.professionID == key then
+        if positiveInteger(info.parentProfessionID) then return info.parentProfessionID end
+        local baseOK, base = call(C_TradeSkillUI.GetBaseProfessionInfo)
+        if baseOK and type(base) == "table" and positiveInteger(base.professionID) then
+            return base.professionID
+        end
+    end
+    ok, info = call(C_TradeSkillUI.GetProfessionInfoBySkillLineID, key)
+    if ok and type(info) == "table" and positiveInteger(info.parentProfessionID) then
+        return info.parentProfessionID
+    end
+    -- An unavailable relation is not evidence that the skill is unknown.
+    return key
+end
+
+-- Forever's right profession tabs use these global profession indices, followed
+-- by the profession spell to exclude skills without a crafting window. The
+-- seven return slots may contain holes (for example, no second primary skill).
+-- The second result tells cache consumers whether absence is authoritative.
+function API.GetProfessions()
+    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return {}, false end
+    local indices = {call(GetProfessions)}
+    if not indices[1] then return {}, false end
+    local result, seen, complete = {}, {}, true
+    local spellBank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    local canCheckSpell = spellBank ~= nil and C_SpellBook and type(C_SpellBook.GetSpellBookItemInfo) == "function"
+        and C_TradeSkillUI and type(C_TradeSkillUI.CanTradeSkillShowCraftingUI) == "function"
+    for slot = 2, 8 do
+        local index = indices[slot]
+        if issecretvalue and issecretvalue(index) then
+            complete = false
+        elseif index ~= nil then
+            local ok, name, texture, _, _, _, spellOffset, key = call(GetProfessionInfo, index)
+            if ok and positiveInteger(key) and type(name) == "string"
+                and not (issecretvalue and issecretvalue(name)) and name ~= "" then
+                local include, openingSpell = true, nil
+                if canCheckSpell then
+                    if not ordinaryNumber(spellOffset) or spellOffset < 0 or spellOffset ~= math.floor(spellOffset) then
+                        include, complete = false, false
+                    else
+                        local spellOK, spell = call(C_SpellBook.GetSpellBookItemInfo, spellOffset + 1, spellBank)
+                        if not spellOK or type(spell) ~= "table" or (issecretvalue and issecretvalue(spell))
+                            or not positiveInteger(spell.spellID) then
+                            include, complete = false, false
+                        else
+                            local showOK, canShow = call(C_TradeSkillUI.CanTradeSkillShowCraftingUI, spell.spellID)
+                            if not showOK or (issecretvalue and issecretvalue(canShow)) or type(canShow) ~= "boolean" then
+                                include, complete = false, false
+                            else
+                                include = canShow
+                                if canShow then openingSpell = spell.spellID end
+                            end
+                        end
+                    end
+                end
+                if include and not seen[key] then
+                    result[#result + 1] = {key = key, name = name, icon = texture, spellID = openingSpell}
+                    seen[key] = true
+                end
+            else
+                complete = false
+            end
+        end
+    end
+    return result, complete
+end
+
+-- Resolve the learned profession's own grimoire spell. The normal out-of-combat
+-- action template may cast it; this lookup never opens a source or casts a spell.
+function API.GetProfessionOpenSpell(key)
+    if not positiveInteger(key) then return nil, L.PROFESSION_OPEN_FAILED end
+    local parentKey = API.GetProfessionParentKey(key)
+    for _, profession in ipairs(API.GetProfessions()) do
+        if profession.key == key or profession.key == parentKey then
+            if positiveInteger(profession.spellID) then return profession.spellID end
+            return nil, L.CATALOG_VERIFY_HELP
+        end
+    end
+    return nil, L.CATALOG_VERIFY_HELP
+end
+
+function API.ProfessionName(key)
+    local parentKey = API.GetProfessionParentKey(key)
+    for _, profession in ipairs(API.GetProfessions()) do
+        if profession.key == key or profession.key == parentKey then return profession.name end
+    end
+    if positiveInteger(key) and C_TradeSkillUI then
+        local ok, info = call(C_TradeSkillUI.GetProfessionInfoBySkillLineID, key)
+        if ok and type(info) == "table" then
+            local name = info.professionName or info.parentProfessionName
+            if type(name) == "string" and name ~= "" then return name end
+        end
+    end
+    return L.PROFESSION_FALLBACK:format(tostring(key))
+end
+
+-- Legacy Lua callers cannot use the Blizzard-only OpenTradeSkill route on
+-- Forever. Profession buttons use their native spell action instead.
+function API.OpenProfession(key)
+    if not positiveInteger(key) then return false, L.PROFESSION_OPEN_FAILED end
+    if InCombatLockdown and InCombatLockdown() then return false, L.PROFESSION_OPEN_COMBAT end
+    if not C_TradeSkillUI then
+        return false, L.PROFESSION_API_UNAVAILABLE
+    end
+    local parentKey = API.GetProfessionParentKey(key)
+    local professions, complete = API.GetProfessions()
+    if complete then
+        local known = false
+        for _, profession in ipairs(professions) do if profession.key == parentKey then known = true; break end end
+        if not known then return false, L.PROFESSION_NOT_KNOWN end
+    end
+    return false, L.CATALOG_VERIFY_HELP
+end
+
+function API.IsOwnProfession()
+    if not C_TradeSkillUI then return false, L.PROFESSION_API_UNAVAILABLE end
+    for _, name in ipairs({"IsTradeSkillLinked", "IsTradeSkillGuild", "IsTradeSkillGuildMember", "IsNPCCrafting"}) do
+        if C_TradeSkillUI[name] then
+            local ok, external = call(C_TradeSkillUI[name])
+            if not ok or external then return false, L.OPEN_OWN_PROFESSION end
+        end
+    end
+    if C_TradeSkillUI.IsDataSourceChanging then
+        local ok, changing = call(C_TradeSkillUI.IsDataSourceChanging)
+        if not ok or changing then return false, L.LOADING_RECIPES end
+    end
+    if C_TradeSkillUI.IsTradeSkillReady then
+        local ok, ready = call(C_TradeSkillUI.IsTradeSkillReady)
+        if not ok or not ready then return false, L.OPEN_PROFESSION_WAIT end
+    end
+    if not API.GetProfessionKey() then return false, L.OPEN_PROFESSION end
+    return true
+end
+
+local function unsupported(recipe, reason)
+    recipe.supported = false
+    recipe.reason = reason
+    return recipe
+end
+
+local function readRecipe(recipeID, info, professionKey)
+    local recipe = {
+        id = recipeID, name = info.name or L.RECIPE_FALLBACK:format(recipeID),
+        reagents = {}, craftingReagents = {}, professionKey = professionKey,
+        supported = true, canCreateMultiple = info.canCreateMultiple ~= false,
+    }
+    -- Optional progression metadata is independent of the item's output yield.
+    -- Missing or invalid fields must not make an otherwise valid recipe unusable.
+    if type(info.canSkillUp) == "boolean" and not (issecretvalue and issecretvalue(info.canSkillUp)) then
+        recipe.canSkillUp = info.canSkillUp
+    end
+    if type(info.disabled) == "boolean" and not (issecretvalue and issecretvalue(info.disabled)) and info.disabled then
+        recipe.canSkillUp = false
+    end
+    if nonnegativeInteger(info.relativeDifficulty) and info.relativeDifficulty <= 3 then
+        recipe.relativeDifficulty = info.relativeDifficulty
+    end
+    if nonnegativeInteger(info.numSkillUps) then recipe.numSkillUps = info.numSkillUps end
+    if not info.learned then return unsupported(recipe, L.RECIPE_NOT_LEARNED) end
+    if info.isRecraft or info.isDummyRecipe or info.isGatheringRecipe
+        or info.isEnchantingRecipe or info.isSalvageRecipe then
+        return unsupported(recipe, L.RECIPE_NOT_SIMPLE_ITEM)
+    end
+    if info.supportsQualities then
+        return unsupported(recipe, L.QUALITY_RECIPES_UNSUPPORTED)
+    end
+    local ok, schematic = call(C_TradeSkillUI.GetRecipeSchematic, recipeID, false)
+    if not ok or type(schematic) ~= "table" or arraySize(schematic.reagentSlotSchematics) == nil then
+        return nil, L.LOADING_REAGENTS
+    end
+    local itemRecipeType = Enum and Enum.TradeskillRecipeType and Enum.TradeskillRecipeType.Item or 1
+    if schematic.recipeType and schematic.recipeType ~= itemRecipeType then
+        return unsupported(recipe, L.RECIPE_NOT_SIMPLE_ITEM)
+    end
+    recipe.outputItemID = schematic.outputItemID
+    if not positiveInteger(recipe.outputItemID) and C_TradeSkillUI.GetRecipeOutputItemData then
+        local outputOK, output = call(C_TradeSkillUI.GetRecipeOutputItemData, recipeID)
+        if outputOK and type(output) == "table" then recipe.outputItemID = output.itemID end
+    end
+    if not positiveInteger(recipe.outputItemID) then
+        return nil, L.LOADING_OUTPUT
+    end
+    recipe.outputCount = schematic.quantityMin
+    if not positiveInteger(recipe.outputCount) then return nil, L.RECIPE_YIELD_UNAVAILABLE end
+    local basicType = Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic or 1
+    local itemSlotType = Enum and Enum.TradeskillSlotDataType and Enum.TradeskillSlotDataType.Reagent or 1
+    local byItem = {}
+    for _, slot in ipairs(schematic.reagentSlotSchematics) do
+        if type(slot) ~= "table" or (issecretvalue and issecretvalue(slot))
+            or (issecretvalue and issecretvalue(slot.required))
+            or (slot.required ~= nil and type(slot.required) ~= "boolean") then
+            return nil, L.LOADING_REAGENTS
+        end
+        -- Basic slots are mandatory even when older exports omit the required flag.
+        local required = slot.required == true or slot.reagentType == basicType
+        if required then
+            if slot.dataSlotType and slot.dataSlotType ~= itemSlotType then
+                return unsupported(recipe, L.SPECIAL_REAGENT_UNSUPPORTED)
+            end
+            local reagentCount = arraySize(slot.reagents)
+            if not reagentCount or reagentCount == 0 then
+                return nil, L.LOADING_REAGENTS
+            end
+            local variableCount = 0
+            if slot.variableQuantities ~= nil then variableCount = arraySize(slot.variableQuantities) end
+            if variableCount == nil then
+                return nil, L.LOADING_REAGENT_QUANTITIES
+            end
+            if reagentCount ~= 1 or variableCount > 0 then
+                return unsupported(recipe, L.RECIPE_REQUIRES_REAGENT_CHOICE)
+            end
+            local reagent = slot.reagents[1]
+            if type(reagent) ~= "table" or (issecretvalue and issecretvalue(reagent)) then
+                return nil, L.LOADING_REAGENTS
+            end
+            if not positiveInteger(reagent.itemID) or reagent.currencyID then
+                return unsupported(recipe, L.REQUIRED_REAGENT_UNSUPPORTED)
+            end
+            if not positiveInteger(slot.quantityRequired) or not positiveInteger(slot.dataSlotIndex) then
+                return nil, L.LOADING_REAGENT_QUANTITIES
+            end
+            byItem[reagent.itemID] = (byItem[reagent.itemID] or 0) + slot.quantityRequired
+            recipe.craftingReagents[#recipe.craftingReagents + 1] = {
+                reagent = {itemID = reagent.itemID},
+                dataSlotIndex = slot.dataSlotIndex, quantity = slot.quantityRequired,
+            }
+        elseif slot.required == nil and slot.reagentType == nil then
+            return nil, L.REAGENT_TYPE_UNAVAILABLE
+        end
+    end
+    for itemID, quantity in pairs(byItem) do
+        recipe.reagents[#recipe.reagents + 1] = {itemID = itemID, quantity = quantity}
+    end
+    table.sort(recipe.reagents, function(a, b) return a.itemID < b.itemID end)
+    -- An empty or incomplete schematic must never become an unlimited free recipe.
+    if #recipe.reagents == 0 then
+        return unsupported(recipe, L.RECIPE_NO_VERIFIABLE_REAGENTS)
+    end
+    return recipe
+end
+
+function API.GetRecipe(recipeID)
+    local own, reason = API.IsOwnProfession()
+    if not own then return nil, reason end
+    if not positiveInteger(recipeID) then return nil, L.INVALID_RECIPE end
+    local key = API.GetProfessionKey()
+    if C_TradeSkillUI.IsRecipeInSkillLine then
+        local ok, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, key)
+        if not ok or not belongs then return nil, L.RECIPE_OTHER_PROFESSION end
+    end
+    local ok, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
+    if not ok or type(info) ~= "table" then return nil, L.LOADING_RECIPE end
+    return readRecipe(recipeID, info, key)
+end
+
+function API.ScanRecipes()
+    local own, reason = API.IsOwnProfession()
+    if not own then return nil, reason end
+    local key = API.GetProfessionKey()
+    local ok, ids = call(C_TradeSkillUI.GetAllRecipeIDs)
+    local count = ok and arraySize(ids)
+    if not count or count == 0 then return nil, L.RECIPES_LOADING end
+    local recipes = {}
+    for _, recipeID in ipairs(ids) do
+        local infoOK, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
+        if not infoOK or type(info) ~= "table" then return nil, L.RECIPES_LOADING end
+        local belongs = true
+        if C_TradeSkillUI.IsRecipeInSkillLine then
+            local belongsOK
+            belongsOK, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, key)
+            if not belongsOK then return nil, L.LOADING_PROFESSION end
+        end
+        if info.learned and belongs then
+            local recipe, errorMessage = readRecipe(recipeID, info, key)
+            if not recipe then return nil, errorMessage end
+            recipes[recipeID] = recipe
+        end
+    end
+    if key ~= API.GetProfessionKey() then return nil, L.PROFESSION_CHANGED end
+    return recipes
+end
+
+local function itemCount(itemID, includeBank)
+    if not positiveInteger(itemID) then return nil end
+    local countFunction = C_Item and C_Item.GetItemCount
+    if type(countFunction) ~= "function" then return nil end
+    -- Forever ItemDocumentation.lua: item, bank, uses, reagent bank, account bank.
+    -- Include only this character's storage; never count charges or account items.
+    local ok, count = call(countFunction, itemID, includeBank, false, includeBank, false)
+    if not ok or not ordinaryNumber(count) or count < 0 then return nil end
+    return math.floor(count)
+end
+
+function API.CountItem(itemID)
+    -- Execution always requires components in the bags.
+    return itemCount(itemID, false) or 0
+end
+
+local function bankCount(itemID, bags)
+    -- The saved personal-bank scan and the client's own count are both evidence
+    -- for the withdrawal/repurchase decision. The client can forget its bank
+    -- counts after /reload, and a saved scan can miss a change CAB could not
+    -- read (crash before saving, reply during /reload, another computer).
+    -- Never let one hide items the other still reports: an over-estimate only
+    -- asks for a bank visit or the existing confirmation, an under-estimate
+    -- would buy reagents the player already owns.
+    local client
+    -- An unavailable bags count cannot safely be subtracted from a combined count.
+    if bags ~= nil then
+        local combined = itemCount(itemID, true)
+        client = combined and math.max(0, combined - bags) or nil
+    end
+    if positiveInteger(itemID) and ns.Stock and ns.Stock.BankCount then
+        local stored = (ns.Stock.BankEvidence or ns.Stock.BankCount)(itemID)
+        if ordinaryNumber(stored) and stored >= 0 then
+            stored = math.floor(stored)
+            -- A higher client count is recorded as evidence to check, so the
+            -- protection survives a later session where the client forgets it.
+            if client and client > stored and ns.Stock.NoteClientBankCount then
+                ns.Stock.NoteClientBankCount(itemID, client)
+            end
+            return math.max(stored, client or 0)
+        end
+    end
+    return client or 0
+end
+
+function API.BankCount(itemID)
+    return bankCount(itemID, itemCount(itemID, false))
+end
+
+function API.Inventory(recipes)
+    local inventory = {}
+    local function add(itemID)
+        if positiveInteger(itemID) and inventory[itemID] == nil then
+            inventory[itemID] = API.CountItem(itemID)
+        end
+    end
+    for _, recipe in pairs(recipes or {}) do
+        add(recipe.outputItemID)
+        for _, reagent in ipairs(recipe.reagents or {}) do add(reagent.itemID) end
+    end
+    return inventory
+end
+
+function API.InventoryWithBank(recipes)
+    local inventory, bank = {}, {}
+    local function add(itemID)
+        if positiveInteger(itemID) and inventory[itemID] == nil then
+            local bags = itemCount(itemID, false)
+            bank[itemID] = bankCount(itemID, bags)
+            inventory[itemID] = (bags or 0) + bank[itemID]
+        end
+    end
+    for _, recipe in pairs(recipes or {}) do
+        add(recipe.outputItemID)
+        for _, reagent in ipairs(recipe.reagents or {}) do add(reagent.itemID) end
+    end
+    -- Bag counts are always live; only the personal bank may use its saved scan.
+    return inventory, bank
+end
+
+function API.RecipeReady(recipeID)
+    local recipe, reason = API.GetRecipe(recipeID)
+    if not recipe then return false, reason end
+    if not recipe.supported then return false, recipe.reason end
+    local infoOK, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
+    if not infoOK or not info or not info.learned then return false, L.RECIPE_NOT_LEARNED end
+    if info.disabled then return false, info.disabledReason or L.RECIPE_UNAVAILABLE end
+    if C_TradeSkillUI.GetRecipeCooldown then
+        local ok, cooldown, _, charges = call(C_TradeSkillUI.GetRecipeCooldown, recipeID)
+        if not ok then return false, L.COOLDOWN_UNAVAILABLE end
+        if ordinaryNumber(cooldown) and cooldown > 0 and not (ordinaryNumber(charges) and charges > 0) then
+            return false, L.RECIPE_ON_COOLDOWN
+        end
+    end
+    if C_TradeSkillUI.GetRecipeRequirements then
+        local ok, requirements = call(C_TradeSkillUI.GetRecipeRequirements, recipeID)
+        if not ok or arraySize(requirements) == nil then return false, L.CRAFT_REQUIREMENTS_UNAVAILABLE end
+        local missingRequirement
+        for _, requirement in ipairs(requirements) do
+            if type(requirement) ~= "table" or type(requirement.met) ~= "boolean"
+                or (issecretvalue and issecretvalue(requirement.met)) then
+                return false, L.CRAFT_REQUIREMENTS_UNAVAILABLE
+            end
+            if requirement.met == false and not missingRequirement then
+                local name = requirement.name
+                missingRequirement = type(name) == "string" and name ~= ""
+                    and not (issecretvalue and issecretvalue(name)) and name or L.REQUIREMENT_TOOL_OR_LOCATION
+            end
+        end
+        -- Forever requirements cover SpellFocus (station), Totem (tool) and
+        -- Area (location). This diagnostic never authorizes an actual craft;
+        -- callers may use it solely to prepare purchases for a later click.
+        if missingRequirement then return false, L.REQUIREMENT_NEEDED:format(missingRequirement), "requirements" end
+    end
+    -- Forever's native validation rejects an explicitly uncraftable recipe.
+    -- Keep missing station/tool diagnostics above so the purchase-only action
+    -- remains available when those requirements are the reason it is blocked.
+    if not (issecretvalue and issecretvalue(info.craftable)) and info.craftable == false then
+        return false, info.disabledReason or L.RECIPE_UNAVAILABLE
+    end
+    return true
+end
+
+function API.Craft(recipeID, crafts)
+    if not positiveInteger(crafts) then return false, L.INVALID_QUANTITY end
+    if InCombatLockdown and InCombatLockdown() then return false, L.CRAFT_SUSPENDED_COMBAT end
+    local ready, reason = API.RecipeReady(recipeID)
+    if not ready then return false, reason end
+    local recipe, readError = API.GetRecipe(recipeID)
+    if not recipe then return false, readError end
+    if crafts > 1 and not recipe.canCreateMultiple then return false, L.RECIPE_SINGLE_CRAFT_ONLY end
+    if C_TradeSkillUI.GetRecipeCooldown then
+        local ok, _, _, charges, maxCharges = call(C_TradeSkillUI.GetRecipeCooldown, recipeID)
+        if ok and ordinaryNumber(maxCharges) and maxCharges > 0 and ordinaryNumber(charges) and crafts > charges then
+            return false, L.CRAFT_CHARGES_INSUFFICIENT
+        end
+    end
+    for _, reagent in ipairs(recipe.reagents) do
+        if API.CountItem(reagent.itemID) < reagent.quantity * crafts then
+            return false, L.REAGENTS_MISSING_BAGS
+        end
+    end
+    observeCraftRejections()
+    local previous, dispatch = craftDispatch, {}
+    craftDispatch = dispatch
+    local ok, result = call(C_TradeSkillUI.CraftRecipe, recipeID, crafts, recipe.craftingReagents)
+    craftDispatch = previous
+    if dispatch.blocked then
+        if ns.Print then ns.Print(L.CRAFT_CLIENT_BLOCKED) end
+        return false, L.CRAFT_CLIENT_BLOCKED, "protected"
+    end
+    if not ok then return false, L.CRAFT_REFUSED_REASON:format(tostring(result or L.API_UNAVAILABLE)) end
+    if result == false then return false, L.CRAFT_REFUSED end
+    -- Success means the call was accepted, not that the cast completed. The queue
+    -- must await the player's spell and inventory events before advancing.
+    return true
+end
+
+-- Read-only eligibility for the client's supported out-of-combat macro button.
+-- Unknown cast identity must never authorize stopping an unrelated player spell.
+function API.CanStopCraft(recipeID)
+    if not positiveInteger(recipeID) or (ns.InCombat and ns.InCombat())
+        or (InCombatLockdown and InCombatLockdown()) then
+        return false, L.CRAFT_STOP_UNCONFIRMED, "unavailable"
+    end
+    local casting, channeling = {call(UnitCastingInfo, "player")}, {call(UnitChannelInfo, "player")}
+    if not casting[1] or not channeling[1] then
+        return false, L.CRAFT_STOP_UNCONFIRMED, "unavailable"
+    end
+    local active = false
+    for index, info in ipairs({casting, channeling}) do
+        local name, tradeskill, spellID = info[2], info[7], info[index == 1 and 10 or 9]
+        if issecretvalue and (issecretvalue(name) or issecretvalue(tradeskill) or issecretvalue(spellID)) then
+            return false, L.CRAFT_STOP_UNCONFIRMED, "unavailable"
+        end
+        if name ~= nil then
+            if type(name) ~= "string" or name == "" or not positiveInteger(spellID)
+                or type(tradeskill) ~= "boolean" then
+                return false, L.CRAFT_STOP_UNCONFIRMED, "unavailable"
+            end
+            if not tradeskill or spellID ~= recipeID then
+                return false, L.CRAFT_STOP_OTHER_ACTION, "other_action"
+            end
+            active = true
+        end
+    end
+    if not active then return false, L.CRAFT_STOP_UNCONFIRMED, "unavailable" end
+    return true
+end
+
+-- Retained for callers that need the failure diagnostic. An ordinary Lua
+-- handler cannot stop a cast on Forever; only the native macro action may do it.
+function API.StopCraft(recipeID)
+    local eligible, reason, kind = API.CanStopCraft(recipeID)
+    if not eligible then return false, reason, kind end
+    return false, L.CRAFT_STOP_UNCONFIRMED, "secure_action_required"
+end

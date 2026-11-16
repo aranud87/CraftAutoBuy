@@ -1,0 +1,49 @@
+## Interface: 16001
+## Title: CraftAutoBuy
+## IconTexture: Interface\AddOns\CraftAutoBuy\Icon.tga
+## Notes: Craft counts with vendor reagents, targeted purchases, and recursive crafting.
+## Notes-frFR: Quantités fabricables avec composants PNJ, achats ciblés et recettes intermédiaires.
+## Notes-deDE: Herstellbare Mengen mit Händlermaterialien, gezielte Einkäufe und Herstellung mit Zwischenrezepten.
+## Notes-itIT: Quantità creabili con reagenti dei mercanti, acquisti mirati e creazione di componenti intermedi.
+## Notes-esES: Cantidades fabricables con componentes de PNJ, compras específicas y fabricación de componentes intermedios.
+## Notes-esMX: Cantidades que puedes crear con componentes de PNJ, compras específicas y recetas intermedias.
+## Notes-ptBR: Quantidades com reagentes de vendedores, compras específicas e criação de receitas intermediárias.
+## Notes-ruRU: Расчёт изготовления с реагентами торговцев, покупка недостающего и изготовление промежуточных материалов.
+## Notes-koKR: 상인 판매 재료를 포함한 제작 수량 계산, 부족한 재료 구입 및 중간 재료 제작.
+## Notes-zhCN: 计入商人材料的可制造数量、按需购买和中间材料制造。
+## Notes-zhTW: 計入商人材料的可製造數量、按需購買與中間材料製造。
+## Author: aranud87
+## Version: 1.0.0
+## X-Website: https://github.com/aranud87/CraftAutoBuy
+## X-License: MIT
+## SavedVariablesPerCharacter: CraftAutoBuyDB
+
+Localization.lua
+Locales/enUS.lua
+Locales/enGB.lua
+Locales/frFR.lua
+Locales/deDE.lua
+Locales/itIT.lua
+Locales/esES.lua
+Locales/esMX.lua
+Locales/ptBR.lua
+Locales/ruRU.lua
+Locales/koKR.lua
+Locales/zhCN.lua
+Locales/zhTW.lua
+VendorData.lua
+Planner.lua
+API.lua
+Bank.lua
+Catalogue.lua
+Stock.lua
+Merchant.lua
+Core.lua
+ActionButtons.lua
+Sidebar.lua
+BookArt.lua
+UI.lua
+StockUI.lua
+NativeUI.lua
+NativeCraft.lua
+Settings.lua
