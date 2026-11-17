@@ -108,7 +108,7 @@ local function showTooltip(button)
         return
     end
     local buying = button.actionIntent == "buy"
-    GameTooltip:SetText(buying and L.ACTION_BUY or L.ACTION_CRAFT)
+    GameTooltip:SetText(buying and L.ACTION_BUY or ns.ActionButtons.CraftText(button.craftQuantity))
     GameTooltip:AddLine(buying and L.ACTION_BUY_HELP or L.ACTION_CRAFT_HELP, 1, 1, 1, true)
     -- Reagent rows already identify bank stock. Keep the detailed warning in
     -- the action tooltip, where it cannot overlap reagent names, prices or tracking.
@@ -302,7 +302,8 @@ function NativeCraft.Refresh()
     if ns.Merchant.IsBusy() and (not ns.job or matchingJob) then state.create.reason = L.WAIT_PURCHASES_RESUME end
     state.create.bankMessage, state.create.alternativeQuote = createBank, createAlternative
     state.cancel = busy() and true or false
-    local actionText = state.create.actionIntent == "buy" and L.ACTION_BUY or L.ACTION_CRAFT
+    state.create.craftQuantity = quantity
+    local actionText = state.create.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(quantity)
     local cancelText = ns.job and ns.job.pending and L.STOP_BATCH or L.CANCEL
     if ns.UI and ns.UI.FitActionButton then
         ns.UI.FitActionButton(state.all, L.MAX_QUANTITY, 64, 40)

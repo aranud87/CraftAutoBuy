@@ -2,6 +2,12 @@ local _, ns = ...
 local ActionButtons = {}
 ns.ActionButtons = ActionButtons
 
+-- Use the selected number of crafts, including the remaining target of a
+-- paused project, rather than the recipe's yield or the possible maximum.
+function ActionButtons.CraftText(quantity)
+    return ns.L.ACTION_CRAFT .. " × " .. tostring(quantity or 1)
+end
+
 -- The button inherits InsecureActionButtonTemplate (Forever's supported macro
 -- actions outside combat). Keep its native OnClick; hooks only manage CAB state.
 function ActionButtons.BindCancel(button)
