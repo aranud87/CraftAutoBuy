@@ -1,12 +1,13 @@
 # CraftAutoBuy
 
-**Version stable : 1.2.0 — Stock v2**
+**Version stable : 1.2.1**
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
-La 1.2.0 contient **Stock v2** et conserve l'onglet CAB v2. GitHub héberge le
-code source, les signalements et les notes de version ; les téléchargements
-de l'addon prêt à installer sont proposés sur CurseForge.
+La 1.2.1 remplace le libellé ambigu « Tout créer » par **Créer × N**, avec le
+nombre de fabrications sélectionné. Elle conserve **Stock v2** et l'onglet CAB v2.
+GitHub héberge le code source, les signalements et les notes de version ; les
+téléchargements de l'addon prêt à installer sont proposés sur CurseForge.
 
 CraftAutoBuy initialise automatiquement le catalogue des recettes au premier
 lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
@@ -116,9 +117,9 @@ son catalogue natif complet.
 4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter**. Avec
    l'achat automatique activé, ouvre un marchand qui les vend et clique dessus.
    Le devis porte sur l'ensemble des fournitures nécessaires à la quantité choisie.
-5. Après leur réception, le bouton affiche **Tout créer**. Clique dessus pour
-   fabriquer le lot choisi. Ici « tout » désigne la quantité saisie, pas un
-   passage automatique au maximum.
+5. Après leur réception, le bouton affiche **Créer × N**, où N est le nombre
+   de fabrications sélectionné. Clique dessus pour
+   fabriquer le lot choisi.
 
 **L'achat et la fabrication demandent deux clics distincts.** La réception des
 composants ne lance jamais une fabrication. Ouvrir le marchand, consulter une
@@ -256,7 +257,7 @@ Vérifie tes sacs et ton argent, puis suis le message affiché avant de reprendr
 Les prérequis manquants apparaissent en rouge. **Tout acheter** peut acheter
 les fournitures même sans le feu de cuisine, la forge, l'enclume ou l'outil
 nécessaire. Rejoins ensuite le lieu adapté ou récupère l'outil, puis clique sur
-**Tout créer**. Arriver sur place ne lance aucune fabrication.
+**Créer × N**. Arriver sur place ne lance aucune fabrication.
 
 ## Arrêter ou changer de recette
 

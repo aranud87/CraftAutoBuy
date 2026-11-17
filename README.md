@@ -3,7 +3,9 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Current stable version: **1.2.0 — Stock v2**.
+Current stable version: **1.2.1**.
+
+The craft button now shows **Craft × N**, the selected number of crafts.
 
 ## Download and updates
 
@@ -32,7 +34,10 @@ from the bank. Bag upgrade estimates are simulations and do not move items.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version stable : **1.2.0 — Stock v2**.
+dans **World of Warcraft: Forever**. Version stable : **1.2.1**.
+
+Le bouton de fabrication affiche désormais **Créer × N**, le nombre de
+fabrications sélectionné.
 
 - **Catalogue CAB :** recettes fabricables de vos métiers, favoris, recherche
   et filtres Banque/Progression.

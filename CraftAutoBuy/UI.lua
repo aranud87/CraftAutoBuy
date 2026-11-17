@@ -298,7 +298,8 @@ local function actionTooltip(button, defaultHelp)
     end
     if button.bankMessage then lines[#lines + 1] = button.bankMessage end
     addCost(lines)
-    tooltip(button, button.actionIntent == "buy" and L.ACTION_BUY or L.ACTION_CRAFT, table.concat(lines, "\n\n"))
+    tooltip(button, button.actionIntent == "buy" and L.ACTION_BUY
+        or ns.ActionButtons.CraftText(button.craftQuantity), table.concat(lines, "\n\n"))
 end
 
 local function updateSidebar()
@@ -624,7 +625,7 @@ function UI.Install()
     widgets.quantity:SetScript("OnEditFocusLost", function(self) ns.SetQuantity(self:GetText()) end)
     widgets.quantity:SetScript("OnTextChanged", function(self, userInput) if userInput then ns.SetQuantity(self:GetText()) end end)
     widgets.increase = button(nil, panel, "+", 18, 375, -482, function() ns.SetQuantity((ns.quantity or 1) + 1) end)
-    widgets.craft = button("CraftAutoBuyCreateButton", panel, L.ACTION_CRAFT, 188, 459, -482, function(self)
+    widgets.craft = button("CraftAutoBuyCreateButton", panel, ns.ActionButtons.CraftText(1), 188, 459, -482, function(self)
         local purchaseOnly, needsVerification, intent = self.purchaseOnly, self.needsVerification, self.actionIntent
         widgets.quantity:ClearFocus()
         if needsVerification then
@@ -995,6 +996,7 @@ function UI.Render()
     widgets.output.Icon:SetTexture(itemIcon(widgets.output.itemID))
     detailBackground(key)
     local count, crafts = ns.maxCrafts or 0, job and job.remaining or ns.quantity or 1
+    widgets.craft.craftQuantity = crafts
     if not widgets.quantity:HasFocus() then widgets.quantity:SetText(tostring(crafts)) end
     local canEdit = recipe ~= nil and ns.CanEditQuantity() and not ns.pendingStart and not ns.bankConfirmation
     widgets.quantity:SetEnabled(canEdit)
@@ -1039,7 +1041,7 @@ function UI.Render()
         control:SetPoint("TOPLEFT", panel, "TOPLEFT", actionLeft, -482)
     end
     UI.FitActionButton(widgets.craft,
-        widgets.craft.actionIntent == "buy" and L.ACTION_BUY or L.ACTION_CRAFT, actionWidth)
+        widgets.craft.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(crafts), actionWidth)
     UI.FitActionButton(widgets.openProfession, L.CATALOG_VERIFY, actionWidth)
     local canCraft = recipe ~= nil and ns.plan and ns.plan.craftable and ready and craftReady and idle or false
     if needsVerification then
