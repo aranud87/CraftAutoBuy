@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("enGB", {
     STOCK_BAG_SLOTS = "%d slots",
     STOCK_BAGS_EQUIPPED = "%d bags equipped",
     STOCK_UPGRADE_TARGET = "Comparison size (slots)",
-    STOCK_UPGRADE_GAIN = "Bag %d → %d slots: +%d.",
+    STOCK_UPGRADE_GAIN = "Bag %d -> %d slots: +%d.",
     STOCK_UPGRADE_NONE = "No general-purpose bag smaller than %d slots.",
     STOCK_UPGRADE_UNKNOWN = "Check bag capacity.",
     STOCK_BANK_UNLOCKABLE = "%d more bank bag slots can be unlocked.",

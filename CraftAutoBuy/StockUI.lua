@@ -118,6 +118,11 @@ end
 
 local function tooltip(owner, text)
     if not GameTooltip then return end
+    -- A cleared native FontString returns nil, not an empty string.
+    if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) or text == "" then
+        GameTooltip:Hide()
+        return
+    end
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     GameTooltip:SetText(text)
     GameTooltip:Show()
@@ -139,6 +144,32 @@ local function button(parent, text, x, y, width, handler)
     value:SetHighlightFontObject("GameFontHighlightSmall")
     value:SetDisabledFontObject("GameFontDisableSmall")
     if value.Text then value.Text:SetWordWrap(false); value.Text:SetMaxLines(1) end
+    value:SetScript("OnClick", handler)
+    return value
+end
+
+local function selector(parent, x, y, width, handler)
+    local value = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    value:SetSize(width, 24)
+    value:SetBackdrop({bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16,
+        edgeSize = 10, insets = {left = 3, right = 3, top = 3, bottom = 3}})
+    value:SetBackdropColor(.08, .07, .05, 1)
+    value:SetBackdropBorderColor(.58, .47, .30, 1)
+    local caption = value:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    caption:SetPoint("LEFT", value, "LEFT", 8, 0)
+    caption:SetSize(width - 31, 18)
+    caption:SetJustifyH("LEFT"); caption:SetJustifyV("MIDDLE"); caption:SetWordWrap(false)
+    value:SetFontString(caption)
+    value:SetNormalFontObject("GameFontNormalSmall")
+    value:SetHighlightFontObject("GameFontHighlightSmall")
+    value:SetDisabledFontObject("GameFontDisableSmall")
+    local arrow = value:CreateTexture(nil, "OVERLAY")
+    arrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    arrow:SetPoint("RIGHT", value, "RIGHT", -4, 0)
+    arrow:SetSize(16, 16)
+    value.Caption, value.Arrow = caption, arrow
     value:SetScript("OnClick", handler)
     return value
 end
@@ -318,14 +349,14 @@ function StockUI.Install()
         end
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    widgets.contentLabel = label(panel, "GameFontNormalSmall", 326, 0, 130, 16)
-    widgets.contentFilter = button(panel, "", 321, -16, 135, function(self)
+    widgets.contentLabel = label(panel, "GameFontNormalSmall", 329, 0, 127, 16)
+    widgets.contentFilter = selector(panel, 321, -16, 135, function(self)
         showMenu(self, L.STOCK_SHOW, {{text = L.STOCK_COMPONENTS, value = "components"}, {text = L.STOCK_ALL, value = "all"}},
             function(value) return view().content == value end,
             function(value) preference("SetContent", "content", value); StockUI.Render() end)
     end)
-    widgets.professionLabel = label(panel, "GameFontNormalSmall", 472, 0, 168, 16)
-    widgets.professionFilter = button(panel, "", 467, -16, 173, function(self)
+    widgets.professionLabel = label(panel, "GameFontNormalSmall", 475, 0, 165, 16)
+    widgets.professionFilter = selector(panel, 467, -16, 173, function(self)
         if view().content == "all" then return end
         local choices = {{text = L.STOCK_ALL_PROFESSIONS, value = false}}
         for _, profession in ipairs(lastData and lastData.professions or {}) do
@@ -393,8 +424,7 @@ function StockUI.Install()
     widgets.missingHit:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -490)
     widgets.missingHit:SetSize(620, 18); widgets.missingHit:EnableMouse(true)
     widgets.missingHit:SetScript("OnEnter", function(self)
-        local text = widgets.missing:GetText()
-        if text ~= "" then tooltip(self, text) end
+        tooltip(self, widgets.missing:GetText())
     end)
     widgets.missingHit:SetScript("OnLeave", hideTooltip)
     panel.SearchBox, panel.Bags, panel.Bank = widgets.search, widgets.bags.frame, widgets.bank.frame
@@ -508,14 +538,15 @@ local function renderNow()
     end
     lastData = data
     widgets.contentLabel:SetText(L.STOCK_SHOW); widgets.professionLabel:SetText(L.STOCK_PROFESSION)
-    widgets.contentFilter:SetText((state.content == "all" and L.STOCK_ALL or L.STOCK_COMPONENTS) .. "  |cffffd100▼|r")
+    widgets.contentFilter:SetText(state.content == "all" and L.STOCK_ALL or L.STOCK_COMPONENTS)
     local professionName = L.STOCK_ALL_PROFESSIONS
     if state.professionKey then
         professionName = tostring(state.professionKey)
         for _, profession in ipairs(data.professions or {}) do if profession.key == state.professionKey then professionName = profession.name; break end end
     end
-    widgets.professionFilter:SetText(professionName .. "  |cffffd100▼|r")
+    widgets.professionFilter:SetText(professionName)
     widgets.professionFilter:SetEnabled(state.content ~= "all")
+    widgets.professionFilter.Arrow:SetAlpha(state.content == "all" and .4 or 1)
     widgets.inventoryFilter.Label:SetText(L.STOCK_INVENTORY_MODE); widgets.inventoryFilter:SetChecked(state.inventory)
     widgets.bags.heading:SetText(L.STOCK_BAGS); widgets.bank.heading:SetText(L.STOCK_BANK)
     widgets.bags.title:SetText(L.STOCK_OBJECT); widgets.bank.title:SetText(L.STOCK_OBJECT)
@@ -548,7 +579,7 @@ local function renderNow()
     widgets.source:SetText((bankOpen and L.STOCK_BANK_CURRENT or L.STOCK_BANK_MEMORY) .. (data.bankUnverified and " (?)" or ""))
     widgets.scope:SetText(state.content == "all" and L.STOCK_ALL_OBJECTS or L.STOCK_COMPONENTS_KNOWN)
     widgets.capacityToggle:ClearAllPoints(); widgets.capacityToggle:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, -(footerY + 22))
-    widgets.capacityToggle:SetText((state.extensionsExpanded and "− " or "+ ") .. L.STOCK_CAPACITY_EXTENSIONS)
+    widgets.capacityToggle:SetText((state.extensionsExpanded and "- " or "+ ") .. L.STOCK_CAPACITY_EXTENSIONS)
     widgets.extensions:SetShown(state.extensionsExpanded)
     if state.extensionsExpanded then renderExtensions(data, state) end
     local names = {}
