@@ -107,12 +107,63 @@ local function invalidateCatalogue()
     if ns.Catalogue then ns.Catalogue.Invalidate() end
 end
 
+local function catalogueIncludesBank()
+    -- An active project keeps the source choice made at its originating click,
+    -- even when CAB is hidden or the player returns to the native profession.
+    if ns.job then return ns.job.catalogueIncludeBank ~= false end
+    if ns.pendingStart then return ns.pendingStart.catalogueIncludeBank ~= false end
+    return not ns.catalogueActive or not ns.CatalogueView or ns.CatalogueView.Get().includeBank ~= false
+end
+
 local function planningStock(recipes)
-    if bankOverride or (ns.job and ns.job.ignoreBank) or (ns.pendingStart and ns.pendingStart.ignoreBank) then
+    if not catalogueIncludesBank() or bankOverride or (ns.job and ns.job.ignoreBank)
+        or (ns.pendingStart and ns.pendingStart.ignoreBank) then
         return ns.API.Inventory(recipes), {}
     end
     if ns.Bank then return ns.Bank.Snapshot(recipes) end
     return ns.API.Inventory(recipes), {}
+end
+-- CAB's component projection uses the same source decision as its Max and
+-- action plan; a separate physical snapshot may still describe stored stock.
+ns.PlanningStock = planningStock
+
+local function bankPurchaseOverlap(recipes, plan, quote)
+    if catalogueIncludesBank() or not ns.Bank or not ns.Bank.Snapshot or not ns.Bank.Message
+        or not plan or not plan.craftable or not next(plan.purchases or {}) then return nil end
+    local _, bank = ns.Bank.Snapshot(recipes)
+    quote = quote or ns.Merchant.Quote(plan.purchases)
+    local overlaps, retrievals = {}, {}
+    for itemID, needed in pairs(plan.purchases) do
+        local purchased = quote and quote.purchaseQuantities and quote.purchaseQuantities[itemID] or needed
+        local stored = bank and bank[itemID] or 0
+        if type(purchased) == "number" and purchased > 0 and stored > 0 then
+            overlaps[itemID] = math.min(stored, purchased)
+            -- The confirmation prices the rounded merchant bundle, but only
+            -- the missing recipe units need withdrawing to avoid that purchase.
+            retrievals[itemID] = math.min(stored, needed)
+        end
+    end
+    if not next(overlaps) then return nil end
+    return ns.Bank.Message({bankWithdrawals = retrievals}), overlaps
+end
+
+local function bankPurchasesApproved(overlaps, approval)
+    if not overlaps then return true end
+    local allowed = approval and approval.bankRepurchases
+    for itemID, quantity in pairs(overlaps) do
+        if not allowed or quantity > (allowed[itemID] or 0) then return false end
+    end
+    return true
+end
+
+-- Filtering out the bank changes the calculation, never the permission to buy
+-- supplies the character already owns there. This read-only warning also lets
+-- CAB/native controls describe the same confirmation as the execution guard.
+function ns.BankPurchaseWarning(recipes, plan, quote)
+    local message, overlaps = bankPurchaseOverlap(recipes, plan, quote)
+    if message and not bankPurchasesApproved(overlaps, bankOverride or (ns.job and ns.job.bankApproval)) then
+        return message, overlaps
+    end
 end
 
 local function bankMessage()
@@ -336,10 +387,12 @@ local function prepareJob()
         ns.Refresh()
         return false
     end
+    local includeBank = catalogueIncludesBank()
     ns.job = {
         recipeID = ns.selectedID, remaining = ns.quantity, total = ns.quantity,
         recipes = activeRecipes(), professionKey = ns.selectedProfessionKey or ns.professionKey, running = false,
         ignoreBank = bankOverride ~= nil, bankApproval = bankOverride,
+        catalogueIncludeBank = includeBank,
     }
     ns.Refresh()
     return true
@@ -413,11 +466,18 @@ end
 -- bypassed stops the queue, and only a new click may show the confirmation.
 -- It never buys, crafts, prompts or approves anything.
 local function purchaseGuard(job)
-    return function()
+    return function(remainingBasket, remainingQuote)
         if ns.job ~= job or not job.awaitingPurchase then return false end
         local inventory, bank = planningStock(job.recipes)
         local plan = ns.Planner.Plan(job.recipes, inventory, ns.vendorItems, job.recipeID, job.remaining, bank)
         if not plan.craftable then return false, L.PLAN_UNAVAILABLE end
+        -- The merchant queue retains its original item targets. A newly gained
+        -- intermediate can remove purchases from the project replan while that
+        -- queue still has orders to send; consent must cover the actual cart.
+        local purchasePlan = remainingBasket and {craftable = true, purchases = remainingBasket} or plan
+        if ns.BankPurchaseWarning(job.recipes, purchasePlan, remainingQuote) then
+            return false, L.BANK_OVERRIDE_CHANGED
+        end
         return not (ns.Bank and ns.Bank.Message(plan)), L.BANK_OVERRIDE_CHANGED
     end
 end
@@ -435,6 +495,9 @@ local function buyForCraft()
     ns.Refresh()
     if ns.plan and ns.plan.craftable then
         if bankMessage() then ns.status = bankMessage(); ns.Refresh(); return false end
+        if ns.BankPurchaseWarning(ns.job.recipes, ns.plan, ns.quote) then
+            clearBankApproval(); ns.status = L.BANK_OVERRIDE_CHANGED; ns.Refresh(); return false
+        end
         local ok, reason = ns.Merchant.Start(ns.plan.purchases, ns.job.bankApproval, purchaseGuard(ns.job))
         if ok then commitAllQuantity() end
         if not ok then
@@ -579,15 +642,17 @@ local function runWithoutBank(approval, purchaseOnly, actionIntent)
 end
 
 local function requestBankConfirmation(purchaseOnly, actionIntent)
-    local message = bankMessage()
-    if not message then return false end
     local recipes = activeRecipes()
+    local message = bankMessage() or ns.BankPurchaseWarning(recipes, ns.plan, ns.quote)
+    if not message then return false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, ns.plan)
     if not allowed then pause(reason or message); return true end
     local approval = {totalCost = quote.totalCost, purchaseQuantities = {}}
     for id, quantity in pairs(quote.purchaseQuantities or alternative.purchases or {}) do
         approval.purchaseQuantities[id] = quantity
     end
+    local _, overlaps = bankPurchaseOverlap(recipes, alternative, quote)
+    approval.bankRepurchases = overlaps
     local context = {
         recipeID = ns.job and ns.job.recipeID or ns.selectedID,
         professionKey = ns.job and ns.job.professionKey or ns.selectedProfessionKey,
@@ -596,6 +661,7 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
         native = not ns.catalogueActive,
         purchaseOnly = purchaseOnly == true,
         actionIntent = actionIntent,
+        catalogueIncludeBank = catalogueIncludesBank(),
     }
     ns.bankConfirmation = context
     ns.status = message
@@ -610,6 +676,7 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
         local quantity = ns.job and ns.job.remaining or ns.quantity
         if id ~= context.recipeID or key ~= context.professionKey or quantity ~= context.quantity
             or ns.job ~= context.job or combat() or ns.pendingStart or ns.Merchant.IsBusy()
+            or catalogueIncludesBank() ~= context.catalogueIncludeBank
             or (context.native and ns.API.SelectedRecipeID() ~= id) then
             pause(L.BANK_OVERRIDE_CHANGED); return
         end
@@ -622,6 +689,8 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
         local freshPlan, freshQuote, canProceed, why = ns.Bank.Alternative(activeRecipes(), ns.plan)
         if not canProceed then pause(why or L.PLAN_UNAVAILABLE); return end
         if not approvedBasket(freshPlan, freshQuote, approval) then pause(L.BANK_OVERRIDE_CHANGED); return end
+        local _, freshOverlaps = bankPurchaseOverlap(activeRecipes(), freshPlan, freshQuote)
+        if not bankPurchasesApproved(freshOverlaps, approval) then pause(L.BANK_OVERRIDE_CHANGED); return end
         runWithoutBank(approval, context.purchaseOnly, context.actionIntent)
     end
     local function accept()
@@ -743,6 +812,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
             requiresMerchant = ns.plan and next(ns.plan.purchases) ~= nil,
             ignoreBank = bankOverride ~= nil or (ns.job and ns.job.ignoreBank),
             bankApproval = bankOverride or (ns.job and ns.job.bankApproval),
+            catalogueIncludeBank = catalogueIncludesBank(),
             purchaseOnly = purchaseOnlyIntent,
         }
         if ns.pendingStart.requiresMerchant and not ns.Merchant.IsOpen() then
@@ -1063,10 +1133,16 @@ function ns.OnEvent(event, ...)
         end
     elseif event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
         if ns.Catalogue then ns.Catalogue.Load() end
+        if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata() end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
         if ns.API.IsOwnProfession() then scanAttempts = 0; rescanAt = now() + 0.2 end
         if ns.UI and ns.UI.Install then ns.UI.Install() end
         if ns.StockUI then ns.StockUI.Install() end
+        ns.Refresh()
+    elseif event == "TRADE_SKILL_FAVORITES_CHANGED" then
+        -- Favorite changes only update browsing metadata. They neither open a
+        -- profession nor schedule another scan/purchase/cast.
+        if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata(...) end
         ns.Refresh()
     elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DETAILS_UPDATE"
         or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" or event == "NEW_RECIPE_LEARNED" then
@@ -1219,7 +1295,8 @@ end)
 
 for _, event in ipairs({
     "ADDON_LOADED", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
-    "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_DETAILS_UPDATE", "NEW_RECIPE_LEARNED", "BAG_UPDATE_DELAYED",
+    "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_DETAILS_UPDATE", "TRADE_SKILL_FAVORITES_CHANGED",
+    "NEW_RECIPE_LEARNED", "BAG_UPDATE_DELAYED",
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "PLAYER_MONEY", "PLAYER_ENTERING_WORLD", "SKILL_LINES_CHANGED",
     "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "BAG_UPDATE",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED",

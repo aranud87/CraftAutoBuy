@@ -56,6 +56,7 @@ end
 local function quotePlan(plan)
     if not plan or not plan.craftable then return false, L.PLAN_UNAVAILABLE, nil, nil, nil, plan end
     local bankMessage = ns.Bank and ns.Bank.Message(plan)
+        or (ns.BankPurchaseWarning and ns.BankPurchaseWarning(ns.recipes, plan))
     if bankMessage then
         local alternativePlan, alternativeQuote, allowed, reason = ns.Bank.Alternative(ns.recipes, plan)
         return allowed, allowed and L.BANK_OVERRIDE_NOTICE or reason,
@@ -261,8 +262,11 @@ function NativeCraft.Refresh()
     local matchingStart = ns.pendingStart and ns.pendingStart.recipeID == id
         and ns.pendingStart.professionKey == ns.professionKey
     local ignoreBank = (matchingJob and ns.job.ignoreBank) or (matchingStart and ns.pendingStart.ignoreBank)
+    local catalogueBankOff = (matchingJob and ns.job.catalogueIncludeBank == false)
+        or (matchingStart and ns.pendingStart.catalogueIncludeBank == false)
     local inventory, bank
-    if ns.Bank and not ignoreBank then inventory, bank = ns.Bank.Snapshot(ns.recipes)
+    if catalogueBankOff and ns.PlanningStock then inventory, bank = ns.PlanningStock(ns.recipes)
+    elseif ns.Bank and not ignoreBank and not catalogueBankOff then inventory, bank = ns.Bank.Snapshot(ns.recipes)
     else inventory, bank = ns.API.Inventory(ns.recipes), {} end
     local maximum, maximumPlan = ns.Planner.MaxCrafts(ns.recipes, inventory, ns.vendorItems, id, 1000, bank)
     if maximum == 0 and not matchingJob then restore(); refreshing = false; return end

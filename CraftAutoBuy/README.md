@@ -1,6 +1,10 @@
 # CraftAutoBuy
 
-**1.0.1 — Version stable**
+**1.1.0 — En développement, pour une pull request en brouillon**
+
+Cette branche prépare **l'onglet CAB v2**. La version stable publiée reste
+**1.0.1**. Le comportement et le rendu de la 1.1.0 restent à confirmer dans
+WoW Forever avant publication.
 
 La version 1.0.1 initialise automatiquement le catalogue des recettes au premier
 lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
@@ -15,6 +19,51 @@ L'onglet **CraftAutoBuy**, à droite de la fenêtre, regroupe les recettes des
 métiers connus. L'onglet **Stock** sépare les composants en sacs et en banque.
 Les commandes d'achat et de fabrication sont également disponibles dans la
 fenêtre habituelle du métier courant.
+
+## L'onglet CAB v2
+
+La liste CAB regroupe les recettes fabricables de tous les métiers connus,
+avec deux filtres toujours visibles :
+
+- **Banque**, activé par défaut : prend en compte le stock personnel mémorisé.
+  En le décochant, les recettes devenues non fabricables disparaissent de leur
+  métier. Si une fabrication reste possible sans banque, la recette reste
+  affichée avec sa nouvelle quantité. Le relevé bancaire continue à être conservé.
+- **Progression**, désactivé par défaut : en le cochant, seules les recettes
+  à la fois fabricables et capables de faire progresser le métier restent
+  affichées dans les sections de métier : difficultés orange, jaune ou verte
+  selon le jeu. Les recettes de difficulté grise sont exclues. Une chance de
+  progression ne garantit pas un point à chaque fabrication. Cette règle
+  native s'applique à tous les métiers, sans exclusion manuelle de recettes.
+
+La section **Favoris** reprend les favoris du jeu parmi les recettes apprises
+d'objets simples prises en charge par CAB. Les enchantements, les recettes
+avec niveaux de qualité et celles sans objet produit ne sont pas inclus.
+Ces favoris restent visibles même sans composants ou sans gain de compétence ; leur quantité et leur couleur
+suivent la prise en compte de la banque. Une recette non réalisable apparaît
+en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
+La recherche s'applique aussi aux favoris.
+
+La liste utilise un seul niveau de sections : **Favoris**, puis un en-tête
+par métier, par exemple **Alchimie** ou **Cuisine**. Les recettes apparaissent
+directement sous leur métier, sans catégories ni sous-catégories imbriquées.
+Chaque en-tête se réduit ou se développe individuellement ; **Tout réduire**
+et **Tout développer** agissent sur ces sections principales. Les métiers
+sans recette visible sont masqués.
+
+Les filtres, les sections repliées, la dernière recette sélectionnée et la
+position dans la liste sont mémorisés par personnage, puis restaurés à la
+réouverture, après `/reload` et à la reconnexion, lorsque les recettes sont
+encore disponibles. L'absence de données natives de favoris pendant leur
+chargement n'est pas interprétée comme une suppression définitive.
+Si ces informations ne sont pas encore disponibles après la mise à jour,
+ouvre le métier correspondant une première fois pour les actualiser.
+
+Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
+directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
+restent pris en compte dans les deux positions de ce filtre. Même avec Banque
+décoché, racheter des fournitures déjà connues en banque demande de confirmer
+**Continuer sans banque** pour le projet en cours.
 
 ## Installation
 
@@ -57,6 +106,9 @@ son catalogue natif complet.
 3. Si CAB doit charger le métier, clique **Charger le métier**. Cela charge ses
    données avec son sort du grimoire, sans achat ni fabrication. Si le chargement
    est indisponible, clique sur l'onglet du métier à droite, puis reviens dans CAB.
+   Cette étape est normale après `/reload` ou après avoir ouvert un autre métier,
+   même si le catalogue est mémorisé. Le bouton disparaît lorsque le métier de
+   la recette est chargé ; aucun sort de métier n'est lancé automatiquement.
 4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter**. Avec
    l'achat automatique activé, ouvre un marchand qui les vend et clique dessus.
    Le devis porte sur l'ensemble des fournitures nécessaires à la quantité choisie.
@@ -79,7 +131,8 @@ que la recette choisie.
 ## Lire les composants
 
 Le détail indique **en sacs (potentiel) / requis par fabrication**. Le potentiel
-peut inclure la banque connue, les intermédiaires et les achats PNJ. Il peut
+utilise les sources retenues pour le calcul, les intermédiaires et les achats
+PNJ ; la banque connue ne compte que si elle est incluse dans ce calcul. Il peut
 dépasser le besoin si le marchand vend des lots. Les matières partagées sont
 réservées une seule fois dans le plan complet.
 
@@ -115,11 +168,15 @@ pas incluses. Avant toute première lecture, l'addon demande d'ouvrir la banque.
 Une lecture incomplète conserve les informations précédentes avec une indication
 de vérification nécessaire ; rouvre la banque pour actualiser le relevé.
 
-Quand la quantité choisie nécessite des composants en banque, tu peux aller les
-récupérer. Si les sacs et les achats permettent une autre solution, le bouton
+Avec le filtre **Banque** activé, quand la quantité choisie nécessite des
+composants en banque, tu peux aller les récupérer. Si les sacs et les achats
+permettent une autre solution, le bouton
 d'action propose **Continuer sans banque** avec confirmation du nouveau devis,
 des lots et du surplus. Ce choix concerne seulement le projet en cours ; il
 n'est pas une préférence permanente. Annuler cette confirmation ne dépense rien.
+Avec Banque décoché, le calcul reste sans banque, mais cette confirmation est
+également demandée avant de racheter des fournitures déjà connues en banque.
+L'autorisation porte sur le projet courant et ne s'étend pas aux autres projets.
 
 Ce choix ne remplace pas une matière de base manquante qui ne peut être ni
 achetée ni fabriquée avec les composants disponibles. Aucun objet n'est retiré

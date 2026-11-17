@@ -230,6 +230,96 @@ local function unsupported(recipe, reason)
     return recipe
 end
 
+local function ordinaryBoolean(value)
+    return type(value) == "boolean" and not (issecretvalue and issecretvalue(value))
+end
+
+local metadataContextToken = {}
+
+-- This snapshot belongs to one synchronous metadata pass. Keep no global
+-- context: opening another profession must be reflected by the next pass.
+function API.BeginRecipeMetadataRead()
+    local context = {token = metadataContextToken, source = C_TradeSkillUI, categories = {}}
+    if not C_TradeSkillUI then return context end
+    for _, name in ipairs({"IsTradeSkillLinked", "IsTradeSkillGuild", "IsTradeSkillGuildMember", "IsNPCCrafting"}) do
+        if C_TradeSkillUI[name] then
+            local ok, external = call(C_TradeSkillUI[name])
+            if not ok or not ordinaryBoolean(external) or external then return context end
+        end
+    end
+    context.available = true
+    context.own = API.IsOwnProfession() and not (ns.IsProfessionClosed and ns.IsProfessionClosed())
+    if context.own then context.professionKey = API.GetProfessionKey() end
+    return context
+end
+
+-- Optional metadata is read independently of schematics. A cold recipe-info
+-- result is contextual (including false learned/favorite/skill-up fields), so
+-- only the current, ready, personal profession can authoritatively clear it.
+-- A positive native favorite is useful even before its profession is opened.
+function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo, context)
+    local metadata = {}
+    if not positiveInteger(recipeID) or not C_TradeSkillUI then return metadata end
+    if type(context) ~= "table" or context.token ~= metadataContextToken or context.source ~= C_TradeSkillUI then
+        context = API.BeginRecipeMetadataRead()
+    end
+    if not context.available then return metadata end
+    local scoped = context.own and context.professionKey == professionKey
+    local info = suppliedInfo
+    if not info and scoped then
+        local ok, value = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
+        if ok and type(value) == "table" and not (issecretvalue and issecretvalue(value)) then info = value end
+    end
+    scoped = scoped and type(info) == "table" and not (issecretvalue and issecretvalue(info))
+        and ordinaryBoolean(info.learned) and info.learned
+        and (info.recipeID == nil or positiveInteger(info.recipeID) and info.recipeID == recipeID)
+    if scoped and C_TradeSkillUI.IsRecipeInSkillLine then
+        local ok, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, professionKey)
+        scoped = ok and ordinaryBoolean(belongs) and belongs
+    end
+    local ok, favorite = call(C_TradeSkillUI.IsRecipeFavorite, recipeID)
+    if ok and ordinaryBoolean(favorite) and (scoped or favorite) then
+        metadata.favorite = favorite
+    elseif scoped and ordinaryBoolean(info.favorite) then
+        metadata.favorite = info.favorite
+    end
+    if not scoped then return metadata end
+    -- A current learned recipe is authoritative even when one optional field
+    -- is absent. Consumers must replace this tuple, not keep an old difficulty
+    -- beside a newly read canSkillUp flag.
+    metadata.progressionRead = true
+    if ordinaryBoolean(info.canSkillUp) then metadata.canSkillUp = info.canSkillUp end
+    if ordinaryBoolean(info.disabled) and info.disabled then metadata.canSkillUp = false end
+    if nonnegativeInteger(info.relativeDifficulty) and info.relativeDifficulty <= 3 then
+        metadata.relativeDifficulty = info.relativeDifficulty
+    end
+    if nonnegativeInteger(info.numSkillUps) then metadata.numSkillUps = info.numSkillUps end
+    local categoryID, path, seen = info.categoryID, {}, {}
+    while positiveInteger(categoryID) and not seen[categoryID] and #path < 16 do
+        seen[categoryID] = true
+        local category = context.categories[categoryID]
+        if category == nil then
+            local categoryOK, value = call(C_TradeSkillUI.GetCategoryInfo, categoryID)
+            if categoryOK and type(value) == "table" and not (issecretvalue and issecretvalue(value))
+                and type(value.name) == "string" and not (issecretvalue and issecretvalue(value.name))
+                and value.name ~= "" then category = value
+            else category = false end
+            context.categories[categoryID] = category
+        end
+        if not category then return metadata end
+        table.insert(path, 1, {id = categoryID, name = category.name,
+            sortIndex = nonnegativeInteger(category.uiOrder) and category.uiOrder or nil})
+        local parent = category.parentCategoryID
+        if parent == nil or nonnegativeInteger(parent) and parent == 0 then
+            metadata.categoryPath = path
+            return metadata
+        end
+        if not positiveInteger(parent) then return metadata end
+        categoryID = parent
+    end
+    return metadata
+end
+
 local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
     local recipe = {
         id = recipeID, name = info.name or L.RECIPE_FALLBACK:format(recipeID),
@@ -248,6 +338,7 @@ local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
         recipe.relativeDifficulty = info.relativeDifficulty
     end
     if nonnegativeInteger(info.numSkillUps) then recipe.numSkillUps = info.numSkillUps end
+    for field, value in pairs(API.GetRecipeMetadata(recipeID, professionKey, info)) do recipe[field] = value end
     if not info.learned then return unsupported(recipe, L.RECIPE_NOT_LEARNED) end
     if info.isRecraft or info.isDummyRecipe or info.isGatheringRecipe
         or info.isEnchantingRecipe or info.isSalvageRecipe then

@@ -508,7 +508,7 @@ function Merchant.Tick(now)
             -- error stops the queue; only a new click may ask that question.
             if phaseGuard then
                 local guardedPhase = phaseBudget
-                local guardOK, allowed, reason = pcall(phaseGuard)
+                local guardOK, allowed, reason = pcall(phaseGuard, remainingBasket, quote)
                 -- A callback may synchronously close/cancel/rearm the phase.
                 -- Its old transaction must not escape that cancellation.
                 if not opened or not active or pending or phaseBudget ~= guardedPhase then return end

@@ -6,10 +6,46 @@ ns.UI = UI
 -- A profession-style page selected by the final side tab. Its catalogue does
 -- not depend on Blizzard's current profession or native ingredient filters.
 local book, panel, returnPage
-local switching, rendering = false, false
+local switching, rendering, installed = false, false, false
 local widgets, rows, categories, reagents, collapsed = {}, {}, {}, {}, {}
+local fallbackView = {includeBank = true, progressionOnly = false, collapsed = collapsed, scroll = 0}
+local restoringScroll, selectionRestored, groupKeys, searchScroll = false, false, {}, 0
 local ICON = "Interface\\AddOns\\CraftAutoBuy\\Icon.tga"
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+
+local function view()
+    return ns.CatalogueView and ns.CatalogueView.Get() or fallbackView
+end
+
+function UI.IncludesBank()
+    return view().includeBank ~= false
+end
+
+local function saveSelection(id, key)
+    if ns.CatalogueView then ns.CatalogueView.SetSelection(id, key) end
+end
+
+local function restoreSelection()
+    if selectionRestored or not ns.CatalogueView or ns.job or ns.pendingStart or ns.bankConfirmation
+        or ns.Merchant.IsBusy() then return end
+    local state = view()
+    if not state.selectedID then selectionRestored = true; return end
+    local recipes = ns.Catalogue and ns.Catalogue.GetRecipes(state.selectedProfessionKey)
+    local recipe = recipes and recipes[state.selectedID]
+    if recipe then
+        -- A background catalogue may use the parent profession ID. Adopt the
+        -- actual cached recipe source when a complete native scan replaced it.
+        selectionRestored = true
+        if ns.SelectCatalogRecipe(state.selectedID, recipe.professionKey or state.selectedProfessionKey) == false then
+            selectionRestored = false
+        end
+    end
+end
+
+local function setCollapsed(key, value)
+    if ns.CatalogueView then ns.CatalogueView.SetCollapsed(key, value)
+    else collapsed[key] = value or nil end
+end
 
 -- Size in the same UI units as the button, using its actual font rather than
 -- string length (CJK and Latin labels have different glyph widths).
@@ -163,6 +199,9 @@ end
 
 local function bankAlternative(recipes, plan)
     local message = ns.Bank and ns.Bank.Message(plan)
+    -- Excluding the bank from the calculation is not consent to repurchase
+    -- supplies already stored there. Advertise the same project confirmation.
+    if not message and ns.BankPurchaseWarning then message = ns.BankPurchaseWarning(recipes, plan) end
     if not message then return nil, false end
     if type(ns.Bank.Alternative) ~= "function" then return message, false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, plan)
@@ -381,8 +420,10 @@ end
 
 function UI.Install()
     if panel then
-        if ns.Sidebar then ns.Sidebar.Install() end
-        return true
+        if installed and ns.Sidebar then ns.Sidebar.Install() end
+        -- A frame allocated before an installation error is not a complete
+        -- page. Do not render missing widgets after that first client error.
+        return installed
     end
     if not ProfessionsFrame then return false end
     book = ProfessionsFrame
@@ -394,18 +435,91 @@ function UI.Install()
     panel:Hide()
     panel.RecipeRows, panel.CategoryRows, panel.ReagentButtons = rows, categories, reagents
 
-    widgets.search = CreateFrame("EditBox", "CraftAutoBuySearchBox", panel, "SearchBoxTemplate")
-    widgets.search:SetSize(267, 20)
-    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, -8)
+    -- Use the book's free header strip for search and filters. The section
+    -- controls stay above the list, leaving the recipe detail unobstructed.
+    widgets.toolbar = CreateFrame("Frame", nil, panel)
+    widgets.toolbar:SetSize(632, 24)
+    widgets.toolbar:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, 28)
+    widgets.search = CreateFrame("EditBox", "CraftAutoBuySearchBox", widgets.toolbar, "SearchBoxTemplate")
+    -- SearchBoxTemplate draws its left border five pixels outside the EditBox.
+    -- Reserve that inset and vertical padding inside the toolbar's bounds.
+    widgets.search:SetSize(262, 20)
+    widgets.search:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 5, -2)
     widgets.search:SetAutoFocus(false)
     widgets.search:SetMaxLetters(80)
     widgets.search:SetScript("OnTextChanged", function(self)
         if SearchBoxTemplate_OnTextChanged then SearchBoxTemplate_OnTextChanged(self) end
         -- The native clear-search button calls SetText programmatically.
-        if widgets.listScroll then widgets.listScroll:SetVerticalScroll(0); UI.Render() end
+        if widgets.listScroll then
+            searchScroll = 0
+            restoringScroll = true
+            widgets.listScroll:SetVerticalScroll(0)
+            restoringScroll = false
+            UI.Render()
+        end
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     panel.SearchBox = widgets.search
+    panel.Toolbar = widgets.toolbar
+
+    widgets.filterRow = CreateFrame("Frame", nil, widgets.toolbar)
+    widgets.filterRow:SetSize(327, 24)
+    widgets.filterRow:SetPoint("TOPLEFT", widgets.toolbar, "TOPLEFT", 305, 0)
+
+    local function filter(name, text, help, x)
+        local control = CreateFrame("CheckButton", nil, widgets.filterRow, "UICheckButtonTemplate")
+        control:SetSize(22, 22)
+        control:SetPoint("LEFT", widgets.filterRow, "LEFT", x, 0)
+        local caption = control.Text or control.text or control:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        caption:ClearAllPoints()
+        caption:SetPoint("LEFT", control, "RIGHT", 3, 0)
+        caption:SetSize(130, 18)
+        caption:SetFontObject("GameFontHighlightSmall")
+        caption:SetJustifyH("LEFT")
+        caption:SetJustifyV("MIDDLE")
+        caption:SetWordWrap(false)
+        caption:SetText(text)
+        control.Label = caption
+        control:SetHitRectInsets(0, -131, 0, 0)
+        control:SetScript("OnClick", function(self)
+            if self.enabled == false then return end
+            if name == "includeBank" and (ns.job or ns.pendingStart or ns.bankConfirmation or ns.Merchant.IsBusy()) then
+                UI.Render(); return
+            end
+            local enabled = self:GetChecked() == true
+            if ns.CatalogueView then ns.CatalogueView.SetFilter(name, enabled)
+            else fallbackView[name] = enabled end
+            if ns.Refresh then ns.Refresh() else UI.Render() end
+        end)
+        control:SetScript("OnEnter", function(self) tooltip(self, text, help) end)
+        control:SetScript("OnLeave", tooltipHide)
+        return control
+    end
+    widgets.bankFilter = filter("includeBank", L.CATALOG_FILTER_BANK, L.CATALOG_FILTER_BANK_HELP, 0)
+    widgets.progressionFilter = filter("progressionOnly", L.CATALOG_FILTER_PROGRESSION, L.CATALOG_FILTER_PROGRESSION_HELP, 160)
+    widgets.collapseAll = button(nil, panel, L.CATALOG_COLLAPSE_ALL, 129, 9, -8, function()
+        local keys = ns.Catalogue and ns.Catalogue.SectionKeys and ns.Catalogue.SectionKeys() or groupKeys
+        for key in pairs(keys) do
+            if key == "favorites" or key:match("^profession:") then setCollapsed(key, true) end
+        end
+        UI.Render()
+    end)
+    widgets.expandAll = button(nil, panel, L.CATALOG_EXPAND_ALL, 129, 147, -8, function()
+        -- Also expand remembered sections currently hidden by a search/filter.
+        local keys = {}
+        for key in pairs(view().collapsed) do keys[#keys + 1] = key end
+        for _, key in ipairs(keys) do setCollapsed(key, false) end
+        UI.Render()
+    end)
+    for _, control in ipairs({widgets.collapseAll, widgets.expandAll}) do
+        control:SetNormalFontObject("GameFontNormalSmall")
+        control:SetHighlightFontObject("GameFontHighlightSmall")
+        control:SetDisabledFontObject("GameFontDisableSmall")
+        control:SetScript("OnEnter", function(self) tooltip(self, self:GetText(), "") end)
+        control:SetScript("OnLeave", tooltipHide)
+    end
+    panel.BankFilter, panel.ProgressionFilter = widgets.bankFilter, widgets.progressionFilter
+    panel.CollapseAllButton, panel.ExpandAllButton = widgets.collapseAll, widgets.expandAll
 
     local listBackground = panel:CreateTexture(nil, "ARTWORK")
     listBackground:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -34)
@@ -417,6 +531,27 @@ function UI.Install()
     widgets.listContent = CreateFrame("Frame", nil, widgets.listScroll)
     widgets.listContent:SetSize(267, 464)
     widgets.listScroll:SetScrollChild(widgets.listContent)
+    local scrollbar = widgets.listScroll.ScrollBar
+    local function rememberUserScroll(offset)
+        if restoringScroll or rendering then return end
+        if offset == nil and widgets.listScroll.GetVerticalScroll then offset = widgets.listScroll:GetVerticalScroll() end
+        if offset == nil and scrollbar and scrollbar.GetValue then offset = scrollbar:GetValue() end
+        if issecretvalue and issecretvalue(offset) then return end
+        if type(offset) ~= "number" or offset ~= offset or offset < 0 or offset == math.huge then return end
+        if widgets.search:GetText() ~= "" then searchScroll = offset
+        elseif ns.CatalogueView then ns.CatalogueView.SetScroll(offset) end
+    end
+    -- OnVerticalScroll also fires for native range clamping, possibly after
+    -- Render returned. Only explicit input may replace the desired position.
+    widgets.listScroll:HookScript("OnMouseWheel", function() rememberUserScroll() end)
+    if scrollbar then
+        scrollbar:HookScript("OnValueChanged", function(_, value, userInput)
+            if userInput == true then rememberUserScroll(value) end
+        end)
+        for _, arrow in pairs({scrollbar.ScrollUpButton, scrollbar.ScrollDownButton}) do
+            arrow:HookScript("OnClick", function() rememberUserScroll() end)
+        end
+    end
     panel.RecipeScroll = widgets.listScroll
     widgets.empty = label(widgets.listContent, "GameFontNormal", 8, -16, 245, 140)
     panel.EmptyText = widgets.empty
@@ -559,6 +694,7 @@ function UI.Install()
     book:HookScript("OnHide", function()
         if ns.pendingStart and UI.IsActive() then panel:Hide() else deactivate(false, false) end
     end)
+    installed = true
     if ns.Sidebar then ns.Sidebar.Install() end
     return true
 end
@@ -594,6 +730,8 @@ local function makeRow(index)
     local row = CreateFrame("Button", nil, widgets.listContent)
     row:SetSize(265, 20)
     row.Label = label(row, "GameFontHighlight", 30, -3, 184, 16)
+    row.Profession = label(row, "GameFontDisableSmall", 30, -19, 220, 14)
+    row.Profession:Hide()
     row.Count = label(row, "GameFontHighlight", 214, -3, 48, 16)
     row.Count:SetJustifyH("RIGHT")
     row.Selection = texture(row, "Professions_Recipe_Active", "BACKGROUND")
@@ -615,6 +753,8 @@ local function makeRow(index)
     row:SetScript("OnClick", function(self)
         if self.entry then
             widgets.reagentScroll:SetVerticalScroll(0)
+            selectionRestored = true
+            saveSelection(self.entry.recipeID, self.entry.professionKey)
             ns.SelectCatalogRecipe(self.entry.recipeID, self.entry.professionKey)
         end
     end)
@@ -637,7 +777,7 @@ local function makeCategory(index)
     category:SetSize(265, 22)
     category.Label = category.ButtonText or label(category, "GameFontNormal", 8, -3, 230, 16)
     local function toggle()
-        collapsed[category.professionKey] = not collapsed[category.professionKey]
+        setCollapsed(category.groupKey, not view().collapsed[category.groupKey])
         UI.Render()
     end
     category:SetScript("OnClick", toggle)
@@ -648,63 +788,112 @@ local function makeCategory(index)
 end
 
 local function renderList()
-    local entries = ns.Catalogue and ns.Catalogue.Rows(widgets.search:GetText()) or {}
+    local state = view()
+    widgets.bankFilter:SetChecked(state.includeBank ~= false)
+    widgets.progressionFilter:SetChecked(state.progressionOnly == true)
+    widgets.bankFilter:SetEnabled(not ns.job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy())
+    local search = widgets.search:GetText()
+    local entries = ns.Catalogue and ns.Catalogue.Rows(search, state) or {}
+    local favorites = ns.Catalogue and ns.Catalogue.Favorites and ns.Catalogue.Favorites(search, state) or {}
     local selectable
     if ns.CanSelectRecipe then selectable = ns.CanSelectRecipe()
     else selectable = not ns.job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy() end
-    local y, rowCount, categoryCount, lastKey = 0, 0, 0, nil
+    local y, rowCount, categoryCount = 0, 0, 0
+    local visible, roots, professions = {}, {}, {}
+    groupKeys = {favorites = true}
+    if #favorites > 0 then
+        roots[#roots + 1] = {key = "favorites", name = L.CATALOG_FAVORITES, entries = favorites, favorite = true}
+    end
     for _, entry in ipairs(entries) do
-        if entry.professionKey ~= lastKey then
-            lastKey = entry.professionKey
-            categoryCount = categoryCount + 1
-            local category = categories[categoryCount] or makeCategory(categoryCount)
-            category.professionKey = lastKey
-            category:ClearAllPoints()
-            category:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 0, -y)
-            category.Label:SetText(entry.professionName)
-            category.Label:SetTextColor(1, .82, 0)
-            if category.CollapseButton and category.CollapseButton.UpdateCollapsedState then
-                category.CollapseButton:UpdateCollapsedState(collapsed[lastKey] == true)
-            end
-            category:Show()
-            y = y + 25
+        local key = entry.groupProfessionKey or entry.professionKey
+        local node = professions[key]
+        if not node then
+            node = {key = "profession:" .. key, name = entry.professionName, professionKey = key, entries = {}}
+            professions[key] = node
+            roots[#roots + 1] = node
         end
-        if not collapsed[lastKey] then
+        -- The profession is the only header. Native category metadata must
+        -- never add another Cuisine heading or nested sections to this view.
+        node.entries[#node.entries + 1] = entry
+    end
+    local function collect(node)
+        groupKeys[node.key] = true
+        for _, entry in ipairs(node.entries) do visible[entry.professionKey .. ":" .. entry.recipeID] = true end
+        table.sort(node.entries, function(a, b)
+            if node.favorite and a.professionName ~= b.professionName then return a.professionName < b.professionName end
+            if a.name ~= b.name then return a.name < b.name end
+            if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
+            return a.professionKey < b.professionKey
+        end)
+    end
+    for _, node in ipairs(roots) do collect(node) end
+    local function renderGroup(node)
+        categoryCount = categoryCount + 1
+        local category = categories[categoryCount] or makeCategory(categoryCount)
+        category.professionKey, category.groupKey = node.professionKey, node.key
+        category:ClearAllPoints()
+        category:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 0, -y)
+        category:SetWidth(265)
+        category.Label:SetWidth(230)
+        category.Label:SetText(node.name or L.CATALOG_UNCATEGORIZED)
+        category.Label:SetTextColor(1, .82, 0)
+        if category.CollapseButton and category.CollapseButton.UpdateCollapsedState then
+            category.CollapseButton:UpdateCollapsedState(state.collapsed[node.key] == true)
+        end
+        category:Show()
+        y = y + 25
+        if state.collapsed[node.key] then return end
+        for _, entry in ipairs(node.entries) do
             rowCount = rowCount + 1
             local row = rows[rowCount] or makeRow(rowCount)
             row.entry = entry
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 0, -y)
             row.Label:SetText(entry.name)
+            row.Profession:SetText(node.favorite and entry.professionName or "")
+            row.Profession:SetShown(node.favorite == true)
+            row:SetHeight(node.favorite and 36 or 20)
             renderSkillUps(row, entry.recipe, selectable)
             row.Count:SetText("[" .. tostring(entry.count) .. (entry.count >= 1000 and "+" or "") .. "]")
             local r, g, b = .5, 1, .5
-            if entry.needsBank then r, g, b = .35, .7, 1 end
+            if entry.count == 0 then r, g, b = .6, .6, .6
+            elseif entry.needsBank then r, g, b = .35, .7, 1 end
             row.Label:SetTextColor(r, g, b)
             row.Count:SetTextColor(r, g, b)
             row.Selection:SetShown(entry.recipeID == ns.selectedID and entry.professionKey == ns.selectedProfessionKey)
             row:SetEnabled(selectable)
             row:Show()
-            y = y + 20
+            y = y + (node.favorite and 36 or 20)
         end
     end
+    for _, node in ipairs(roots) do renderGroup(node) end
     for index = rowCount + 1, #rows do rows[index].entry = nil; rows[index]:Hide() end
     for index = categoryCount + 1, #categories do categories[index]:Hide() end
     widgets.listContent:SetHeight(math.max(464, y))
-    widgets.empty:SetShown(#entries == 0)
-    if #entries == 0 then
+    restoringScroll = true
+    local offset = search ~= "" and searchScroll or state.scroll or 0
+    widgets.listScroll:SetVerticalScroll(math.min(offset, math.max(0, y - 464)))
+    restoringScroll = false
+    widgets.empty:SetShown(#entries == 0 and #favorites == 0)
+    if #entries == 0 and #favorites == 0 then
         local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
         local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
-        widgets.empty:SetText(initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
-            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or "")))
+        local known = ns.Catalogue and ns.Catalogue.HasRecipes and ns.Catalogue.HasRecipes()
+        widgets.empty:SetText(known and L.CATALOG_NO_RESULTS
+            or (initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
+            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or ""))))
     end
+    return visible
 end
 
 local function renderReagents(recipe, recipes, id, crafts)
     local count, y = 0, 0
     if recipe then
         local inventory, bank
-        if ns.job and ns.job.ignoreBank then inventory, bank = ns.API.Inventory(recipes), {}
+        local knownBank
+        if ns.Bank and not (ns.job and ns.job.ignoreBank) then _, knownBank = ns.Bank.Snapshot(recipes) end
+        if ns.PlanningStock then inventory, bank = ns.PlanningStock(recipes)
+        elseif (ns.job and ns.job.ignoreBank) or not UI.IncludesBank() then inventory, bank = ns.API.Inventory(recipes), {}
         elseif ns.Bank then inventory, bank = ns.Bank.Snapshot(recipes)
         else inventory = ns.API.Inventory(recipes) end
         local projection = ns.NativeUI and ns.NativeUI.Project(id, recipes, inventory, ns.vendorItems, crafts,
@@ -717,7 +906,7 @@ local function renderReagents(recipe, recipes, id, crafts)
             local amounts = ns.NativeUI and ns.NativeUI.FormatQuantity(owned, potential, reagent.quantity, true)
                 or (tostring(owned) .. " / " .. tostring(reagent.quantity))
             value.itemID = reagent.itemID
-            value.bankCount = bank and bank[reagent.itemID] or 0
+            value.bankCount = knownBank and knownBank[reagent.itemID] or (bank and bank[reagent.itemID]) or 0
             value.vendorSource = projected and projected.vendorSource
             if value.vendorSource == nil and ns.vendorItems and ns.vendorItems[reagent.itemID] then
                 if ns.Merchant.GetReagentSourceStock then value.vendorSource = ns.Merchant.GetReagentSourceStock(reagent.itemID)
@@ -726,6 +915,7 @@ local function renderReagents(recipe, recipes, id, crafts)
             value.Icon:SetTexture(itemIcon(reagent.itemID))
             value.Name:SetText(amounts .. " " .. ns.ItemName(reagent.itemID))
             local sourceText = ns.NativeUI.FormatSources(value.bankCount, value.vendorSource, true)
+            if not UI.IncludesBank() and value.bankCount > 0 then sourceText = sourceText .. "\n" .. L.CATALOG_BANK_EXCLUDED end
             value.SourceLine:SetText(sourceText)
             value.SourceLine:SetShown(sourceText ~= "")
             -- Measure the actual text, rather than reserving two name lines
@@ -784,15 +974,21 @@ function UI.Render()
         return
     end
     rendering = true
+    restoreSelection()
     if book:IsShown() and not panel:IsShown() then displayPage() end
-    renderList()
+    local visible = renderList()
     local job = ns.job
     local id = job and job.recipeID or ns.selectedID
     local recipes = ns.ActiveRecipes and ns.ActiveRecipes() or (job and job.recipes or ns.recipes or {})
     local recipe = id and recipes[id]
     local key = job and job.professionKey or ns.selectedProfessionKey or ns.professionKey
+    -- Preserve the selection for filter reversal, but expose no stale action
+    -- for a recipe outside the current catalogue. Active work stays visible.
+    if not job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy()
+        and (not id or not key or not visible[key .. ":" .. id]) then recipe = nil end
     local professionName = ns.Catalogue and ns.Catalogue.GetProfessionName(key) or ""
     widgets.recipeName:SetText(recipe and recipe.name or L.CATALOG_SELECT)
+    if selectionRestored and not job and recipe then saveSelection(id, key) end
     widgets.profession:SetText(recipe and professionName or "")
     widgets.output:SetShown(recipe ~= nil)
     widgets.output.itemID = recipe and recipe.outputItemID
@@ -804,15 +1000,17 @@ function UI.Render()
     widgets.quantity:SetEnabled(canEdit)
     widgets.decrease:SetEnabled(canEdit and crafts > 1)
     widgets.increase:SetEnabled(canEdit and crafts < 1000)
-    local needsBuy = ns.plan and next(ns.plan.purchases or {}) ~= nil
-    local bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason = bankAlternative(recipes, ns.plan)
+    local needsBuy = recipe and ns.plan and next(ns.plan.purchases or {}) ~= nil
+    local bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason
+    if recipe then bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason = bankAlternative(recipes, ns.plan) end
     local autoBuy = CraftAutoBuyDB and CraftAutoBuyDB.autoBuy == true
     local purchaseReady = not needsBuy or (autoBuy and ns.Merchant.IsOpen() and ns.quote and ns.quote.canBuy)
     local idle = not ns.pendingStart and not ns.bankConfirmation and not (job and (job.running or job.pending or job.awaitingPurchase))
         and not ns.Merchant.IsBusy()
     local ready = (not bankMessage and purchaseReady) or (bankMessage and bankAllowed)
     ns.readinessPlan = alternativePlan or ns.plan
-    local craftReady, requirementReason, purchaseOnly, requirementKind = craftAction(id, key, ns.readinessPlan)
+    local craftReady, requirementReason, purchaseOnly, requirementKind = false, nil, false, nil
+    if recipe then craftReady, requirementReason, purchaseOnly, requirementKind = craftAction(id, key, ns.readinessPlan) end
     widgets.craft.bankMessage = bankActionMessage(bankMessage, bankAllowed, bankQuote, bankReason, craftReady, alternativePlan)
     widgets.craft.requirementReason, widgets.craft.purchaseOnly = requirementReason, purchaseOnly
     widgets.craft.requirementKind = requirementKind
@@ -950,7 +1148,14 @@ function UI.Show()
     local previousPage
     if ns.StockUI and ns.StockUI.IsActive() then previousPage = ns.StockUI.NativeTabSelected() end
     if not UI.IsActive() then
+        selectionRestored = false
         returnPage = previousPage or (book.BookPage and book.BookPage:IsShown() and book.BookPage or book.CraftingPage)
+    end
+    -- Opening CAB while a native project is running makes that project the
+    -- latest CAB selection too. Completion must not jump to an older recipe.
+    if ns.job and ns.job.recipeID and ns.job.professionKey then
+        saveSelection(ns.job.recipeID, ns.job.professionKey)
+        selectionRestored = true
     end
     ns.catalogueActive = true
     switching = true

@@ -6,7 +6,7 @@ ns.Catalogue = Catalogue
 -- Saved data is a recipe catalogue, never a stock snapshot or a shopping list.
 -- Counts are rebuilt from the current bags only when invalidated. Each recipe
 -- uses its own profession's producers; cross-profession chains are not assumed.
-local records, loadedDB, rows = {}, nil, nil
+local records, loadedDB, rows = {}, nil, {}
 local EMPTY = {}
 local MAX_INTEGER = 2147483647
 local searchText = ns.Locale.SearchText
@@ -19,6 +19,26 @@ end
 local function nonnegativeInteger(value)
     return type(value) == "number" and not (issecretvalue and issecretvalue(value))
         and value == value and value >= 0 and value < math.huge and value == math.floor(value)
+end
+
+local function categoryPath(source)
+    if type(source) ~= "table" or (issecretvalue and issecretvalue(source)) or #source > 16 then return nil end
+    local copied, seen, length = {}, {}, 0
+    for index in pairs(source) do
+        if not integer(index) then return nil end
+        length = length + 1
+    end
+    if length ~= #source then return nil end
+    for _, category in ipairs(source) do
+        if type(category) ~= "table" or (issecretvalue and issecretvalue(category))
+            or (issecretvalue and issecretvalue(category.id)) or not integer(category.id) or seen[category.id]
+            or type(category.name) ~= "string" or (issecretvalue and issecretvalue(category.name))
+            or category.name == "" then return nil end
+        seen[category.id] = true
+        copied[#copied + 1] = {id = category.id, name = category.name,
+            sortIndex = nonnegativeInteger(category.sortIndex) and category.sortIndex or nil}
+    end
+    return copied
 end
 
 local function characterGUID()
@@ -56,6 +76,10 @@ local function copyRecipe(id, source, key)
         recipe.relativeDifficulty = source.relativeDifficulty
     end
     if nonnegativeInteger(source.numSkillUps) then recipe.numSkillUps = source.numSkillUps end
+    if type(source.favorite) == "boolean" and not (issecretvalue and issecretvalue(source.favorite)) then
+        recipe.favorite = source.favorite
+    end
+    recipe.categoryPath = categoryPath(source.categoryPath)
     local reagentCount = 0
     for index in pairs(source.reagents) do
         if not integer(index) then return nil, false end
@@ -83,7 +107,7 @@ local function copyRecipes(source, key)
 end
 
 function Catalogue.Invalidate()
-    rows = nil
+    rows = {}
 end
 
 local function parentKey(key, entry)
@@ -149,13 +173,25 @@ function Catalogue.Record(key, recipes, background)
     if not integer(key) then return false end
     local copied = copyRecipes(recipes, key)
     if not copied then return false end
+    local parent = parentKey(key)
+    -- Optional metadata can be unavailable during a complete schematic read.
+    -- Preserve the last native observation without preserving old recipes.
+    local previous = records[key] and records[key].recipes or EMPTY
+    local previousParent = parent ~= key and records[parent] and records[parent].recipes or EMPTY
+    for id, recipe in pairs(copied) do
+        local old = previous[id] or previousParent[id]
+        if old then
+            for _, field in ipairs({"favorite", "categoryPath"}) do
+                if recipe[field] == nil then recipe[field] = old[field] end
+            end
+        end
+    end
     -- A complete scan can contain learned spells without supported item output
     -- (e.g. enchants). Distinguish it from a transient empty parent scan.
     local learnedCount = 0
     for _, recipe in pairs(recipes) do
         if recipe.learned ~= false then learnedCount = learnedCount + 1 end
     end
-    local parent = parentKey(key)
     -- A first background read can use the base profession ID. A complete
     -- native child read is authoritative and must not be hidden by that cache.
     if not background and parent ~= key and records[parent] and records[parent].background then
@@ -211,7 +247,102 @@ function Catalogue.MissingProfessions()
     return missing
 end
 
-local function rebuildRows()
+function Catalogue.HasRecipes()
+    ensureLoaded()
+    local known, complete = ns.API.GetProfessions()
+    local keys = {}
+    for _, profession in ipairs(known) do keys[profession.key] = true end
+    for key, entry in pairs(records) do
+        if (not complete or keys[key] or keys[parentKey(key, entry)]) and next(entry.recipes) then return true end
+    end
+    return false
+end
+
+function Catalogue.SectionKeys()
+    ensureLoaded()
+    local result = {favorites = true}
+    local known, complete = ns.API.GetProfessions()
+    local keys = {}
+    for _, profession in ipairs(known) do keys[profession.key] = true end
+    for key, entry in pairs(records) do
+        local groupKey = parentKey(key, entry)
+        if not complete or keys[key] or keys[groupKey] then
+            for _, recipe in pairs(entry.recipes) do
+                result["profession:" .. tostring(groupKey)] = true
+                for _, category in ipairs(recipe.categoryPath or EMPTY) do
+                    result["category:" .. tostring(groupKey) .. ":" .. tostring(category.id)] = true
+                end
+            end
+        end
+    end
+    return result
+end
+
+-- The event payload is authoritative even if a different profession is open.
+-- Without it, the API distinguishes unreadable metadata from a real false.
+function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
+    ensureLoaded()
+    local nativeEvent = type(isFavorite) == "boolean" and not (issecretvalue and issecretvalue(isFavorite))
+        and integer(recipeSpellID)
+    local changed = false
+    if nativeEvent then
+        -- One spell can be present in both parent and child snapshots. The
+        -- event describes every occurrence without requiring contextual APIs.
+        for _, entry in pairs(records) do
+            local recipe = entry.recipes[recipeSpellID]
+            if recipe and recipe.favorite ~= isFavorite then
+                recipe.favorite, changed = isFavorite, true
+            end
+        end
+        if changed then Catalogue.Invalidate() end
+        return changed
+    end
+    local context = ns.API.BeginRecipeMetadataRead and ns.API.BeginRecipeMetadataRead()
+    for key, entry in pairs(records) do
+        for id, recipe in pairs(entry.recipes) do
+            local metadata = ns.API.GetRecipeMetadata and ns.API.GetRecipeMetadata(id, key, nil, context) or {}
+            if metadata.progressionRead == true then
+                for _, field in ipairs({"canSkillUp", "relativeDifficulty", "numSkillUps"}) do
+                    if recipe[field] ~= metadata[field] then recipe[field], changed = metadata[field], true end
+                end
+            end
+            for _, field in ipairs({"favorite", "canSkillUp", "relativeDifficulty", "numSkillUps"}) do
+                if metadata[field] ~= nil and recipe[field] ~= metadata[field] then
+                    recipe[field], changed = metadata[field], true
+                end
+            end
+            local path = categoryPath(metadata.categoryPath)
+            if path then
+                local old, equal = recipe.categoryPath, true
+                if not old or #old ~= #path then equal = false
+                else
+                    for index, category in ipairs(path) do
+                        local other = old[index]
+                        if category.id ~= other.id or category.name ~= other.name or category.sortIndex ~= other.sortIndex then
+                            equal = false; break
+                        end
+                    end
+                end
+                if not equal then recipe.categoryPath, changed = path, true end
+            end
+        end
+    end
+    if changed then Catalogue.Invalidate() end
+    return changed
+end
+
+-- Native recipe rows only display a skill-gain chevron for canSkillUp plus
+-- Optimal (0), Medium (1) or Easy (2). Forever can report canSkillUp=true and
+-- numSkillUps=1 even for Trivial (3), so neither flag/count alone is evidence
+-- that a craft can advance this character's current profession.
+-- Source: Blizzard_ProfessionsRecipeList.lua, Init, skillUpAtlas selection.
+function Catalogue.CanSkillUp(recipe)
+    return type(recipe) == "table" and not (issecretvalue and issecretvalue(recipe))
+        and not (issecretvalue and issecretvalue(recipe.canSkillUp)) and recipe.canSkillUp == true
+        and nonnegativeInteger(recipe.relativeDifficulty) and recipe.relativeDifficulty <= 2
+end
+
+local function rebuildRows(includeBank)
     local known, complete = ns.API.GetProfessions()
     local knownNames = {}
     for _, profession in ipairs(known) do knownNames[profession.key] = profession.name end
@@ -222,7 +353,7 @@ local function rebuildRows()
         end
     end
     local inventory, bank
-    if ns.Bank then inventory, bank = ns.Bank.Snapshot(allRecipes)
+    if ns.Bank and includeBank then inventory, bank = ns.Bank.Snapshot(allRecipes)
     else inventory = ns.API.Inventory(allRecipes) end
     local result = {}
     for key, entry in pairs(records) do
@@ -231,7 +362,7 @@ local function rebuildRows()
             local prepared = ns.Planner.Prepare(entry.recipes)
             for id, recipe in pairs(entry.recipes) do
                 local count, plan = ns.Planner.MaxCrafts(prepared, inventory, ns.vendorItems or {}, id, 1000, bank)
-                if count > 0 then
+                if count > 0 or recipe.favorite == true then
                     local bankMessage = ns.Bank and ns.Bank.Message(plan)
                     -- The planner prefers owned bank supplies, but the colour
                     -- answers whether bags plus merchant supplies can make the
@@ -239,31 +370,59 @@ local function rebuildRows()
                     local needsBank = bankMessage ~= nil and not ns.Planner.Plan(prepared,
                         inventory, ns.vendorItems or {}, id, count).craftable
                     result[#result + 1] = {recipeID = id, professionKey = key, name = recipe.name,
+                        groupProfessionKey = parent,
                         professionName = knownNames[key] or knownNames[parent] or entry.name, count = count, recipe = recipe,
-                        bankMessage = bankMessage, needsBank = needsBank}
+                        bankMessage = bankMessage, needsBank = needsBank, favorite = recipe.favorite == true,
+                        categoryPath = recipe.categoryPath or EMPTY}
                 end
             end
         end
     end
     table.sort(result, function(a, b)
         if a.professionName ~= b.professionName then return a.professionName < b.professionName end
+        local ap, bp = a.categoryPath, b.categoryPath
+        for index = 1, math.max(#ap, #bp) do
+            local ac, bc = ap[index], bp[index]
+            if not ac then return true end
+            if not bc then return false end
+            if ac.id ~= bc.id then
+                -- A missing optional native order sorts last. Mixing numeric
+                -- comparisons with name-only fallbacks is not transitive.
+                local ao, bo = ac.sortIndex or math.huge, bc.sortIndex or math.huge
+                if ao ~= bo then return ao < bo end
+                if ac.name ~= bc.name then return ac.name < bc.name end
+                return ac.id < bc.id
+            end
+        end
         if a.name ~= b.name then return a.name < b.name end
         if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
         return a.professionKey < b.professionKey
     end)
-    rows = result
+    rows[includeBank and "bank" or "bags"] = result
 end
 
-function Catalogue.Rows(search)
+local function filteredRows(search, options, favorites)
     ensureLoaded()
-    if not rows then rebuildRows() end
+    local includeBank = not options or options.includeBank ~= false
+    local cacheKey = includeBank and "bank" or "bags"
+    if not rows[cacheKey] then rebuildRows(includeBank) end
     -- Lua's %s depends on the system locale and can strip bytes from UTF-8.
     local needle = type(search) == "string" and searchText(search:match("^[ \t\r\n\v\f]*(.-)[ \t\r\n\v\f]*$")) or ""
     local result = {}
-    for _, row in ipairs(rows) do
-        if needle == "" or string.find(searchText(row.name .. " " .. row.professionName), needle, 1, true) then
+    for _, row in ipairs(rows[cacheKey]) do
+        local show = favorites and row.favorite or not favorites and row.count > 0
+            and (not options or not options.progressionOnly or Catalogue.CanSkillUp(row.recipe))
+        if show and (needle == "" or string.find(searchText(row.name .. " " .. row.professionName), needle, 1, true)) then
             result[#result + 1] = row
         end
     end
     return result
+end
+
+function Catalogue.Rows(search, options)
+    return filteredRows(search, options, false)
+end
+
+function Catalogue.Favorites(search, options)
+    return filteredRows(search, options, true)
 end
