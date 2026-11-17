@@ -1,7 +1,8 @@
-# Publish the installable addon only; development material stays local.
+# Publish the addon and repository landing page; development material stays local.
 /*
 !/.gitignore
 !/.gitattributes
+!/README.md
 !/CraftAutoBuy/
 
 # Keep temporary files out of the addon if a tool creates any there.

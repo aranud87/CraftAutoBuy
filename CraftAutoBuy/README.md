@@ -1,13 +1,14 @@
 # CraftAutoBuy
 
-**1.2.0 — Stock v2, en développement dans une pull request en brouillon**
+**Version stable : 1.2.0 — Stock v2**
 
-Cette branche prépare **l'onglet Stock v2**, à partir de la maquette approuvée.
-La version stable publiée reste **1.1.0**, qui contient l'onglet CAB v2.
-Le comportement et le rendu de Stock v2 restent à confirmer dans WoW Forever
-avant publication de la 1.2.0.
+**[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
-La version 1.0.1 initialise automatiquement le catalogue des recettes au premier
+La 1.2.0 contient **Stock v2** et conserve l'onglet CAB v2. GitHub héberge le
+code source, les signalements et les notes de version ; les téléchargements
+de l'addon prêt à installer sont proposés sur CurseForge.
+
+CraftAutoBuy initialise automatiquement le catalogue des recettes au premier
 lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
 tu peux la masquer et continuer à jouer pendant le chargement.
 
