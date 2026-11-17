@@ -173,7 +173,7 @@ loin de la banque. La recherche s'applique aux sacs et à la banque.
 - **Tous** montre aussi les autres objets en sacs et dans le relevé bancaire,
   sans dépendre du catalogue des métiers. Le menu Métier est alors désactivé ;
   son choix précédent est conservé pour le retour aux composants.
-- L'affichage classique garde deux listes indépendantes. **Mode inventaire**
+- L'affichage classique garde deux listes indépendantes. **Inventaire**
   aligne chaque objet sur une ligne commune **Objet / Sacs / Banque / Total**,
   avec un défilement commun. **0** signifie absence connue ; **?** indique une
   quantité inconnue ou à vérifier. Le total n'est affiché que si les deux

@@ -227,7 +227,7 @@ ns.Locale.RegisterLocale("koKR", {
     STOCK_ALL = "전체",
     STOCK_PROFESSION = "전문 기술",
     STOCK_ALL_PROFESSIONS = "모든 전문 기술",
-    STOCK_INVENTORY_MODE = "재고 비교 모드",
+    STOCK_INVENTORY_MODE = "재고",
     STOCK_OBJECT = "아이템",
     STOCK_QUANTITY = "수량",
     STOCK_TOTAL = "합계",

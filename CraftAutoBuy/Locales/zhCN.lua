@@ -227,7 +227,7 @@ ns.Locale.RegisterLocale("zhCN", {
     STOCK_ALL = "全部",
     STOCK_PROFESSION = "专业",
     STOCK_ALL_PROFESSIONS = "所有专业",
-    STOCK_INVENTORY_MODE = "盘点模式",
+    STOCK_INVENTORY_MODE = "库存",
     STOCK_OBJECT = "物品",
     STOCK_QUANTITY = "数量",
     STOCK_TOTAL = "合计",

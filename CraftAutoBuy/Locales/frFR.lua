@@ -230,7 +230,7 @@ ns.Locale.RegisterLocale("frFR", {
     STOCK_ALL = "Tous",
     STOCK_PROFESSION = "Métier",
     STOCK_ALL_PROFESSIONS = "Tous les métiers",
-    STOCK_INVENTORY_MODE = "Mode inventaire",
+    STOCK_INVENTORY_MODE = "Inventaire",
     STOCK_OBJECT = "Objet",
     STOCK_QUANTITY = "Qté",
     STOCK_TOTAL = "Total",

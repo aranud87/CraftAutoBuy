@@ -227,7 +227,7 @@ ns.Locale.RegisterLocale("ruRU", {
     STOCK_ALL = "Все",
     STOCK_PROFESSION = "Профессия",
     STOCK_ALL_PROFESSIONS = "Все профессии",
-    STOCK_INVENTORY_MODE = "Режим инвентаря",
+    STOCK_INVENTORY_MODE = "Инвентарь",
     STOCK_OBJECT = "Предмет",
     STOCK_QUANTITY = "Кол-во",
     STOCK_TOTAL = "Всего",

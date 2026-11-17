@@ -227,7 +227,7 @@ ns.Locale.RegisterLocale("zhTW", {
     STOCK_ALL = "全部",
     STOCK_PROFESSION = "專業技能",
     STOCK_ALL_PROFESSIONS = "所有專業技能",
-    STOCK_INVENTORY_MODE = "盤點模式",
+    STOCK_INVENTORY_MODE = "庫存",
     STOCK_OBJECT = "物品",
     STOCK_QUANTITY = "數量",
     STOCK_TOTAL = "合計",

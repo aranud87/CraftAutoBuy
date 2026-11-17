@@ -105,6 +105,7 @@ local searchScroll = {bags = 0, bank = 0, inventory = 0}
 local fallbackView = {content = "components", inventory = false, extensionsExpanded = false,
     comparisonSize = 20, scroll = {bags = 0, bank = 0, inventory = 0}}
 local lastData
+local LIST_TOP, LIST_HEIGHT, COMPACT_LIST_HEIGHT = 94, 315, 195
 
 local function view()
     return ns.StockView and ns.StockView.Get() or fallbackView
@@ -160,7 +161,7 @@ local function selector(parent, x, y, width, handler)
     local caption = value:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     caption:SetPoint("LEFT", value, "LEFT", 8, 0)
     caption:SetSize(width - 31, 18)
-    caption:SetJustifyH("LEFT"); caption:SetJustifyV("MIDDLE"); caption:SetWordWrap(false)
+    caption:SetJustifyH("LEFT"); caption:SetJustifyV("MIDDLE"); caption:SetWordWrap(false); caption:SetMaxLines(1)
     value:SetFontString(caption)
     value:SetNormalFontObject("GameFontNormalSmall")
     value:SetHighlightFontObject("GameFontHighlightSmall")
@@ -172,6 +173,51 @@ local function selector(parent, x, y, width, handler)
     value.Caption, value.Arrow = caption, arrow
     value:SetScript("OnClick", handler)
     return value
+end
+
+local function nativeTextWidth(fontString, fallback)
+    local method = fontString.GetUnboundedStringWidth or fontString.GetStringWidth
+    if type(method) == "function" then
+        local ok, width = pcall(method, fontString)
+        if ok and type(width) == "number" and not (issecretvalue and issecretvalue(width))
+            and width == width and width >= 0 and width < 10000 then return math.ceil(width) end
+    end
+    -- Compatibility only; the native font measurement is used in Forever.
+    return #fallback * 7
+end
+
+local function measureText(text)
+    widgets.measure:SetText(text)
+    return nativeTextWidth(widgets.measure, text)
+end
+
+local function layoutToolbar(professionName)
+    local gap, available = 8, 626 -- Inside the 650px page, x=14..640.
+    local contentWidth = math.min(150, math.max(110,
+        math.max(measureText(L.STOCK_COMPONENTS), measureText(L.STOCK_ALL)) + 31))
+    local professionWidth = math.min(185, math.max(145,
+        math.max(measureText(L.STOCK_ALL_PROFESSIONS), measureText(professionName)) + 31))
+    local checkWidth = math.min(125, math.max(80,
+        nativeTextWidth(widgets.inventoryFilter.Label, L.STOCK_INVENTORY_MODE) + 25))
+    local searchWidth = math.min(200, available - contentWidth - professionWidth - checkWidth - gap * 3)
+    local extra = available - searchWidth - contentWidth - professionWidth - checkWidth - gap * 3
+    local grow = math.min(extra, 185 - professionWidth)
+    professionWidth, extra = professionWidth + grow, extra - grow
+    contentWidth = contentWidth + math.min(extra, 150 - contentWidth)
+
+    widgets.search:ClearAllPoints(); widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+    widgets.search:SetSize(searchWidth, 20)
+    local x = 14 + searchWidth + gap
+    for _, entry in ipairs({{widgets.contentFilter, contentWidth}, {widgets.professionFilter, professionWidth}}) do
+        local control, width = entry[1], entry[2]
+        control:ClearAllPoints(); control:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -10)
+        control:SetSize(width, 24); control.Caption:SetSize(width - 31, 18)
+        x = x + width + gap
+    end
+    widgets.inventoryFilter:ClearAllPoints()
+    widgets.inventoryFilter:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -11)
+    widgets.inventoryFilter.Label:SetSize(checkWidth - 25, 18)
+    widgets.inventoryFilter:SetHitRectInsets(0, -(checkWidth - 22), 0, 0)
 end
 
 local function showMenu(owner, title, choices, selected, choose)
@@ -260,8 +306,8 @@ end
 
 local function makeColumn(name, key, x, inventory)
     local frame = CreateFrame("Frame", name, panel)
-    frame:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -119)
-    frame:SetSize(inventory and 642 or 312, 314)
+    frame:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -LIST_TOP)
+    frame:SetSize(inventory and 642 or 312, LIST_HEIGHT + 24)
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
     background:SetAtlas("Professions-background-summarylist")
@@ -278,9 +324,9 @@ local function makeColumn(name, key, x, inventory)
     end
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 9, -24)
-    scroll:SetSize(inventory and 614 or 284, 290)
+    scroll:SetSize(inventory and 614 or 284, LIST_HEIGHT)
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(inventory and 614 or 284, 290)
+    content:SetSize(inventory and 614 or 284, LIST_HEIGHT)
     scroll:SetScrollChild(content)
     local empty = label(frame, "GameFontHighlight", 12, -38, inventory and 590 or 276, 72)
     empty:SetWordWrap(true)
@@ -304,13 +350,13 @@ local function makeColumn(name, key, x, inventory)
 end
 
 local function capacitySummary(x)
-    local value = {heading = label(panel, "GameFontNormalLarge", x, -75, 150, 20),
-        used = label(panel, "GameFontHighlightSmall", x + 150, -78, 140, 18),
-        free = label(panel, "GameFontHighlightSmall", x, -98, 145, 16),
-        total = label(panel, "GameFontHighlightSmall", x + 145, -98, 145, 16)}
+    local value = {heading = label(panel, "GameFontNormalLarge", x, -50, 150, 20),
+        used = label(panel, "GameFontHighlightSmall", x + 150, -53, 140, 18),
+        free = label(panel, "GameFontHighlightSmall", x, -73, 145, 16),
+        total = label(panel, "GameFontHighlightSmall", x + 145, -73, 145, 16)}
     value.used:SetJustifyH("RIGHT"); value.total:SetJustifyH("RIGHT")
     local hit = CreateFrame("Frame", nil, panel)
-    hit:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -73)
+    hit:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -48)
     hit:SetSize(292, 42); hit:EnableMouse(true)
     help(hit, function()
         local descriptor = value.data or {}
@@ -336,10 +382,12 @@ function StockUI.Install()
     panel.Background:SetAllPoints(panel)
     panel.Background:SetAtlas("Profession-Background-Template2")
     panel:Hide()
+    widgets.measure = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    widgets.measure:Hide()
 
     widgets.search = CreateFrame("EditBox", "CraftAutoBuyStockSearchBox", panel, "SearchBoxTemplate")
-    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -18)
-    widgets.search:SetSize(285, 20)
+    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+    widgets.search:SetSize(200, 20)
     widgets.search:SetAutoFocus(false); widgets.search:SetMaxLetters(80)
     widgets.search:SetScript("OnTextChanged", function(self)
         if SearchBoxTemplate_OnTextChanged then SearchBoxTemplate_OnTextChanged(self) end
@@ -349,14 +397,13 @@ function StockUI.Install()
         end
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    widgets.contentLabel = label(panel, "GameFontNormalSmall", 329, 0, 127, 16)
-    widgets.contentFilter = selector(panel, 321, -16, 135, function(self)
+    widgets.contentFilter = selector(panel, 222, -10, 130, function(self)
         showMenu(self, L.STOCK_SHOW, {{text = L.STOCK_COMPONENTS, value = "components"}, {text = L.STOCK_ALL, value = "all"}},
             function(value) return view().content == value end,
             function(value) preference("SetContent", "content", value); StockUI.Render() end)
     end)
-    widgets.professionLabel = label(panel, "GameFontNormalSmall", 475, 0, 165, 16)
-    widgets.professionFilter = selector(panel, 467, -16, 173, function(self)
+    help(widgets.contentFilter, function() return L.STOCK_SHOW .. ": " .. (widgets.contentFilter:GetText() or "") end)
+    widgets.professionFilter = selector(panel, 360, -10, 170, function(self)
         if view().content == "all" then return end
         local choices = {{text = L.STOCK_ALL_PROFESSIONS, value = false}}
         for _, profession in ipairs(lastData and lastData.professions or {}) do
@@ -366,15 +413,18 @@ function StockUI.Install()
             function(value) return (view().professionKey or false) == value end,
             function(value) preference("SetProfession", "professionKey", value or nil); StockUI.Render() end)
     end)
-    help(widgets.professionFilter, function() return L.STOCK_PROFESSION_HELP end)
+    help(widgets.professionFilter, function()
+        return (widgets.professionFilter:GetText() or L.STOCK_PROFESSION) .. "\n" .. L.STOCK_PROFESSION_HELP
+    end)
     widgets.inventoryFilter = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    widgets.inventoryFilter:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -43)
+    widgets.inventoryFilter:SetPoint("TOPLEFT", panel, "TOPLEFT", 538, -11)
     widgets.inventoryFilter:SetSize(22, 22)
     local checkText = widgets.inventoryFilter.Text or widgets.inventoryFilter:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     checkText:ClearAllPoints(); checkText:SetPoint("LEFT", widgets.inventoryFilter, "RIGHT", 3, 0)
-    checkText:SetSize(285, 18); checkText:SetJustifyH("LEFT"); checkText:SetJustifyV("MIDDLE")
+    checkText:SetSize(77, 18); checkText:SetJustifyH("LEFT"); checkText:SetJustifyV("MIDDLE")
+    checkText:SetWordWrap(false); checkText:SetMaxLines(1)
     widgets.inventoryFilter.Label = checkText
-    widgets.inventoryFilter:SetHitRectInsets(0, -286, 0, 0)
+    widgets.inventoryFilter:SetHitRectInsets(0, -80, 0, 0)
     widgets.inventoryFilter:SetScript("OnClick", function(self)
         preference("SetInventory", "inventory", self:GetChecked() == true); StockUI.Render()
     end)
@@ -537,7 +587,6 @@ local function renderNow()
         if not found then preference("SetProfession", "professionKey", nil); state = view(); data = dataFor(search, state) end
     end
     lastData = data
-    widgets.contentLabel:SetText(L.STOCK_SHOW); widgets.professionLabel:SetText(L.STOCK_PROFESSION)
     widgets.contentFilter:SetText(state.content == "all" and L.STOCK_ALL or L.STOCK_COMPONENTS)
     local professionName = L.STOCK_ALL_PROFESSIONS
     if state.professionKey then
@@ -548,6 +597,7 @@ local function renderNow()
     widgets.professionFilter:SetEnabled(state.content ~= "all")
     widgets.professionFilter.Arrow:SetAlpha(state.content == "all" and .4 or 1)
     widgets.inventoryFilter.Label:SetText(L.STOCK_INVENTORY_MODE); widgets.inventoryFilter:SetChecked(state.inventory)
+    layoutToolbar(professionName)
     widgets.bags.heading:SetText(L.STOCK_BAGS); widgets.bank.heading:SetText(L.STOCK_BANK)
     widgets.bags.title:SetText(L.STOCK_OBJECT); widgets.bank.title:SetText(L.STOCK_OBJECT)
     widgets.bags.headers[1]:SetText(L.STOCK_QUANTITY); widgets.bank.headers[1]:SetText(L.STOCK_QUANTITY)
@@ -562,7 +612,7 @@ local function renderNow()
         or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BAGS or L.STOCK_EMPTY_BAGS))
     local bankEmpty = not data.bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)
         or (search ~= "" and L.STOCK_NO_RESULTS or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BANK or L.STOCK_EMPTY_BANK))
-    local height = state.extensionsExpanded and 170 or 290
+    local height = state.extensionsExpanded and COMPACT_LIST_HEIGHT or LIST_HEIGHT
     renderColumn(widgets.bags, data.bags or {}, bagEmpty, height)
     renderColumn(widgets.bank, data.bankKnown and data.bank or {}, bankEmpty, height)
     local inventoryEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or empty
@@ -573,7 +623,7 @@ local function renderNow()
     renderColumn(widgets.inventory, data.inventory or {}, inventoryEmpty, height)
     renderCapacity(widgets.bagCapacity, data.capacity and data.capacity.bags)
     renderCapacity(widgets.bankCapacity, data.capacity and data.capacity.bank)
-    local footerY = 119 + 24 + height + 6
+    local footerY = LIST_TOP + 24 + height + 6
     widgets.source:ClearAllPoints(); widgets.source:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -footerY)
     widgets.scope:ClearAllPoints(); widgets.scope:SetPoint("TOPLEFT", panel, "TOPLEFT", 326, -footerY)
     widgets.source:SetText((bankOpen and L.STOCK_BANK_CURRENT or L.STOCK_BANK_MEMORY) .. (data.bankUnverified and " (?)" or ""))
