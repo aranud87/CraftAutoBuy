@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("esMX", {
     STOCK_BANK_NEXT_COST = "Siguiente casilla: %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "Abre el banco para comprobar las opciones de ampliación.",
     STOCK_SLOTS_GENERAL = "%d casillas libres para cualquier objeto.",
-    STOCK_INVENTORY_HELP = "Alinea los mismos objetos de las bolsas y el banco. ? indica una cantidad desconocida; el total requiere ambas cantidades conocidas.",
-    STOCK_PROFESSION_HELP = "Componentes de recetas aprendidas compatibles con CAB. Un ingrediente compartido puede pertenecer a varias profesiones. Este filtro se desactiva con Todo.",
-    STOCK_CAPACITY_HELP = "Las casillas cuentan todo el contenido, sin depender de los filtros. Una pila ocupa una casilla. Con el banco cerrado se usan los datos guardados.",
+    STOCK_INVENTORY_HELP = "Alinea los mismos objetos de bolsas y banco. ? = cantidad o total desconocido.",
+    STOCK_PROFESSION_HELP = "Materiales de recetas aprendidas compatibles con CAB, a veces comunes a varias profesiones. Desactivado con Todo.",
+    STOCK_CAPACITY_HELP = "Se cuentan todos los objetos, sin importar los filtros. Una pila ocupa una casilla.",
 })

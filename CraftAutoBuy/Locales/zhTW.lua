@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("zhTW", {
     STOCK_BANK_NEXT_COST = "下一個欄位：%s",
     STOCK_BANK_EXTENSION_UNKNOWN = "請開啟銀行以確認擴充選項。",
     STOCK_SLOTS_GENERAL = "%d 個空格可存放任意物品。",
-    STOCK_INVENTORY_HELP = "將背包和銀行中的相同物品對齊顯示。? 表示數量未知；只有兩個數量皆已知時才顯示合計。",
-    STOCK_PROFESSION_HELP = "CAB 支援的已學配方所需材料。共用材料可歸屬多個專業技能。選擇全部時，此篩選器停用。",
-    STOCK_CAPACITY_HELP = "格數統計包含所有物品，不受篩選影響。一疊物品佔一格。銀行關閉時使用記錄的銀行資料。",
+    STOCK_INVENTORY_HELP = "對齊顯示背包和銀行的相同物品。? = 數量或合計未知。",
+    STOCK_PROFESSION_HELP = "CAB 支援的已學配方材料，部分可用於多個專業技能。全部模式停用。",
+    STOCK_CAPACITY_HELP = "統計包含所有物品，不受篩選影響。一疊物品佔一格。",
 })

@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("deDE", {
     STOCK_BANK_NEXT_COST = "Nächster Platz: %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "Bank öffnen, um Erweiterungen zu prüfen.",
     STOCK_SLOTS_GENERAL = "%d freie Plätze für beliebige Gegenstände.",
-    STOCK_INVENTORY_HELP = "Ordnet gleiche Gegenstände aus Taschen und Bank in einer Zeile an. ? bedeutet unbekannte Menge; die Summe erfordert zwei bekannte Mengen.",
-    STOCK_PROFESSION_HELP = "Materialien erlernter, von CAB unterstützter Rezepte. Gemeinsame Zutaten können zu mehreren Berufen gehören. Bei Alle ist dieser Filter deaktiviert.",
-    STOCK_CAPACITY_HELP = "Die Plätze zählen den gesamten Inhalt unabhängig von Filtern. Ein Stapel belegt einen Platz. Bei geschlossener Bank werden gespeicherte Bankdaten verwendet.",
+    STOCK_INVENTORY_HELP = "Gleiche Gegenstände aus Taschen und Bank in einer Zeile. ? = unbekannte Menge oder Summe.",
+    STOCK_PROFESSION_HELP = "Materialien erlernter, von CAB unterstützter Rezepte; teils für mehrere Berufe. Bei Alle deaktiviert.",
+    STOCK_CAPACITY_HELP = "Alle Inhalte zählen, unabhängig vom Filter. Ein Stapel belegt einen Platz.",
 })

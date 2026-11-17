@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("itIT", {
     STOCK_BANK_NEXT_COST = "Prossimo scomparto: %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "Apri la banca per verificare le possibilità di espansione.",
     STOCK_SLOTS_GENERAL = "%d scomparti liberi per qualsiasi oggetto.",
-    STOCK_INVENTORY_HELP = "Allinea gli stessi oggetti nelle borse e in banca. ? indica una quantità sconosciuta; il totale richiede entrambe le quantità note.",
-    STOCK_PROFESSION_HELP = "Componenti delle ricette apprese supportate da CAB. Un ingrediente condiviso può appartenere a più professioni. Questo filtro è disattivato con Tutti.",
-    STOCK_CAPACITY_HELP = "Gli scomparti comprendono tutti i contenuti, indipendentemente dai filtri. Una pila occupa uno scomparto. A banca chiusa vengono usati i dati memorizzati.",
+    STOCK_INVENTORY_HELP = "Allinea gli stessi oggetti nelle borse e in banca. ? = quantità o totale sconosciuto.",
+    STOCK_PROFESSION_HELP = "Componenti di ricette apprese supportate da CAB, anche condivisi tra professioni. Disattivato con Tutti.",
+    STOCK_CAPACITY_HELP = "Tutti gli oggetti contano, anche con i filtri. Una pila occupa uno scomparto.",
 })

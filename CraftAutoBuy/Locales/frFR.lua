@@ -258,7 +258,7 @@ ns.Locale.RegisterLocale("frFR", {
     STOCK_BANK_NEXT_COST = "Prochain emplacement : %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "Ouvre la banque pour vérifier les possibilités d’extension.",
     STOCK_SLOTS_GENERAL = "%d places libres pour tout objet.",
-    STOCK_INVENTORY_HELP = "Aligne les mêmes objets dans les sacs et en banque. ? indique une quantité inconnue ; le total exige deux quantités connues.",
-    STOCK_PROFESSION_HELP = "Composants des recettes apprises prises en charge par CAB. Un ingrédient partagé peut appartenir à plusieurs métiers. Ce filtre est désactivé avec Tous.",
-    STOCK_CAPACITY_HELP = "Les emplacements comptent tout le contenu, quels que soient les filtres. Une pile occupe une place. Banque fermée, l’affichage utilise le dernier relevé mémorisé.",
+    STOCK_INVENTORY_HELP = "Aligne les objets des sacs et de la banque. ? = quantité ou total inconnu.",
+    STOCK_PROFESSION_HELP = "Composants des recettes apprises gérées par CAB, parfois communs à plusieurs métiers. Inactif avec Tous.",
+    STOCK_CAPACITY_HELP = "Tous les objets comptent, même avec un filtre. Une pile occupe une place.",
 })

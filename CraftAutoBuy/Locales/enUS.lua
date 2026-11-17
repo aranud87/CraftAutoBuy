@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("enUS", {
     STOCK_BANK_NEXT_COST = "Next slot: %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "Open the bank to check expansion options.",
     STOCK_SLOTS_GENERAL = "%d free slots for any item.",
-    STOCK_INVENTORY_HELP = "Aligns the same items in bags and bank. ? means an unknown quantity; a total requires both quantities to be known.",
-    STOCK_PROFESSION_HELP = "Components of learned recipes supported by CAB. Shared ingredients may belong to several professions. This filter is disabled with All.",
-    STOCK_CAPACITY_HELP = "Slot counts cover all contents, regardless of filters. A stack occupies one slot. When the bank is closed, its displayed data come from the last recorded reading.",
+    STOCK_INVENTORY_HELP = "Aligns matching items in bags and bank. ? = unknown quantity or total.",
+    STOCK_PROFESSION_HELP = "Materials for learned recipes supported by CAB, sometimes shared across professions. Disabled with All.",
+    STOCK_CAPACITY_HELP = "All contents count, regardless of filters. One stack uses one slot.",
 })

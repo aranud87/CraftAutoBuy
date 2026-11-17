@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("koKR", {
     STOCK_BANK_NEXT_COST = "다음 가방 칸: %s",
     STOCK_BANK_EXTENSION_UNKNOWN = "은행을 열어 확장 가능 여부를 확인하세요.",
     STOCK_SLOTS_GENERAL = "모든 아이템에 쓸 수 있는 빈칸 %d개입니다.",
-    STOCK_INVENTORY_HELP = "가방과 은행의 같은 아이템을 한 줄에 표시합니다. ?는 수량을 알 수 없다는 뜻이며, 두 수량을 모두 알아야 합계를 표시합니다.",
-    STOCK_PROFESSION_HELP = "CAB에서 지원하는 배운 제조법의 재료입니다. 공통 재료는 여러 전문 기술에 속할 수 있습니다. 전체에서는 이 필터를 사용할 수 없습니다.",
-    STOCK_CAPACITY_HELP = "칸 수는 필터와 관계없이 모든 내용물을 셉니다. 한 묶음이 한 칸을 차지합니다. 은행이 닫혀 있으면 기록된 은행 데이터를 사용합니다.",
+    STOCK_INVENTORY_HELP = "가방과 은행의 같은 아이템을 한 줄에 표시합니다. ? = 알 수 없는 수량 또는 합계.",
+    STOCK_PROFESSION_HELP = "CAB에서 지원하는 배운 제조법의 재료이며, 여러 전문 기술에서 쓰일 수 있습니다. 전체에서는 비활성화됩니다.",
+    STOCK_CAPACITY_HELP = "필터와 관계없이 모든 아이템을 셉니다. 한 묶음은 한 칸을 차지합니다.",
 })

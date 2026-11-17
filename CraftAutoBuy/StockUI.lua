@@ -125,7 +125,8 @@ local function tooltip(owner, text)
         return
     end
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-    GameTooltip:SetText(text)
+    -- Use the native tooltip width for localized help instead of one long line.
+    GameTooltip:SetText(text, 1, .82, 0, 1, true)
     GameTooltip:Show()
 end
 

@@ -255,7 +255,7 @@ ns.Locale.RegisterLocale("zhCN", {
     STOCK_BANK_NEXT_COST = "下一个栏位：%s",
     STOCK_BANK_EXTENSION_UNKNOWN = "请打开银行以确认扩容选项。",
     STOCK_SLOTS_GENERAL = "%d 个空格可存放任意物品。",
-    STOCK_INVENTORY_HELP = "将背包和银行中的同一物品对齐显示。? 表示数量未知；只有两个数量均已知时才显示合计。",
-    STOCK_PROFESSION_HELP = "CAB 支持的已学配方所需材料。共用材料可归属多个专业。选择全部时，此筛选器停用。",
-    STOCK_CAPACITY_HELP = "格数统计包含所有物品，不受筛选影响。一叠物品占一格。银行关闭时使用记录的银行数据。",
+    STOCK_INVENTORY_HELP = "对齐显示背包和银行的同一物品。? = 数量或合计未知。",
+    STOCK_PROFESSION_HELP = "CAB 支持的已学配方材料，部分可用于多个专业。全部模式停用。",
+    STOCK_CAPACITY_HELP = "统计包含所有物品，不受筛选影响。一叠物品占一格。",
 })
