@@ -14,7 +14,7 @@ ns.Locale.RegisterLocale("deDE", {
     CATALOG_UNCATEGORIZED = "Ohne Kategorie",
     INITIALIZATION_HIDE_BUTTON = "Ausblenden",
     INITIALIZATION_TITLE = "Initialisierung von CraftAutoBuy",
-    INITIALIZATION_BACKGROUND_HELP = "Rezepte werden erstmals geladen. Du kannst dieses Fenster ausblenden und weiterspielen: Das Einlesen läuft im Hintergrund weiter. Das Fenster schließt sich automatisch.",
+    INITIALIZATION_BACKGROUND_HELP = "Rezepte werden erstmals geladen. Du kannst dieses Fenster ausblenden und weiterspielen: Das Einlesen läuft im Hintergrund weiter. Das Fenster schließt sich automatisch.\n\n|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:16:16|t Der Inhalt deiner Bank wird erst angezeigt, nachdem du sie zum ersten Mal geöffnet hast.",
     INITIALIZING_RECIPES = "Rezepte werden im Hintergrund eingelesen… (%d/%d Berufe)",
     INITIALIZATION_WAITING = "Warte auf Spieldaten zum Einlesen der Rezepte: %s.",
     STOCK_INITIALIZING = "Reagenzien erscheinen nach dem ersten Einlesen der Rezepte.",

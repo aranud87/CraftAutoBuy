@@ -14,7 +14,7 @@ ns.Locale.RegisterLocale("koKR", {
     CATALOG_UNCATEGORIZED = "분류 없음",
     INITIALIZATION_HIDE_BUTTON = "숨기기",
     INITIALIZATION_TITLE = "CraftAutoBuy 초기화",
-    INITIALIZATION_BACKGROUND_HELP = "제작법을 처음 불러오는 중입니다. 이 창을 숨기고 계속 플레이하셔도 읽기는 백그라운드에서 계속됩니다. 창은 자동으로 닫힙니다.",
+    INITIALIZATION_BACKGROUND_HELP = "제작법을 처음 불러오는 중입니다. 이 창을 숨기고 계속 플레이하셔도 읽기는 백그라운드에서 계속됩니다. 창은 자동으로 닫힙니다.\n\n|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:16:16|t 은행 내용물은 은행을 처음 연 후에만 표시됩니다.",
     INITIALIZING_RECIPES = "백그라운드에서 제작법을 초기화하는 중… (전문 기술 %d/%d개)",
     INITIALIZATION_WAITING = "제작법을 읽기 위해 게임 데이터를 기다리는 중: %s.",
     STOCK_INITIALIZING = "제작법을 처음 읽은 후 재료가 표시됩니다.",

@@ -14,7 +14,7 @@ ns.Locale.RegisterLocale("zhCN", {
     CATALOG_UNCATEGORIZED = "未分类",
     INITIALIZATION_HIDE_BUTTON = "隐藏",
     INITIALIZATION_TITLE = "CraftAutoBuy 初始化",
-    INITIALIZATION_BACKGROUND_HELP = "首次加载配方。你可以隐藏此窗口并继续游戏：读取将在后台继续进行。窗口会自动关闭。",
+    INITIALIZATION_BACKGROUND_HELP = "首次加载配方。你可以隐藏此窗口并继续游戏：读取将在后台继续进行。窗口会自动关闭。\n\n|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:16:16|t 首次打开银行后，才会显示银行中的物品。",
     INITIALIZING_RECIPES = "正在后台初始化配方…（%d/%d 个专业）",
     INITIALIZATION_WAITING = "正在等待游戏数据以读取配方：%s。",
     STOCK_INITIALIZING = "首次读取配方后会显示材料。",

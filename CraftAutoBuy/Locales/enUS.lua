@@ -14,7 +14,7 @@ ns.Locale.RegisterLocale("enUS", {
     CATALOG_UNCATEGORIZED = "Uncategorized",
     INITIALIZATION_HIDE_BUTTON = "Hide",
     INITIALIZATION_TITLE = "CraftAutoBuy initialization",
-    INITIALIZATION_BACKGROUND_HELP = "Initial recipe loading. You can hide this window and keep playing: scanning continues in the background. The window will close automatically.",
+    INITIALIZATION_BACKGROUND_HELP = "Initial recipe loading. You can hide this window and keep playing: scanning continues in the background. The window will close automatically.\n\n|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:16:16|t Your bank contents will only be displayed after you open your bank for the first time.",
     INITIALIZING_RECIPES = "Initializing recipes in the background… (%d/%d professions)",
     INITIALIZATION_WAITING = "Recipe reading is waiting for game data: %s.",
     STOCK_INITIALIZING = "Reagents will appear after recipes are read for the first time.",

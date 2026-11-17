@@ -14,7 +14,7 @@ ns.Locale.RegisterLocale("ptBR", {
     CATALOG_UNCATEGORIZED = "Sem categoria",
     INITIALIZATION_HIDE_BUTTON = "Ocultar",
     INITIALIZATION_TITLE = "Inicialização do CraftAutoBuy",
-    INITIALIZATION_BACKGROUND_HELP = "Carregamento inicial das receitas. Você pode ocultar esta janela e continuar jogando: a leitura prossegue em segundo plano. A janela será fechada automaticamente.",
+    INITIALIZATION_BACKGROUND_HELP = "Carregamento inicial das receitas. Você pode ocultar esta janela e continuar jogando: a leitura prossegue em segundo plano. A janela será fechada automaticamente.\n\n|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:16:16|t O conteúdo do seu banco só será exibido após você abri-lo pela primeira vez.",
     INITIALIZING_RECIPES = "Inicializando as receitas em segundo plano… (%d/%d profissões)",
     INITIALIZATION_WAITING = "Leitura de receitas aguardando os dados do jogo: %s.",
     STOCK_INITIALIZING = "Os reagentes aparecerão após a primeira leitura das receitas.",
