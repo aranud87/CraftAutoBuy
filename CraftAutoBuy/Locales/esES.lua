@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("esES", {
     CATALOG_FAVORITES = "Favoritos",
     CATALOG_FILTER_BANK = "Banco",
-    CATALOG_FILTER_BANK_HELP = "Incluye los componentes guardados del banco personal al calcular las recetas que se pueden fabricar. Los favoritos siguen visibles.",
+    CATALOG_FILTER_BANK_HELP = "Incluye en el cálculo los componentes registrados del banco personal. Aunque esté desactivado, comprar suministros ya registrados en el banco requiere confirmación para el proyecto actual. Los favoritos siguen visibles.",
     CATALOG_FILTER_PROGRESSION = "Progreso",
     CATALOG_FILTER_PROGRESSION_HELP = "Muestra solo recetas que se puedan fabricar y que puedan aumentar la habilidad de profesión. Los favoritos siguen visibles.",
     CATALOG_COLLAPSE_ALL = "Contraer todo",

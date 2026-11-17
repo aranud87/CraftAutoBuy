@@ -36,8 +36,10 @@ avec deux filtres toujours visibles :
   progression ne garantit pas un point à chaque fabrication. Cette règle
   native s'applique à tous les métiers, sans exclusion manuelle de recettes.
 
-La section **Favoris** reprend les favoris du jeu. Ils restent visibles même
-sans composants ou sans gain de compétence ; leur quantité et leur couleur
+La section **Favoris** reprend les favoris du jeu parmi les recettes apprises
+d'objets simples prises en charge par CAB. Les enchantements, les recettes
+avec niveaux de qualité et celles sans objet produit ne sont pas inclus.
+Ces favoris restent visibles même sans composants ou sans gain de compétence ; leur quantité et leur couleur
 suivent la prise en compte de la banque. Une recette non réalisable apparaît
 en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
 La recherche s'applique aussi aux favoris.
@@ -59,7 +61,9 @@ ouvre le métier correspondant une première fois pour les actualiser.
 
 Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
 directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
-restent pris en compte dans les deux positions de ce filtre.
+restent pris en compte dans les deux positions de ce filtre. Même avec Banque
+décoché, racheter des fournitures déjà connues en banque demande de confirmer
+**Continuer sans banque** pour le projet en cours.
 
 ## Installation
 
@@ -169,6 +173,9 @@ permettent une autre solution, le bouton
 d'action propose **Continuer sans banque** avec confirmation du nouveau devis,
 des lots et du surplus. Ce choix concerne seulement le projet en cours ; il
 n'est pas une préférence permanente. Annuler cette confirmation ne dépense rien.
+Avec Banque décoché, le calcul reste sans banque, mais cette confirmation est
+également demandée avant de racheter des fournitures déjà connues en banque.
+L'autorisation porte sur le projet courant et ne s'étend pas aux autres projets.
 
 Ce choix ne remplace pas une matière de base manquante qui ne peut être ni
 achetée ni fabriquée avec les composants disponibles. Aucun objet n'est retiré

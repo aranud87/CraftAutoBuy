@@ -56,6 +56,7 @@ end
 local function quotePlan(plan)
     if not plan or not plan.craftable then return false, L.PLAN_UNAVAILABLE, nil, nil, nil, plan end
     local bankMessage = ns.Bank and ns.Bank.Message(plan)
+        or (ns.BankPurchaseWarning and ns.BankPurchaseWarning(ns.recipes, plan))
     if bankMessage then
         local alternativePlan, alternativeQuote, allowed, reason = ns.Bank.Alternative(ns.recipes, plan)
         return allowed, allowed and L.BANK_OVERRIDE_NOTICE or reason,

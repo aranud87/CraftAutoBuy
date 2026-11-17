@@ -199,6 +199,9 @@ end
 
 local function bankAlternative(recipes, plan)
     local message = ns.Bank and ns.Bank.Message(plan)
+    -- Excluding the bank from the calculation is not consent to repurchase
+    -- supplies already stored there. Advertise the same project confirmation.
+    if not message and ns.BankPurchaseWarning then message = ns.BankPurchaseWarning(recipes, plan) end
     if not message then return nil, false end
     if type(ns.Bank.Alternative) ~= "function" then return message, false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, plan)

@@ -7,7 +7,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("frFR", {
     CATALOG_FAVORITES = "Favoris",
     CATALOG_FILTER_BANK = "Banque",
-    CATALOG_FILTER_BANK_HELP = "Inclut les composants mémorisés de la banque personnelle dans le calcul des recettes fabricables. Les favoris restent visibles.",
+    CATALOG_FILTER_BANK_HELP = "Inclut la banque personnelle mémorisée dans le calcul. Même décoché, racheter des fournitures déjà connues en banque demande une confirmation pour le projet en cours. Les favoris restent visibles.",
     CATALOG_FILTER_PROGRESSION = "Progression",
     CATALOG_FILTER_PROGRESSION_HELP = "Affiche uniquement les recettes fabricables pouvant faire progresser le métier. Les favoris restent visibles.",
     CATALOG_COLLAPSE_ALL = "Tout réduire",

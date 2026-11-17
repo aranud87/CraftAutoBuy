@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("deDE", {
     CATALOG_FAVORITES = "Favoriten",
     CATALOG_FILTER_BANK = "Bank",
-    CATALOG_FILTER_BANK_HELP = "Gespeicherte Reagenzien aus der persönlichen Bank bei der Berechnung herstellbarer Rezepte berücksichtigen. Favoriten bleiben sichtbar.",
+    CATALOG_FILTER_BANK_HELP = "Gespeicherte Reagenzien der persönlichen Bank bei der Berechnung berücksichtigen. Auch bei deaktivierter Option erfordert der Kauf bereits in der Bank erfasster Materialien eine Bestätigung für das aktuelle Projekt. Favoriten bleiben sichtbar.",
     CATALOG_FILTER_PROGRESSION = "Fortschritt",
     CATALOG_FILTER_PROGRESSION_HELP = "Nur herstellbare Rezepte anzeigen, die die Berufsfertigkeit erhöhen können. Favoriten bleiben sichtbar.",
     CATALOG_COLLAPSE_ALL = "Alle einklappen",

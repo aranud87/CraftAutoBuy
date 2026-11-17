@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("koKR", {
     CATALOG_FAVORITES = "즐겨찾기",
     CATALOG_FILTER_BANK = "은행",
-    CATALOG_FILTER_BANK_HELP = "제작 가능한 제조법을 계산할 때 저장된 개인 은행 재료를 포함합니다. 즐겨찾기는 계속 표시됩니다.",
+    CATALOG_FILTER_BANK_HELP = "계산에 저장된 개인 은행 재료를 포함합니다. 선택을 해제해도 은행에 이미 있다고 기록된 재료를 구입하려면 현재 작업에 대한 확인이 필요합니다. 즐겨찾기는 계속 표시됩니다.",
     CATALOG_FILTER_PROGRESSION = "숙련도 향상",
     CATALOG_FILTER_PROGRESSION_HELP = "제작할 수 있고 전문 기술 숙련도를 올릴 수 있는 제조법만 표시합니다. 즐겨찾기는 계속 표시됩니다.",
     CATALOG_COLLAPSE_ALL = "모두 접기",

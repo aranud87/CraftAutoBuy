@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("zhCN", {
     CATALOG_FAVORITES = "收藏",
     CATALOG_FILTER_BANK = "银行",
-    CATALOG_FILTER_BANK_HELP = "计算可制作配方时计入已记录的个人银行材料。收藏的配方仍会显示。",
+    CATALOG_FILTER_BANK_HELP = "计算时计入已记录的个人银行材料。即使取消勾选，购买银行中已有记录的材料仍需为当前制作项目确认。收藏的配方仍会显示。",
     CATALOG_FILTER_PROGRESSION = "技能提升",
     CATALOG_FILTER_PROGRESSION_HELP = "只显示能够制作且可能提升专业技能的配方。收藏的配方仍会显示。",
     CATALOG_COLLAPSE_ALL = "全部折叠",

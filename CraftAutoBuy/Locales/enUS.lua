@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("enUS", {
     CATALOG_FAVORITES = "Favorites",
     CATALOG_FILTER_BANK = "Bank",
-    CATALOG_FILTER_BANK_HELP = "Include remembered personal-bank reagents when calculating craftable recipes. Favorites remain visible.",
+    CATALOG_FILTER_BANK_HELP = "Include remembered personal-bank reagents in calculations. When unchecked, buying supplies already recorded in the bank still requires confirmation for the current project. Favorites remain visible.",
     CATALOG_FILTER_PROGRESSION = "Skill gains",
     CATALOG_FILTER_PROGRESSION_HELP = "Show only craftable recipes that can increase profession skill. Favorites remain visible.",
     CATALOG_COLLAPSE_ALL = "Collapse all",

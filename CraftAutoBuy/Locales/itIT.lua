@@ -4,7 +4,7 @@ local _, ns = ...
 ns.Locale.RegisterLocale("itIT", {
     CATALOG_FAVORITES = "Preferiti",
     CATALOG_FILTER_BANK = "Banca",
-    CATALOG_FILTER_BANK_HELP = "Include i reagenti memorizzati della banca personale nel calcolo delle ricette realizzabili. I preferiti restano visibili.",
+    CATALOG_FILTER_BANK_HELP = "Include nel calcolo i reagenti memorizzati della banca personale. Anche con questa opzione disattivata, acquistare materiali già registrati in banca richiede una conferma per il progetto in corso. I preferiti restano visibili.",
     CATALOG_FILTER_PROGRESSION = "Avanzamento",
     CATALOG_FILTER_PROGRESSION_HELP = "Mostra solo le ricette realizzabili che possono aumentare la competenza nella professione. I preferiti restano visibili.",
     CATALOG_COLLAPSE_ALL = "Comprimi tutto",
