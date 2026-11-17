@@ -234,22 +234,37 @@ local function ordinaryBoolean(value)
     return type(value) == "boolean" and not (issecretvalue and issecretvalue(value))
 end
 
+local metadataContextToken = {}
+
+-- This snapshot belongs to one synchronous metadata pass. Keep no global
+-- context: opening another profession must be reflected by the next pass.
+function API.BeginRecipeMetadataRead()
+    local context = {token = metadataContextToken, source = C_TradeSkillUI, categories = {}}
+    if not C_TradeSkillUI then return context end
+    for _, name in ipairs({"IsTradeSkillLinked", "IsTradeSkillGuild", "IsTradeSkillGuildMember", "IsNPCCrafting"}) do
+        if C_TradeSkillUI[name] then
+            local ok, external = call(C_TradeSkillUI[name])
+            if not ok or not ordinaryBoolean(external) or external then return context end
+        end
+    end
+    context.available = true
+    context.own = API.IsOwnProfession() and not (ns.IsProfessionClosed and ns.IsProfessionClosed())
+    if context.own then context.professionKey = API.GetProfessionKey() end
+    return context
+end
+
 -- Optional metadata is read independently of schematics. A cold recipe-info
 -- result is contextual (including false learned/favorite/skill-up fields), so
 -- only the current, ready, personal profession can authoritatively clear it.
 -- A positive native favorite is useful even before its profession is opened.
-function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo)
+function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo, context)
     local metadata = {}
     if not positiveInteger(recipeID) or not C_TradeSkillUI then return metadata end
-    for _, name in ipairs({"IsTradeSkillLinked", "IsTradeSkillGuild", "IsTradeSkillGuildMember", "IsNPCCrafting"}) do
-        if C_TradeSkillUI[name] then
-            local ok, external = call(C_TradeSkillUI[name])
-            if not ok or not ordinaryBoolean(external) or external then return metadata end
-        end
+    if type(context) ~= "table" or context.token ~= metadataContextToken or context.source ~= C_TradeSkillUI then
+        context = API.BeginRecipeMetadataRead()
     end
-    local own = API.IsOwnProfession()
-    local scoped = own and API.GetProfessionKey() == professionKey
-        and not (ns.IsProfessionClosed and ns.IsProfessionClosed())
+    if not context.available then return metadata end
+    local scoped = context.own and context.professionKey == professionKey
     local info = suppliedInfo
     if not info and scoped then
         local ok, value = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
@@ -282,10 +297,16 @@ function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo)
     local categoryID, path, seen = info.categoryID, {}, {}
     while positiveInteger(categoryID) and not seen[categoryID] and #path < 16 do
         seen[categoryID] = true
-        local categoryOK, category = call(C_TradeSkillUI.GetCategoryInfo, categoryID)
-        if not categoryOK or type(category) ~= "table" or (issecretvalue and issecretvalue(category))
-            or type(category.name) ~= "string" or (issecretvalue and issecretvalue(category.name))
-            or category.name == "" then return metadata end
+        local category = context.categories[categoryID]
+        if category == nil then
+            local categoryOK, value = call(C_TradeSkillUI.GetCategoryInfo, categoryID)
+            if categoryOK and type(value) == "table" and not (issecretvalue and issecretvalue(value))
+                and type(value.name) == "string" and not (issecretvalue and issecretvalue(value.name))
+                and value.name ~= "" then category = value
+            else category = false end
+            context.categories[categoryID] = category
+        end
+        if not category then return metadata end
         table.insert(path, 1, {id = categoryID, name = category.name,
             sortIndex = nonnegativeInteger(category.uiOrder) and category.uiOrder or nil})
         local parent = category.parentCategoryID

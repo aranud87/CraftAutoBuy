@@ -285,10 +285,22 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
     local nativeEvent = type(isFavorite) == "boolean" and not (issecretvalue and issecretvalue(isFavorite))
         and integer(recipeSpellID)
     local changed = false
+    if nativeEvent then
+        -- One spell can be present in both parent and child snapshots. The
+        -- event describes every occurrence without requiring contextual APIs.
+        for _, entry in pairs(records) do
+            local recipe = entry.recipes[recipeSpellID]
+            if recipe and recipe.favorite ~= isFavorite then
+                recipe.favorite, changed = isFavorite, true
+            end
+        end
+        if changed then Catalogue.Invalidate() end
+        return changed
+    end
+    local context = ns.API.BeginRecipeMetadataRead and ns.API.BeginRecipeMetadataRead()
     for key, entry in pairs(records) do
         for id, recipe in pairs(entry.recipes) do
-            local metadata = ns.API.GetRecipeMetadata and ns.API.GetRecipeMetadata(id, key) or {}
-            if nativeEvent and id == recipeSpellID then metadata.favorite = isFavorite end
+            local metadata = ns.API.GetRecipeMetadata and ns.API.GetRecipeMetadata(id, key, nil, context) or {}
             if metadata.progressionRead == true then
                 for _, field in ipairs({"canSkillUp", "relativeDifficulty", "numSkillUps"}) do
                     if recipe[field] ~= metadata[field] then recipe[field], changed = metadata[field], true end

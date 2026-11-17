@@ -131,7 +131,8 @@ que la recette choisie.
 ## Lire les composants
 
 Le détail indique **en sacs (potentiel) / requis par fabrication**. Le potentiel
-peut inclure la banque connue, les intermédiaires et les achats PNJ. Il peut
+utilise les sources retenues pour le calcul, les intermédiaires et les achats
+PNJ ; la banque connue ne compte que si elle est incluse dans ce calcul. Il peut
 dépasser le besoin si le marchand vend des lots. Les matières partagées sont
 réservées une seule fois dans le plan complet.
 

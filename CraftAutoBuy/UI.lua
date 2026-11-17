@@ -531,14 +531,27 @@ function UI.Install()
     widgets.listContent = CreateFrame("Frame", nil, widgets.listScroll)
     widgets.listContent:SetSize(267, 464)
     widgets.listScroll:SetScrollChild(widgets.listContent)
-    widgets.listScroll:HookScript("OnVerticalScroll", function(_, offset)
-        -- Clamping a temporary filtered list must not overwrite the last
-        -- disposition of the full list; only user scrolls publish a new offset.
-        if not restoringScroll and not rendering then
-            if widgets.search:GetText() ~= "" then searchScroll = math.max(0, tonumber(offset) or 0)
-            elseif ns.CatalogueView then ns.CatalogueView.SetScroll(offset) end
+    local scrollbar = widgets.listScroll.ScrollBar
+    local function rememberUserScroll(offset)
+        if restoringScroll or rendering then return end
+        if offset == nil and widgets.listScroll.GetVerticalScroll then offset = widgets.listScroll:GetVerticalScroll() end
+        if offset == nil and scrollbar and scrollbar.GetValue then offset = scrollbar:GetValue() end
+        if issecretvalue and issecretvalue(offset) then return end
+        if type(offset) ~= "number" or offset ~= offset or offset < 0 or offset == math.huge then return end
+        if widgets.search:GetText() ~= "" then searchScroll = offset
+        elseif ns.CatalogueView then ns.CatalogueView.SetScroll(offset) end
+    end
+    -- OnVerticalScroll also fires for native range clamping, possibly after
+    -- Render returned. Only explicit input may replace the desired position.
+    widgets.listScroll:HookScript("OnMouseWheel", function() rememberUserScroll() end)
+    if scrollbar then
+        scrollbar:HookScript("OnValueChanged", function(_, value, userInput)
+            if userInput == true then rememberUserScroll(value) end
+        end)
+        for _, arrow in pairs({scrollbar.ScrollUpButton, scrollbar.ScrollDownButton}) do
+            arrow:HookScript("OnClick", function() rememberUserScroll() end)
         end
-    end)
+    end
     panel.RecipeScroll = widgets.listScroll
     widgets.empty = label(widgets.listContent, "GameFontNormal", 8, -16, 245, 140)
     panel.EmptyText = widgets.empty
@@ -1137,6 +1150,12 @@ function UI.Show()
     if not UI.IsActive() then
         selectionRestored = false
         returnPage = previousPage or (book.BookPage and book.BookPage:IsShown() and book.BookPage or book.CraftingPage)
+    end
+    -- Opening CAB while a native project is running makes that project the
+    -- latest CAB selection too. Completion must not jump to an older recipe.
+    if ns.job and ns.job.recipeID and ns.job.professionKey then
+        saveSelection(ns.job.recipeID, ns.job.professionKey)
+        selectionRestored = true
     end
     ns.catalogueActive = true
     switching = true
