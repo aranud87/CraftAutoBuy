@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("koKR", {
     STOCK_BAG_SLOTS = "%d칸",
     STOCK_BAGS_EQUIPPED = "가방 %d개 장착",
     STOCK_UPGRADE_TARGET = "비교 크기(칸)",
-    STOCK_UPGRADE_GAIN = "가방 %d -> %d칸: +%d칸.",
+    STOCK_UPGRADE_GAIN = "총 증가: +%d칸. 교체할 가방 수: %d.",
     STOCK_UPGRADE_NONE = "%d칸보다 작은 일반 가방이 없습니다.",
     STOCK_UPGRADE_UNKNOWN = "가방 용량을 확인하세요.",
     STOCK_BANK_UNLOCKABLE = "은행 가방 칸을 %d개 더 해제할 수 있습니다.",

@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("esMX", {
     STOCK_BAG_SLOTS = "%d casillas",
     STOCK_BAGS_EQUIPPED = "%d bolsas equipadas",
     STOCK_UPGRADE_TARGET = "Tamaño comparado (casillas)",
-    STOCK_UPGRADE_GAIN = "Bolsa de %d -> %d casillas: +%d.",
+    STOCK_UPGRADE_GAIN = "Ganancia total: +%d casillas. Bolsas a cambiar: %d.",
     STOCK_UPGRADE_NONE = "Ninguna bolsa normal con menos de %d casillas.",
     STOCK_UPGRADE_UNKNOWN = "Comprueba la capacidad de las bolsas.",
     STOCK_BANK_UNLOCKABLE = "Se pueden desbloquear %d casillas más para bolsas del banco.",

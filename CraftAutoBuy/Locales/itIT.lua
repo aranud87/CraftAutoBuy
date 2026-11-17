@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("itIT", {
     STOCK_BAG_SLOTS = "%d scomparti",
     STOCK_BAGS_EQUIPPED = "%d borse equipaggiate",
     STOCK_UPGRADE_TARGET = "Capienza di confronto (scomparti)",
-    STOCK_UPGRADE_GAIN = "Borsa da %d -> %d scomparti: +%d.",
+    STOCK_UPGRADE_GAIN = "Guadagno totale: +%d scomparti. Borse da sostituire: %d.",
     STOCK_UPGRADE_NONE = "Nessuna borsa normale con meno di %d scomparti.",
     STOCK_UPGRADE_UNKNOWN = "Verifica la capienza delle borse.",
     STOCK_BANK_UNLOCKABLE = "%d altri scomparti per borse della banca sbloccabili.",

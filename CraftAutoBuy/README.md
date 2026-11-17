@@ -189,7 +189,10 @@ mémorisé ; une capacité non lue reste inconnue.
 Le volet **Capacité et possibilités d'extension** détaille les sacs équipés et
 les emplacements bancaires encore déblocables lorsque ces données sont connues.
 La taille de sac saisie sert uniquement à comparer un remplacement : le gain
-affiché concerne le plus petit sac ordinaire équipé, hors sac à dos. Cette
+affiché additionne les gains de tous les sacs ordinaires équipés plus petits
+que cette taille, hors sac à dos et sacs spécialisés. Deux sacs identiques
+sont comptés séparément. Si le type d'un sac plus petit est inconnu, le gain
+reste à vérifier. Cette
 comparaison ne promet pas qu'un sac de cette taille est possédé ou disponible
 chez un marchand. Elle ne remplace, n'achète et ne déplace aucun objet.
 

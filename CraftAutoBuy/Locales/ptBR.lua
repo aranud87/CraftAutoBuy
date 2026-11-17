@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("ptBR", {
     STOCK_BAG_SLOTS = "%d espaços",
     STOCK_BAGS_EQUIPPED = "%d bolsas equipadas",
     STOCK_UPGRADE_TARGET = "Tamanho comparado (espaços)",
-    STOCK_UPGRADE_GAIN = "Bolsa de %d -> %d espaços: +%d.",
+    STOCK_UPGRADE_GAIN = "Ganho total: +%d espaços. Bolsas a trocar: %d.",
     STOCK_UPGRADE_NONE = "Nenhuma bolsa comum com menos de %d espaços.",
     STOCK_UPGRADE_UNKNOWN = "Verifique a capacidade das bolsas.",
     STOCK_BANK_UNLOCKABLE = "É possível desbloquear mais %d espaços para bolsas no banco.",

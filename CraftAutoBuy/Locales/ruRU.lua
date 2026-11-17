@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("ruRU", {
     STOCK_BAG_SLOTS = "%d ячеек",
     STOCK_BAGS_EQUIPPED = "Надето сумок: %d",
     STOCK_UPGRADE_TARGET = "Размер для сравнения (ячеек)",
-    STOCK_UPGRADE_GAIN = "Сумка: %d -> %d ячеек, +%d.",
+    STOCK_UPGRADE_GAIN = "Общий прирост: +%d ячеек. Сумок для замены: %d.",
     STOCK_UPGRADE_NONE = "Нет обычной сумки меньше %d ячеек.",
     STOCK_UPGRADE_UNKNOWN = "Проверьте вместимость сумок.",
     STOCK_BANK_UNLOCKABLE = "Можно открыть ещё %d ячеек для банковских сумок.",

@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("deDE", {
     STOCK_BAG_SLOTS = "%d Plätze",
     STOCK_BAGS_EQUIPPED = "%d Taschen angelegt",
     STOCK_UPGRADE_TARGET = "Vergleichsgröße (Plätze)",
-    STOCK_UPGRADE_GAIN = "Tasche %d -> %d Plätze: +%d.",
+    STOCK_UPGRADE_GAIN = "Gesamtgewinn: +%d Plätze. Zu ersetzende Taschen: %d.",
     STOCK_UPGRADE_NONE = "Keine normale Tasche mit weniger als %d Plätzen.",
     STOCK_UPGRADE_UNKNOWN = "Taschenkapazität prüfen.",
     STOCK_BANK_UNLOCKABLE = "%d weitere Banktaschenplätze freischaltbar.",

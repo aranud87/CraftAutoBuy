@@ -548,13 +548,21 @@ end
 
 local function renderExtensions(data, state)
     local capacity = data.capacity and data.capacity.bags or {}
-    local equipped, sizes, smallest = 0, {}, nil
+    local equipped, sizes, replacements, gain, uncertain = 0, {}, 0, 0, false
     if capacity.known then
         for _, container in ipairs(capacity.containers or {}) do
             if type(container.id) == "number" and container.id > 0 and type(container.size) == "number" and container.size > 0 then
                 equipped = equipped + 1
                 sizes[#sizes + 1] = L.STOCK_BAG_SLOTS:format(container.size)
-                if container.family == 0 and (not smallest or container.size < smallest) then smallest = container.size end
+                if container.size < state.comparisonSize then
+                    if container.family == 0 then
+                        replacements = replacements + 1
+                        gain = gain + state.comparisonSize - container.size
+                    elseif type(container.family) ~= "number" then
+                        -- An unread bag type could change the total gain.
+                        uncertain = true
+                    end
+                end
             end
         end
     end
@@ -562,9 +570,9 @@ local function renderExtensions(data, state)
     widgets.sizes:SetText(table.concat(sizes, " / "))
     widgets.compareLabel:SetText(L.STOCK_UPGRADE_TARGET)
     if not widgets.comparison:HasFocus() then widgets.comparison:SetText(tostring(state.comparisonSize)) end
-    if not capacity.known or not smallest then widgets.gain:SetText(L.STOCK_UPGRADE_UNKNOWN)
-    elseif state.comparisonSize > smallest then
-        widgets.gain:SetText(L.STOCK_UPGRADE_GAIN:format(smallest, state.comparisonSize, state.comparisonSize - smallest))
+    if not capacity.known or uncertain then widgets.gain:SetText(L.STOCK_UPGRADE_UNKNOWN)
+    elseif replacements > 0 then
+        widgets.gain:SetText(L.STOCK_UPGRADE_GAIN:format(gain, replacements))
     else widgets.gain:SetText(L.STOCK_UPGRADE_NONE:format(state.comparisonSize)) end
     local bank = data.extensions and data.extensions.bank or {}
     if bank.known and bank.remaining ~= nil then

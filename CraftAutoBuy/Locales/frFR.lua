@@ -250,7 +250,7 @@ ns.Locale.RegisterLocale("frFR", {
     STOCK_BAG_SLOTS = "%d places",
     STOCK_BAGS_EQUIPPED = "%d sacs équipés",
     STOCK_UPGRADE_TARGET = "Taille comparée (places)",
-    STOCK_UPGRADE_GAIN = "Sac %d -> %d places : +%d.",
+    STOCK_UPGRADE_GAIN = "Gain total : +%d places. Sacs concernés : %d.",
     STOCK_UPGRADE_NONE = "Aucun sac ordinaire plus petit que %d places.",
     STOCK_UPGRADE_UNKNOWN = "Capacité des sacs à vérifier.",
     STOCK_BANK_UNLOCKABLE = "Encore %d emplacements de sacs à débloquer en banque.",

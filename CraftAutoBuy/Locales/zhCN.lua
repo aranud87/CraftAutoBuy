@@ -247,7 +247,7 @@ ns.Locale.RegisterLocale("zhCN", {
     STOCK_BAG_SLOTS = "%d 格",
     STOCK_BAGS_EQUIPPED = "已装备 %d 个背包",
     STOCK_UPGRADE_TARGET = "对比容量（格）",
-    STOCK_UPGRADE_GAIN = "背包 %d -> %d 格：增加 %d 格。",
+    STOCK_UPGRADE_GAIN = "总增益：+%d 格。需更换背包数：%d。",
     STOCK_UPGRADE_NONE = "没有小于 %d 格的普通背包。",
     STOCK_UPGRADE_UNKNOWN = "请确认背包容量。",
     STOCK_BANK_UNLOCKABLE = "还可解锁 %d 个银行背包栏位。",
