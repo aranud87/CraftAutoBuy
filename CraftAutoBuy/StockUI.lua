@@ -100,19 +100,122 @@ local function displayPage()
     switching = false
 end
 
-local function makeRow(column)
-    -- This is an informational frame, not an item/transfer button.
+local installed, restoringScroll = false, false
+local searchScroll = {bags = 0, bank = 0, inventory = 0}
+local fallbackView = {content = "components", inventory = false, extensionsExpanded = false,
+    comparisonSize = 20, scroll = {bags = 0, bank = 0, inventory = 0}}
+local lastData
+
+local function view()
+    return ns.StockView and ns.StockView.Get() or fallbackView
+end
+
+local function preference(method, field, value)
+    if ns.StockView and ns.StockView[method] then return ns.StockView[method](value) end
+    fallbackView[field] = value
+    return true
+end
+
+local function tooltip(owner, text)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetText(text)
+    GameTooltip:Show()
+end
+
+local function hideTooltip() if GameTooltip then GameTooltip:Hide() end end
+
+local function help(control, text)
+    control:SetScript("OnEnter", function(self) tooltip(self, text()) end)
+    control:SetScript("OnLeave", hideTooltip)
+end
+
+local function button(parent, text, x, y, width, handler)
+    local value = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    value:SetSize(width, 22)
+    value:SetText(text)
+    value:SetNormalFontObject("GameFontNormalSmall")
+    value:SetHighlightFontObject("GameFontHighlightSmall")
+    value:SetDisabledFontObject("GameFontDisableSmall")
+    if value.Text then value.Text:SetWordWrap(false); value.Text:SetMaxLines(1) end
+    value:SetScript("OnClick", handler)
+    return value
+end
+
+local function showMenu(owner, title, choices, selected, choose)
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        MenuUtil.CreateContextMenu(owner, function(_, root)
+            root:CreateTitle(title)
+            root:SetScrollMode(220)
+            for _, choice in ipairs(choices) do
+                root:CreateRadio(choice.text, selected, choose, choice.value)
+            end
+        end)
+        return
+    end
+    -- Native frame/button fallback for clients without the shared menu API.
+    local menu = widgets.menu
+    if not menu then
+        menu = CreateFrame("Frame", nil, panel)
+        menu:SetFrameStrata("TOOLTIP")
+        menu:SetFrameLevel(panel:GetFrameLevel() + 20)
+        local background = menu:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints(menu)
+        background:SetColorTexture(.08, .07, .05, 1)
+        menu.rows = {}
+        menu:Hide()
+        widgets.menu = menu
+    end
+    if menu:IsShown() and menu.owner == owner then menu:Hide(); return end
+    menu.owner = owner
+    menu:ClearAllPoints()
+    menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    menu:SetSize(220, 8 + #choices * 24)
+    for index, choice in ipairs(choices) do
+        local row = menu.rows[index]
+        if not row then row = button(menu, "", 4, -4 - (index - 1) * 24, 212); menu.rows[index] = row end
+        row:SetText((selected(choice.value) and "|cffffd100" or "") .. choice.text)
+        row:SetScript("OnClick", function() menu:Hide(); choose(choice.value) end)
+        row:Show()
+    end
+    for index = #choices + 1, #menu.rows do menu.rows[index]:Hide() end
+    menu:Show()
+end
+
+local function rememberScroll(column, offset)
+    if rendering or restoringScroll then return end
+    if offset == nil and column.scroll.GetVerticalScroll then offset = column.scroll:GetVerticalScroll() end
+    if offset == nil and column.scroll.ScrollBar and column.scroll.ScrollBar.GetValue then
+        offset = column.scroll.ScrollBar:GetValue()
+    end
+    if type(offset) ~= "number" or (issecretvalue and issecretvalue(offset)) or offset ~= offset
+        or offset < 0 or offset == math.huge then return end
+    if widgets.search:GetText() ~= "" then searchScroll[column.key] = offset
+    elseif ns.StockView then ns.StockView.SetScroll(column.key, offset)
+    else fallbackView.scroll[column.key] = offset end
+end
+
+local function makeRow(column, inventory)
+    -- Informational item frames never purchase, craft, or move an item.
     local row = CreateFrame("Frame", nil, column.content)
-    row:SetSize(284, 40)
+    row:SetSize(inventory and 614 or 284, 40)
     row:EnableMouse(true)
     row.Icon = row:CreateTexture(nil, "ARTWORK")
     row.Icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -4)
     row.Icon:SetSize(32, 32)
-    row.Name = label(row, "GameFontHighlight", 40, -4, 195, 32)
+    row.Name = label(row, "GameFontHighlight", 40, -4, inventory and 280 or 190, 32)
     row.Name:SetWordWrap(true)
     row.Name:SetMaxLines(2)
-    row.Count = label(row, "GameFontHighlight", 237, -4, 45, 32)
-    row.Count:SetJustifyH("RIGHT")
+    if inventory then
+        row.BagCount = label(row, "GameFontHighlight", 330, -4, 76, 32)
+        row.BankCount = label(row, "GameFontHighlight", 414, -4, 76, 32)
+        row.Total = label(row, "GameFontNormal", 498, -4, 76, 32)
+        row.BagCount:SetJustifyH("RIGHT"); row.BankCount:SetJustifyH("RIGHT"); row.Total:SetJustifyH("RIGHT")
+    else
+        row.Count = label(row, "GameFontHighlight", 237, -4, 45, 32)
+        row.Count:SetJustifyH("RIGHT")
+    end
     row:SetScript("OnEnter", function(self)
         if not GameTooltip or not self.itemID then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -120,34 +223,78 @@ local function makeRow(column)
         else GameTooltip:SetText(self.Name:GetText()) end
         GameTooltip:Show()
     end)
-    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row:SetScript("OnLeave", hideTooltip)
     return row
 end
 
-local function makeColumn(name, title, x)
+local function makeColumn(name, key, x, inventory)
     local frame = CreateFrame("Frame", name, panel)
-    frame:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -44)
-    frame:SetSize(312, 414)
+    frame:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -119)
+    frame:SetSize(inventory and 642 or 312, 314)
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
     background:SetAtlas("Professions-background-summarylist")
-    local heading = label(frame, "GameFontNormalLarge", 10, -8, 286, 24)
-    heading:SetText(title)
+    local heading = label(frame, "GameFontHighlightSmall", 10, -2, 280, 18)
+    local headers = {}
+    if inventory then
+        for index, left in ipairs({340, 424, 508}) do
+            headers[index] = label(frame, "GameFontHighlightSmall", left, -2, 76, 18)
+            headers[index]:SetJustifyH("RIGHT")
+        end
+    else
+        headers[1] = label(frame, "GameFontHighlightSmall", 247, -2, 45, 18)
+        headers[1]:SetJustifyH("RIGHT")
+    end
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 9, -37)
-    scroll:SetSize(284, 366)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 9, -24)
+    scroll:SetSize(inventory and 614 or 284, 290)
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(284, 366)
+    content:SetSize(inventory and 614 or 284, 290)
     scroll:SetScrollChild(content)
-    local empty = label(frame, "GameFontHighlight", 12, -49, 276, 72)
+    local empty = label(frame, "GameFontHighlight", 12, -38, inventory and 590 or 276, 72)
     empty:SetWordWrap(true)
-    local column = {frame = frame, heading = heading, scroll = scroll, content = content, empty = empty, rows = {}}
-    frame.Rows, frame.Scroll, frame.EmptyText, frame.Heading = column.rows, scroll, empty, heading
+    local column = {key = key, frame = frame, scroll = scroll, content = content,
+        empty = empty, rows = {}, title = heading, headers = headers, inventory = inventory}
+    frame.Rows, frame.Scroll, frame.EmptyText = column.rows, scroll, empty
+    frame.ObjectHeading, frame.Headers = heading, headers
+    -- A generic OnVerticalScroll also runs after deferred native clamping.
+    -- Persist only explicit user input, never those programmatic events.
+    scroll:HookScript("OnMouseWheel", function() rememberScroll(column) end)
+    local scrollbar = scroll.ScrollBar
+    if scrollbar then
+        scrollbar:HookScript("OnValueChanged", function(_, offset, userInput)
+            if userInput == true then rememberScroll(column, offset) end
+        end)
+        for _, arrow in pairs({scrollbar.ScrollUpButton, scrollbar.ScrollDownButton}) do
+            arrow:HookScript("OnClick", function() rememberScroll(column) end)
+        end
+    end
     return column
 end
 
+local function capacitySummary(x)
+    local value = {heading = label(panel, "GameFontNormalLarge", x, -75, 150, 20),
+        used = label(panel, "GameFontHighlightSmall", x + 150, -78, 140, 18),
+        free = label(panel, "GameFontHighlightSmall", x, -98, 145, 16),
+        total = label(panel, "GameFontHighlightSmall", x + 145, -98, 145, 16)}
+    value.used:SetJustifyH("RIGHT"); value.total:SetJustifyH("RIGHT")
+    local hit = CreateFrame("Frame", nil, panel)
+    hit:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -73)
+    hit:SetSize(292, 42); hit:EnableMouse(true)
+    help(hit, function()
+        local descriptor = value.data or {}
+        local text = L.STOCK_CAPACITY_HELP
+        if descriptor.generalFree ~= nil then text = text .. "\n" .. L.STOCK_SLOTS_GENERAL:format(descriptor.generalFree) end
+        if descriptor.specializedFree and descriptor.specializedFree > 0 then
+            text = text .. "\n" .. L.STOCK_CAPACITY_SPECIALIZED:format(descriptor.specializedFree)
+        end
+        return text
+    end)
+    return value
+end
+
 function StockUI.Install()
-    if panel then return true end
+    if panel then return installed end
     if not ProfessionsFrame then return false end
     book = ProfessionsFrame
     panel = CreateFrame("Frame", "CraftAutoBuyStockPage", book)
@@ -158,91 +305,267 @@ function StockUI.Install()
     panel.Background:SetAllPoints(panel)
     panel.Background:SetAtlas("Profession-Background-Template2")
     panel:Hide()
+
     widgets.search = CreateFrame("EditBox", "CraftAutoBuyStockSearchBox", panel, "SearchBoxTemplate")
-    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -10)
-    widgets.search:SetSize(300, 20)
-    widgets.search:SetAutoFocus(false)
-    widgets.search:SetMaxLetters(80)
+    widgets.search:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -18)
+    widgets.search:SetSize(285, 20)
+    widgets.search:SetAutoFocus(false); widgets.search:SetMaxLetters(80)
     widgets.search:SetScript("OnTextChanged", function(self)
         if SearchBoxTemplate_OnTextChanged then SearchBoxTemplate_OnTextChanged(self) end
-        if widgets.bags then
-            widgets.bags.scroll:SetVerticalScroll(0)
-            widgets.bank.scroll:SetVerticalScroll(0)
+        if installed then
+            searchScroll = {bags = 0, bank = 0, inventory = 0}
             StockUI.Render()
         end
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    widgets.bags = makeColumn("CraftAutoBuyStockBags", L.STOCK_BAGS, 4)
-    widgets.bank = makeColumn("CraftAutoBuyStockBank", L.STOCK_BANK, 334)
-    widgets.missing = label(panel, "GameFontHighlight", 14, -468, 620, 38)
-    widgets.missing:SetWordWrap(true)
+    widgets.contentLabel = label(panel, "GameFontNormalSmall", 326, 0, 130, 16)
+    widgets.contentFilter = button(panel, "", 321, -16, 135, function(self)
+        showMenu(self, L.STOCK_SHOW, {{text = L.STOCK_COMPONENTS, value = "components"}, {text = L.STOCK_ALL, value = "all"}},
+            function(value) return view().content == value end,
+            function(value) preference("SetContent", "content", value); StockUI.Render() end)
+    end)
+    widgets.professionLabel = label(panel, "GameFontNormalSmall", 472, 0, 168, 16)
+    widgets.professionFilter = button(panel, "", 467, -16, 173, function(self)
+        if view().content == "all" then return end
+        local choices = {{text = L.STOCK_ALL_PROFESSIONS, value = false}}
+        for _, profession in ipairs(lastData and lastData.professions or {}) do
+            choices[#choices + 1] = {text = profession.name, value = profession.key}
+        end
+        showMenu(self, L.STOCK_PROFESSION, choices,
+            function(value) return (view().professionKey or false) == value end,
+            function(value) preference("SetProfession", "professionKey", value or nil); StockUI.Render() end)
+    end)
+    help(widgets.professionFilter, function() return L.STOCK_PROFESSION_HELP end)
+    widgets.inventoryFilter = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    widgets.inventoryFilter:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -43)
+    widgets.inventoryFilter:SetSize(22, 22)
+    local checkText = widgets.inventoryFilter.Text or widgets.inventoryFilter:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    checkText:ClearAllPoints(); checkText:SetPoint("LEFT", widgets.inventoryFilter, "RIGHT", 3, 0)
+    checkText:SetSize(285, 18); checkText:SetJustifyH("LEFT"); checkText:SetJustifyV("MIDDLE")
+    widgets.inventoryFilter.Label = checkText
+    widgets.inventoryFilter:SetHitRectInsets(0, -286, 0, 0)
+    widgets.inventoryFilter:SetScript("OnClick", function(self)
+        preference("SetInventory", "inventory", self:GetChecked() == true); StockUI.Render()
+    end)
+    help(widgets.inventoryFilter, function() return L.STOCK_INVENTORY_HELP end)
+    widgets.bagCapacity, widgets.bankCapacity = capacitySummary(14), capacitySummary(344)
+    widgets.bags = makeColumn("CraftAutoBuyStockBags", "bags", 4)
+    widgets.bank = makeColumn("CraftAutoBuyStockBank", "bank", 334)
+    widgets.inventory = makeColumn("CraftAutoBuyStockInventory", "inventory", 4, true)
+    widgets.bags.heading, widgets.bank.heading = widgets.bagCapacity.heading, widgets.bankCapacity.heading
+    widgets.bags.frame.Heading, widgets.bank.frame.Heading = widgets.bags.heading, widgets.bank.heading
+    widgets.source = label(panel, "GameFontHighlightSmall", 14, -439, 300, 18)
+    widgets.scope = label(panel, "GameFontHighlightSmall", 326, -439, 310, 18)
+    widgets.scope:SetJustifyH("RIGHT")
+    widgets.capacityToggle = button(panel, "", 9, -461, 631, function()
+        preference("SetExtensions", "extensionsExpanded", not view().extensionsExpanded); StockUI.Render()
+    end)
+    widgets.extensions = CreateFrame("Frame", nil, panel)
+    widgets.extensions:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -370)
+    widgets.extensions:SetSize(620, 116)
+    widgets.equipped = label(widgets.extensions, "GameFontNormalSmall", 0, 0, 300, 18)
+    widgets.sizes = label(widgets.extensions, "GameFontHighlightSmall", 0, -21, 300, 26)
+    widgets.sizes:SetWordWrap(true)
+    widgets.compareLabel = label(widgets.extensions, "GameFontHighlightSmall", 0, -49, 246, 18)
+    widgets.comparison = CreateFrame("EditBox", nil, widgets.extensions, "InputBoxTemplate")
+    widgets.comparison:SetPoint("TOPLEFT", widgets.extensions, "TOPLEFT", 251, -47)
+    widgets.comparison:SetSize(42, 20); widgets.comparison:SetAutoFocus(false)
+    widgets.comparison:SetNumeric(true); widgets.comparison:SetMaxLetters(3)
+    local function commitSize(self)
+        local size = tonumber(self:GetText())
+        if size and size == math.floor(size) and size >= 1 and size <= 100 then
+            preference("SetComparisonSize", "comparisonSize", size)
+        end
+        self:ClearFocus(); StockUI.Render()
+    end
+    widgets.comparison:SetScript("OnEnterPressed", commitSize)
+    widgets.comparison:SetScript("OnEditFocusLost", commitSize)
+    widgets.comparison:SetScript("OnEscapePressed", function(self) self:ClearFocus(); StockUI.Render() end)
+    widgets.gain = label(widgets.extensions, "GameFontHighlightSmall", 0, -77, 300, 36)
+    widgets.gain:SetWordWrap(true)
+    widgets.bankExtension = label(widgets.extensions, "GameFontNormalSmall", 330, 0, 286, 44)
+    widgets.bankExtension:SetWordWrap(true)
+    widgets.bankCost = label(widgets.extensions, "GameFontHighlightSmall", 330, -49, 286, 52)
+    widgets.bankCost:SetWordWrap(true)
+    widgets.missing = label(panel, "GameFontHighlightSmall", 14, -490, 620, 18)
+    widgets.missing:SetWordWrap(false)
+    widgets.missingHit = CreateFrame("Frame", nil, panel)
+    widgets.missingHit:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -490)
+    widgets.missingHit:SetSize(620, 18); widgets.missingHit:EnableMouse(true)
+    widgets.missingHit:SetScript("OnEnter", function(self)
+        local text = widgets.missing:GetText()
+        if text ~= "" then tooltip(self, text) end
+    end)
+    widgets.missingHit:SetScript("OnLeave", hideTooltip)
     panel.SearchBox, panel.Bags, panel.Bank = widgets.search, widgets.bags.frame, widgets.bank.frame
     panel.MissingProfessions = widgets.missing
+    panel.ContentFilter, panel.ProfessionFilter = widgets.contentFilter, widgets.professionFilter
+    panel.InventoryFilter, panel.Inventory = widgets.inventoryFilter, widgets.inventory.frame
+    panel.CapacityToggle, panel.ComparisonSize = widgets.capacityToggle, widgets.comparison
+    panel.BagCapacity, panel.BankCapacity = widgets.bagCapacity, widgets.bankCapacity
+    panel.Extensions, panel.ExtensionGain, panel.BankExtension = widgets.extensions, widgets.gain, widgets.bankExtension
+    panel.SourceText, panel.ScopeText = widgets.source, widgets.scope
     for _, nativePage in pairs({book.CraftingPage, book.BookPage}) do
         nativePage:HookScript("OnShow", function(self)
             returnPage = self
-            -- In gamepad mode a page Blizzard shows wins over the waiting Stock page.
             if StockUI.IsActive() and not switching and ns.Sidebar and ns.Sidebar.IsGamepadMode
-                and ns.Sidebar.IsGamepadMode() then
-                deactivate(false)
-                return
-            end
+                and ns.Sidebar.IsGamepadMode() then deactivate(false); return end
             if StockUI.IsActive() and not switching then self:Hide() end
         end)
     end
+    panel:SetScript("OnHide", function() if widgets.menu then widgets.menu:Hide() end end)
     book:HookScript("OnHide", function() if not switching then deactivate(false) end end)
+    installed = true
     if ns.Sidebar then ns.Sidebar.Install() end
     return true
 end
 
-local function renderColumn(column, entries, emptyText)
+local function countText(value) return value == nil and "?" or tostring(value) end
+
+local function renderColumn(column, entries, emptyText, height)
     for index, entry in ipairs(entries) do
         local row = column.rows[index]
-        if not row then row = makeRow(column); column.rows[index] = row end
+        if not row then row = makeRow(column, column.inventory); column.rows[index] = row end
         row.itemID = entry.itemID
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", column.content, "TOPLEFT", 0, -(index - 1) * 40)
-        row.Icon:SetTexture(entry.icon or QUESTION_MARK)
-        row.Name:SetText(entry.name)
-        row.Count:SetText(tostring(entry.count))
+        row:ClearAllPoints(); row:SetPoint("TOPLEFT", column.content, "TOPLEFT", 0, -(index - 1) * 40)
+        row.Icon:SetTexture(entry.icon or QUESTION_MARK); row.Name:SetText(entry.name)
+        if column.inventory then
+            row.BagCount:SetText(countText(entry.bagCount)); row.BankCount:SetText(countText(entry.bankCount))
+            row.Total:SetText(countText(entry.total))
+        else row.Count:SetText(countText(entry.count)) end
         row:Show()
     end
-    for index = #entries + 1, #column.rows do
-        local row = column.rows[index]
-        row.itemID = nil
-        row:Hide()
+    for index = #entries + 1, #column.rows do column.rows[index].itemID = nil; column.rows[index]:Hide() end
+    column.frame:SetHeight(height + 24); column.scroll:SetHeight(height)
+    column.content:SetHeight(math.max(height, #entries * 40))
+    column.empty:SetText(emptyText); column.empty:SetShown(#entries == 0)
+    local desired = widgets.search:GetText() ~= "" and searchScroll[column.key] or view().scroll[column.key] or 0
+    restoringScroll = true
+    column.scroll:SetVerticalScroll(math.min(desired, math.max(0, #entries * 40 - height)))
+    restoringScroll = false
+end
+
+local function dataFor(search, state)
+    if ns.Stock and ns.Stock.View then return ns.Stock.View(search, state) end
+    local bags, bank, known, missing = {}, {}, false, {}
+    if ns.Stock and ns.Stock.Rows then bags, bank, known, missing = ns.Stock.Rows(search) end
+    return {bags = bags, bank = bank, bankKnown = known, bagsKnown = true,
+        missing = missing, professions = {}, inventory = {}, capacity = {}, extensions = {}}
+end
+
+local function renderCapacity(widget, descriptor)
+    descriptor = descriptor or {}
+    widget.data = descriptor
+    if descriptor.known and descriptor.total ~= nil and descriptor.used ~= nil and descriptor.free ~= nil then
+        widget.used:SetText(L.STOCK_CAPACITY_USED:format(descriptor.used))
+        widget.free:SetText(L.STOCK_CAPACITY_FREE:format(descriptor.free))
+        widget.total:SetText(L.STOCK_CAPACITY_TOTAL:format(descriptor.total))
+    else
+        widget.used:SetText("?"); widget.free:SetText(L.STOCK_CAPACITY_UNKNOWN); widget.total:SetText("")
     end
-    column.content:SetHeight(math.max(366, #entries * 40))
-    column.empty:SetText(emptyText)
-    column.empty:SetShown(#entries == 0)
+end
+
+local function renderExtensions(data, state)
+    local capacity = data.capacity and data.capacity.bags or {}
+    local equipped, sizes, smallest = 0, {}, nil
+    if capacity.known then
+        for _, container in ipairs(capacity.containers or {}) do
+            if type(container.id) == "number" and container.id > 0 and type(container.size) == "number" and container.size > 0 then
+                equipped = equipped + 1
+                sizes[#sizes + 1] = L.STOCK_BAG_SLOTS:format(container.size)
+                if container.family == 0 and (not smallest or container.size < smallest) then smallest = container.size end
+            end
+        end
+    end
+    widgets.equipped:SetText(capacity.known and L.STOCK_BAGS_EQUIPPED:format(equipped) or L.STOCK_UPGRADE_UNKNOWN)
+    widgets.sizes:SetText(table.concat(sizes, " / "))
+    widgets.compareLabel:SetText(L.STOCK_UPGRADE_TARGET)
+    if not widgets.comparison:HasFocus() then widgets.comparison:SetText(tostring(state.comparisonSize)) end
+    if not capacity.known or not smallest then widgets.gain:SetText(L.STOCK_UPGRADE_UNKNOWN)
+    elseif state.comparisonSize > smallest then
+        widgets.gain:SetText(L.STOCK_UPGRADE_GAIN:format(smallest, state.comparisonSize, state.comparisonSize - smallest))
+    else widgets.gain:SetText(L.STOCK_UPGRADE_NONE:format(state.comparisonSize)) end
+    local bank = data.extensions and data.extensions.bank or {}
+    if bank.known and bank.remaining ~= nil then
+        widgets.bankExtension:SetText(bank.remaining > 0 and L.STOCK_BANK_UNLOCKABLE:format(bank.remaining) or L.STOCK_BANK_FULLY_UNLOCKED)
+        if bank.nextCost ~= nil then
+            local money = GetCoinTextureString and GetCoinTextureString(bank.nextCost)
+                or GetMoneyString and GetMoneyString(bank.nextCost) or tostring(bank.nextCost)
+            widgets.bankCost:SetText(L.STOCK_BANK_NEXT_COST:format(money))
+        else widgets.bankCost:SetText("") end
+    else widgets.bankExtension:SetText(L.STOCK_BANK_EXTENSION_UNKNOWN); widgets.bankCost:SetText("") end
+end
+
+local function renderNow()
+    if book:IsShown() and not panel:IsShown() then displayPage() end
+    setBookArt()
+    local state, search = view(), widgets.search:GetText()
+    local data = dataFor(search, state)
+    if data.professionsComplete and state.professionKey then
+        local found = false
+        for _, profession in ipairs(data.professions or {}) do if profession.key == state.professionKey then found = true; break end end
+        if not found then preference("SetProfession", "professionKey", nil); state = view(); data = dataFor(search, state) end
+    end
+    lastData = data
+    widgets.contentLabel:SetText(L.STOCK_SHOW); widgets.professionLabel:SetText(L.STOCK_PROFESSION)
+    widgets.contentFilter:SetText((state.content == "all" and L.STOCK_ALL or L.STOCK_COMPONENTS) .. "  |cffffd100▼|r")
+    local professionName = L.STOCK_ALL_PROFESSIONS
+    if state.professionKey then
+        professionName = tostring(state.professionKey)
+        for _, profession in ipairs(data.professions or {}) do if profession.key == state.professionKey then professionName = profession.name; break end end
+    end
+    widgets.professionFilter:SetText(professionName .. "  |cffffd100▼|r")
+    widgets.professionFilter:SetEnabled(state.content ~= "all")
+    widgets.inventoryFilter.Label:SetText(L.STOCK_INVENTORY_MODE); widgets.inventoryFilter:SetChecked(state.inventory)
+    widgets.bags.heading:SetText(L.STOCK_BAGS); widgets.bank.heading:SetText(L.STOCK_BANK)
+    widgets.bags.title:SetText(L.STOCK_OBJECT); widgets.bank.title:SetText(L.STOCK_OBJECT)
+    widgets.bags.headers[1]:SetText(L.STOCK_QUANTITY); widgets.bank.headers[1]:SetText(L.STOCK_QUANTITY)
+    widgets.inventory.title:SetText(L.STOCK_OBJECT)
+    for index, text in ipairs({L.STOCK_BAGS, L.STOCK_BANK, L.STOCK_TOTAL}) do widgets.inventory.headers[index]:SetText(text) end
+    widgets.bags.frame:SetShown(not state.inventory); widgets.bank.frame:SetShown(not state.inventory)
+    widgets.inventory.frame:SetShown(state.inventory)
+    local bankOpen = ns.Stock and ns.Stock.IsBankOpen and ns.Stock.IsBankOpen()
+    local initializing = state.content ~= "all" and ns.Bootstrap and ns.Bootstrap.StatusText() or nil
+    local empty = initializing and L.STOCK_INITIALIZING or nil
+    local bagEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or (search ~= "" and L.STOCK_NO_RESULTS
+        or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BAGS or L.STOCK_EMPTY_BAGS))
+    local bankEmpty = not data.bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)
+        or (search ~= "" and L.STOCK_NO_RESULTS or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BANK or L.STOCK_EMPTY_BANK))
+    local height = state.extensionsExpanded and 170 or 290
+    renderColumn(widgets.bags, data.bags or {}, bagEmpty, height)
+    renderColumn(widgets.bank, data.bankKnown and data.bank or {}, bankEmpty, height)
+    local inventoryEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or empty
+        or not data.bankKnown and bankEmpty
+        or (search ~= "" and L.STOCK_NO_RESULTS or (state.content == "all"
+            and (L.STOCK_EMPTY_ALL_BAGS .. " " .. L.STOCK_EMPTY_ALL_BANK)
+            or (L.STOCK_EMPTY_BAGS .. " " .. L.STOCK_EMPTY_BANK)))
+    renderColumn(widgets.inventory, data.inventory or {}, inventoryEmpty, height)
+    renderCapacity(widgets.bagCapacity, data.capacity and data.capacity.bags)
+    renderCapacity(widgets.bankCapacity, data.capacity and data.capacity.bank)
+    local footerY = 119 + 24 + height + 6
+    widgets.source:ClearAllPoints(); widgets.source:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -footerY)
+    widgets.scope:ClearAllPoints(); widgets.scope:SetPoint("TOPLEFT", panel, "TOPLEFT", 326, -footerY)
+    widgets.source:SetText((bankOpen and L.STOCK_BANK_CURRENT or L.STOCK_BANK_MEMORY) .. (data.bankUnverified and " (?)" or ""))
+    widgets.scope:SetText(state.content == "all" and L.STOCK_ALL_OBJECTS or L.STOCK_COMPONENTS_KNOWN)
+    widgets.capacityToggle:ClearAllPoints(); widgets.capacityToggle:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, -(footerY + 22))
+    widgets.capacityToggle:SetText((state.extensionsExpanded and "− " or "+ ") .. L.STOCK_CAPACITY_EXTENSIONS)
+    widgets.extensions:SetShown(state.extensionsExpanded)
+    if state.extensionsExpanded then renderExtensions(data, state) end
+    local names = {}
+    for _, profession in ipairs(data.missing or {}) do names[#names + 1] = profession.name end
+    widgets.missing:SetText(data.bagsKnown == false and L.STOCK_BAGS_LOADING or initializing or (state.content ~= "all" and #names > 0
+        and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or ""))
 end
 
 function StockUI.Render()
     if rendering or not StockUI.IsActive() or not StockUI.Install() then return end
-    if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then
-        ns.Sidebar.RequestNativeRestore()
-        return
-    end
+    if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then ns.Sidebar.RequestNativeRestore(); return end
     rendering = true
-    if book:IsShown() and not panel:IsShown() then displayPage() end
-    setBookArt()
-    local search = widgets.search:GetText()
-    widgets.bags.heading:SetText(L.STOCK_BAGS)
-    widgets.bank.heading:SetText(L.STOCK_BANK)
-    local bags, bank, bankKnown, missing = {}, {}, false, {}
-    if ns.Stock then bags, bank, bankKnown, missing = ns.Stock.Rows(search) end
-    local bankOpen = ns.Stock and ns.Stock.IsBankOpen and ns.Stock.IsBankOpen()
-    local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
-    local empty = initializing and L.STOCK_INITIALIZING or nil
-    renderColumn(widgets.bags, bags or {}, search ~= "" and L.STOCK_NO_RESULTS or empty or L.STOCK_EMPTY_BAGS)
-    renderColumn(widgets.bank, bankKnown and bank or {}, not bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)
-        or (search ~= "" and L.STOCK_NO_RESULTS or empty or L.STOCK_EMPTY_BANK))
-    local names = {}
-    for _, profession in ipairs(missing or {}) do names[#names + 1] = profession.name end
-    widgets.missing:SetText(initializing
-        or (#names > 0 and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or ""))
+    local ok, reason = pcall(renderNow)
     rendering = false
+    if not ok then error(reason, 0) end
 end
+
 
 function StockUI.Show()
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then return false end

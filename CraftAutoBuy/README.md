@@ -1,10 +1,11 @@
 # CraftAutoBuy
 
-**1.1.0 — En développement, pour une pull request en brouillon**
+**1.2.0 — Stock v2, en développement dans une pull request en brouillon**
 
-Cette branche prépare **l'onglet CAB v2**. La version stable publiée reste
-**1.0.1**. Le comportement et le rendu de la 1.1.0 restent à confirmer dans
-WoW Forever avant publication.
+Cette branche prépare **l'onglet Stock v2**, à partir de la maquette approuvée.
+La version stable publiée reste **1.1.0**, qui contient l'onglet CAB v2.
+Le comportement et le rendu de Stock v2 restent à confirmer dans WoW Forever
+avant publication de la 1.2.0.
 
 La version 1.0.1 initialise automatiquement le catalogue des recettes au premier
 lancement. Une fenêtre de progression accompagne la lecture en arrière-plan ;
@@ -16,7 +17,8 @@ avec les composants en sacs, la banque personnelle connue, les fournitures PNJ
 et les recettes intermédiaires apprises.
 
 L'onglet **CraftAutoBuy**, à droite de la fenêtre, regroupe les recettes des
-métiers connus. L'onglet **Stock** sépare les composants en sacs et en banque.
+métiers connus. L'onglet **Stock** affiche les sacs et la banque en parallèle,
+avec les composants par défaut et une option pour consulter tous les objets.
 Les commandes d'achat et de fabrication sont également disponibles dans la
 fenêtre habituelle du métier courant.
 
@@ -89,7 +91,8 @@ obligatoire ni tutoriel.
 
 Cette initialisation ne déclenche aucun achat ni aucune fabrication. Les
 composants de l'onglet **Stock** apparaissent après la première lecture des
-recettes. La banque est indépendante : l'initialisation ne lit pas une banque
+recettes. L'affichage **Tous** peut consulter les objets en sacs sans attendre
+ce catalogue. La banque est indépendante : l'initialisation ne lit pas une banque
 fermée et ne remplace pas la première visite nécessaire pour en mémoriser le
 contenu.
 
@@ -156,11 +159,42 @@ Les chevrons de progression reprennent les indications de gain de compétence
 du jeu ; ils sont distincts de ces couleurs de disponibilité. Le bouton d'action
 tient aussi compte du marchand ouvert, du coût et des prérequis de la recette.
 
-## Banque et onglet Stock
+## Banque et onglet Stock v2
 
-Ouvre ta banque une première fois pour que CraftAutoBuy enregistre ses composants.
+Ouvre ta banque une première fois pour que CraftAutoBuy enregistre son contenu.
 L'onglet **Stock** permet ensuite de consulter les quantités observées, même
-loin de la banque, avec une recherche et deux listes indépendantes.
+loin de la banque. La recherche s'applique aux sacs et à la banque.
+
+- **Composants**, sélectionné par défaut, affiche les ingrédients des recettes
+  apprises prises en charge par CAB. Le menu **Métier** peut limiter cette vue
+  à Cuisine, Alchimie ou un autre métier connu. Un ingrédient utilisé par
+  plusieurs métiers apparaît dans chacun. Ce filtre ne classe pas les ingrédients
+  de toutes les recettes non apprises.
+- **Tous** montre aussi les autres objets en sacs et dans le relevé bancaire,
+  sans dépendre du catalogue des métiers. Le menu Métier est alors désactivé ;
+  son choix précédent est conservé pour le retour aux composants.
+- L'affichage classique garde deux listes indépendantes. **Mode inventaire**
+  aligne chaque objet sur une ligne commune **Objet / Sacs / Banque / Total**,
+  avec un défilement commun. **0** signifie absence connue ; **?** indique une
+  quantité inconnue ou à vérifier. Le total n'est affiché que si les deux
+  quantités sont connues. Les piles d'un même objet sont additionnées.
+
+Les résumés de capacité indiquent les emplacements totaux, occupés et libres
+pour chaque source. Ils comptent tout le contenu, même lorsque les filtres
+n'en montrent qu'une partie. Une pile de vingt objets occupe une seule place.
+Les places libres des sacs spécialisés sont distinguées des places utilisables
+pour n'importe quel objet. La capacité de banque fermée provient du relevé
+mémorisé ; une capacité non lue reste inconnue.
+
+Le volet **Capacité et possibilités d'extension** détaille les sacs équipés et
+les emplacements bancaires encore déblocables lorsque ces données sont connues.
+La taille de sac saisie sert uniquement à comparer un remplacement : le gain
+affiché concerne le plus petit sac ordinaire équipé, hors sac à dos. Cette
+comparaison ne promet pas qu'un sac de cette taille est possédé ou disponible
+chez un marchand. Elle ne remplace, n'achète et ne déplace aucun objet.
+
+Les filtres, le mode d'affichage et la disposition de Stock sont mémorisés par
+personnage. Stock reste une vue de consultation, même pendant une fabrication.
 
 La banque est mémorisée pour ce personnage et conservée après `/reload` ou
 reconnexion. Les banques de guilde, de compte et des autres personnages ne sont

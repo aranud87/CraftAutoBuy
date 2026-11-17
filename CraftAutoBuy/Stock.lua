@@ -74,6 +74,10 @@ local function ensureLoaded()
             -- a confirmed zero. A later successful bank scan will restore it.
             if integer(id, 1) and known == true and not invalidCounts[id] then snapshot.knownItems[id] = true end
         end
+        if ns.StockInventory then
+            snapshot.capacity = ns.StockInventory.SanitizeCapacity(saved.capacity)
+            snapshot.extensions = ns.StockInventory.SanitizeExtensions(saved.extensions)
+        end
         -- Items per container in the last complete reading. An unreadable
         -- memory is dropped as a whole; the next complete reading rebuilds it.
         if type(saved.containers) == "table" then
@@ -288,10 +292,12 @@ local function captureContainers()
     local containers, mode = bankContainers()
     if not containers then return nil, mode end
     local counts, held, slotsByBag = {}, {}, {}
+    local capacity, capacityKnown = {}, true
     for index, bag in ipairs(containers) do
         local ok, slots = call(C_Container.GetContainerNumSlots, bag)
         if not ok or not integer(slots) or slots > 1000 or (index == 1 and slots == 0) then return nil, "pending" end
         slotsByBag[bag] = slots
+        local used = 0
         for slot = 1, slots do
             local infoOK, info = call(C_Container.GetContainerItemInfo, bag, slot)
             if not infoOK or secret(info) then return nil, "pending" end
@@ -300,8 +306,26 @@ local function captureContainers()
                     return nil, "pending"
                 end
                 counts[info.itemID] = (counts[info.itemID] or 0) + info.stackCount
+                used = used + 1
                 held[bag] = held[bag] or {}
                 held[bag][info.itemID] = (held[bag][info.itemID] or 0) + info.stackCount
+            end
+        end
+        if ns.StockInventory then
+            local descriptor, reason = ns.StockInventory.DescribeContainer(bag, slots, used)
+            if reason == "contradiction" then return nil, "pending" end
+            if descriptor then capacity[#capacity + 1] = descriptor else capacityKnown = false end
+        end
+    end
+    if ns.StockInventory and mode == "modern" then
+        local empty
+        for bag, slots in pairs(slotsByBag) do
+            if slots == 0 then
+                if not empty then empty = emptyBagSlots(slotsByBag) end
+                -- All also presents objects for which no recipe or former
+                -- evidence exists. An equipped tab still loading must not
+                -- become a complete empty bank merely for lack of evidence.
+                if not empty[bag] then return nil, "pending" end
             end
         end
     end
@@ -311,7 +335,8 @@ local function captureContainers()
     for bag, slots in pairs(slotsByBag) do
         if slots > 0 then loadedThisVisit[bag] = true end
     end
-    return counts, "complete", held
+    return counts, "complete", held,
+        ns.StockInventory and (capacityKnown and ns.StockInventory.Capacity(capacity) or {known = false, containers = {}}) or nil
 end
 
 local function captureKnownItems()
@@ -376,12 +401,22 @@ end
 -- counts are identical, e.g. to clear a notice left by an unread notification.
 -- Returns updated, read (read is false when the client data are incomplete).
 local function capture(force)
-    local counts, result, held = captureContainers()
+    local counts, result, held, capacity = captureContainers()
     if counts then
         changePending, firstReadPending = false, false
         -- Kept even when the totals are unchanged: a sort moves stacks.
         snapshot.containers = held
-        local updated = force or snapshot.unverified or not snapshot.known or not snapshot.complete
+        -- Optional presentation metadata is committed only with the same
+        -- complete reading as its item counts. It never alters bank evidence.
+        local metadataChanged = false
+        if ns.StockInventory then
+            local extensions = ns.StockInventory.BankExtensions()
+            metadataChanged = not ns.StockInventory.SameMetadata(snapshot.capacity, capacity,
+                snapshot.extensions, extensions)
+            snapshot.capacity = capacity
+            snapshot.extensions = extensions
+        end
+        local updated = force or metadataChanged or snapshot.unverified or not snapshot.known or not snapshot.complete
         for id, count in pairs(counts) do if snapshot.counts[id] ~= count then updated = true; break end end
         for id, count in pairs(snapshot.counts) do if counts[id] ~= count then updated = true; break end end
         if updated then
@@ -621,6 +656,12 @@ function Stock.Rows(search)
     table.sort(bags, before); table.sort(bank, before)
     local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
     return bags, bank, bankKnown, missing
+end
+
+function Stock.View(search, options)
+    ensureLoaded()
+    return ns.StockInventory.Build(snapshot, search, options, Stock.BankCount,
+        Stock.IsBankUnverified(), bankOpen)
 end
 
 local function installEvents()
