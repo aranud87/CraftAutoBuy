@@ -81,6 +81,44 @@ function Inventory.Capacity(containers)
     return Inventory.SanitizeCapacity(value)
 end
 
+-- Only the optional personal-bank containers are replaceable bags. The fixed
+-- initial storage is not a bag, even when Forever gives it a positive index.
+-- Derive this view from recorded metadata; never query a closed bank for it.
+function Inventory.BankBags(saved)
+    local capacity = Inventory.SanitizeCapacity(saved)
+    if not capacity.known or #capacity.containers == 0 then return capacity end
+    local base, first, last
+    -- Compatibility clients may expose modern enums while still using the
+    -- negative legacy bank container. Its presence identifies that layout.
+    if integer(BANK_CONTAINER, -128, -1) then
+        for _, entry in ipairs(capacity.containers) do
+            if entry.id == BANK_CONTAINER then
+                if not integer(NUM_BAG_SLOTS, 0, MAX_CONTAINERS)
+                    or not integer(NUM_BANKBAGSLOTS, 0, MAX_CONTAINERS) then return unknown() end
+                base, first, last = BANK_CONTAINER, NUM_BAG_SLOTS + 1, NUM_BAG_SLOTS + NUM_BANKBAGSLOTS
+                break
+            end
+        end
+    end
+    if base == nil then
+        local indices = Enum and Enum.BagIndex
+        local initial, final = indices and indices.CharacterBankTab_1, indices and indices.CharacterBankTab_9
+        if not integer(initial, 1) or not integer(final, initial, initial + MAX_CONTAINERS) then return unknown() end
+        for _, entry in ipairs(capacity.containers) do
+            if entry.id == initial then base, first, last = initial, initial + 1, final; break end
+        end
+    end
+    if base == nil then return unknown() end
+    local bags = {}
+    for _, entry in ipairs(capacity.containers) do
+        if entry.id ~= base then
+            if not integer(entry.id, first, last) then return unknown() end
+            bags[#bags + 1] = entry
+        end
+    end
+    return Inventory.Capacity(bags)
+end
+
 function Inventory.SanitizeExtensions(saved)
     if secret(saved) or type(saved) ~= "table" or secret(saved.known) or saved.known ~= true
         or not integer(saved.purchased, 0, MAX_CONTAINERS)
@@ -270,5 +308,6 @@ function Inventory.Build(snapshot, search, options, bankCount, unverified, bankO
         view.extensions.bank = Inventory.SanitizeExtensions(snapshot.extensions)
     end
     view.capacity.bank.memory, view.capacity.bank.unverified = not bankOpen, unverified == true
+    view.bankBags = Inventory.BankBags(view.capacity.bank)
     return view
 end

@@ -105,7 +105,7 @@ local searchScroll = {bags = 0, bank = 0, inventory = 0}
 local fallbackView = {content = "components", inventory = false, extensionsExpanded = false,
     comparisonSize = 20, scroll = {bags = 0, bank = 0, inventory = 0}}
 local lastData
-local LIST_TOP, LIST_HEIGHT, COMPACT_LIST_HEIGHT = 94, 315, 195
+local LIST_TOP, LIST_HEIGHT, COMPACT_LIST_HEIGHT = 94, 315, 171
 
 local function view()
     return ns.StockView and ns.StockView.Get() or fallbackView
@@ -443,8 +443,8 @@ function StockUI.Install()
         preference("SetExtensions", "extensionsExpanded", not view().extensionsExpanded); StockUI.Render()
     end)
     widgets.extensions = CreateFrame("Frame", nil, panel)
-    widgets.extensions:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -370)
-    widgets.extensions:SetSize(620, 116)
+    widgets.extensions:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -346)
+    widgets.extensions:SetSize(620, 140)
     widgets.equipped = label(widgets.extensions, "GameFontNormalSmall", 0, 0, 300, 18)
     widgets.sizes = label(widgets.extensions, "GameFontHighlightSmall", 0, -21, 300, 26)
     widgets.sizes:SetWordWrap(true)
@@ -465,9 +465,14 @@ function StockUI.Install()
     widgets.comparison:SetScript("OnEscapePressed", function(self) self:ClearFocus(); StockUI.Render() end)
     widgets.gain = label(widgets.extensions, "GameFontHighlightSmall", 0, -77, 300, 36)
     widgets.gain:SetWordWrap(true)
-    widgets.bankExtension = label(widgets.extensions, "GameFontNormalSmall", 330, 0, 286, 44)
+    widgets.bankEquipped = label(widgets.extensions, "GameFontNormalSmall", 330, 0, 286, 18)
+    widgets.bankSizes = label(widgets.extensions, "GameFontHighlightSmall", 330, -21, 286, 26)
+    widgets.bankSizes:SetWordWrap(true)
+    widgets.bankExtension = label(widgets.extensions, "GameFontNormalSmall", 330, -49, 286, 28)
     widgets.bankExtension:SetWordWrap(true)
-    widgets.bankCost = label(widgets.extensions, "GameFontHighlightSmall", 330, -49, 286, 52)
+    widgets.bankGain = label(widgets.extensions, "GameFontHighlightSmall", 330, -80, 286, 32)
+    widgets.bankGain:SetWordWrap(true)
+    widgets.bankCost = label(widgets.extensions, "GameFontHighlightSmall", 330, -114, 286, 22)
     widgets.bankCost:SetWordWrap(true)
     widgets.missing = label(panel, "GameFontHighlightSmall", 14, -490, 620, 18)
     widgets.missing:SetWordWrap(false)
@@ -485,6 +490,8 @@ function StockUI.Install()
     panel.CapacityToggle, panel.ComparisonSize = widgets.capacityToggle, widgets.comparison
     panel.BagCapacity, panel.BankCapacity = widgets.bagCapacity, widgets.bankCapacity
     panel.Extensions, panel.ExtensionGain, panel.BankExtension = widgets.extensions, widgets.gain, widgets.bankExtension
+    panel.BankBagsEquipped, panel.BankBagSizes = widgets.bankEquipped, widgets.bankSizes
+    panel.BankUpgradeGain, panel.BankCost = widgets.bankGain, widgets.bankCost
     panel.SourceText, panel.ScopeText = widgets.source, widgets.scope
     for _, nativePage in pairs({book.CraftingPage, book.BookPage}) do
         nativePage:HookScript("OnShow", function(self)
@@ -546,18 +553,18 @@ local function renderCapacity(widget, descriptor)
     end
 end
 
-local function renderExtensions(data, state)
-    local capacity = data.capacity and data.capacity.bags or {}
+local function bagDetails(capacity, size)
+    capacity = capacity or {}
     local equipped, sizes, replacements, gain, uncertain = 0, {}, 0, 0, false
     if capacity.known then
         for _, container in ipairs(capacity.containers or {}) do
             if type(container.id) == "number" and container.id > 0 and type(container.size) == "number" and container.size > 0 then
                 equipped = equipped + 1
                 sizes[#sizes + 1] = L.STOCK_BAG_SLOTS:format(container.size)
-                if container.size < state.comparisonSize then
+                if container.size < size then
                     if container.family == 0 then
                         replacements = replacements + 1
-                        gain = gain + state.comparisonSize - container.size
+                        gain = gain + size - container.size
                     elseif type(container.family) ~= "number" then
                         -- An unread bag type could change the total gain.
                         uncertain = true
@@ -566,17 +573,33 @@ local function renderExtensions(data, state)
             end
         end
     end
-    widgets.equipped:SetText(capacity.known and L.STOCK_BAGS_EQUIPPED:format(equipped) or L.STOCK_UPGRADE_UNKNOWN)
-    widgets.sizes:SetText(table.concat(sizes, " / "))
+    local result = L.STOCK_UPGRADE_UNKNOWN
+    if capacity.known and not uncertain then
+        result = replacements > 0 and L.STOCK_UPGRADE_GAIN:format(gain, replacements)
+            or L.STOCK_UPGRADE_NONE:format(size)
+    end
+    return capacity.known and equipped or nil, table.concat(sizes, " / "), result
+end
+
+local function renderExtensions(data, state)
+    local equipped, sizes, gain = bagDetails(data.capacity and data.capacity.bags, state.comparisonSize)
+    widgets.equipped:SetText(equipped and L.STOCK_BAGS_EQUIPPED:format(equipped) or L.STOCK_UPGRADE_UNKNOWN)
+    widgets.sizes:SetText(sizes)
+    widgets.gain:SetText(gain)
+    local bankEquipped, bankSizes, bankGain = bagDetails(data.bankBags, state.comparisonSize)
+    widgets.bankEquipped:SetText(bankEquipped and L.STOCK_BANK_BAGS_EQUIPPED:format(bankEquipped) or L.STOCK_UPGRADE_UNKNOWN)
+    widgets.bankSizes:SetText(bankSizes); widgets.bankGain:SetText(bankGain)
     widgets.compareLabel:SetText(L.STOCK_UPGRADE_TARGET)
     if not widgets.comparison:HasFocus() then widgets.comparison:SetText(tostring(state.comparisonSize)) end
-    if not capacity.known or uncertain then widgets.gain:SetText(L.STOCK_UPGRADE_UNKNOWN)
-    elseif replacements > 0 then
-        widgets.gain:SetText(L.STOCK_UPGRADE_GAIN:format(gain, replacements))
-    else widgets.gain:SetText(L.STOCK_UPGRADE_NONE:format(state.comparisonSize)) end
     local bank = data.extensions and data.extensions.bank or {}
     if bank.known and bank.remaining ~= nil then
-        widgets.bankExtension:SetText(bank.remaining > 0 and L.STOCK_BANK_UNLOCKABLE:format(bank.remaining) or L.STOCK_BANK_FULLY_UNLOCKED)
+        if bank.purchased == 0 and bank.remaining > 0 then
+            -- The first purchase is fixed storage, not an optional bag slot.
+            widgets.bankExtension:SetText(L.STOCK_UPGRADE_UNKNOWN)
+        else
+            widgets.bankExtension:SetText(bank.remaining > 0 and L.STOCK_BANK_UNLOCKABLE:format(bank.remaining,
+                state.comparisonSize, bank.remaining * state.comparisonSize) or L.STOCK_BANK_FULLY_UNLOCKED)
+        end
         if bank.nextCost ~= nil then
             local money = GetCoinTextureString and GetCoinTextureString(bank.nextCost)
                 or GetMoneyString and GetMoneyString(bank.nextCost) or tostring(bank.nextCost)

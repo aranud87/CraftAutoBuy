@@ -196,6 +196,12 @@ reste à vérifier. Cette
 comparaison ne promet pas qu'un sac de cette taille est possédé ou disponible
 chez un marchand. Elle ne remplace, n'achète et ne déplace aucun objet.
 
+Le côté Banque présente aussi le nombre de sacs équipés et leurs tailles.
+La même taille saisie calcule leur gain de remplacement, séparément du gain
+possible dans les emplacements encore verrouillés (nombre à débloquer x taille).
+Le stockage initial de banque n'est pas un sac à remplacer. Les données restent
+mémorisées banque fermée ; une lecture inconnue n'est pas affichée comme zéro.
+
 Les filtres, le mode d'affichage et la disposition de Stock sont mémorisés par
 personnage. Stock reste une vue de consultation, même pendant une fabrication.
 
