@@ -921,7 +921,8 @@ local function renderList()
     return visible
 end
 
-local function renderReagents(recipe, recipes, id, crafts)
+local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
+    maximumHeight = maximumHeight or 238
     local count, y = 0, 0
     if recipe then
         local inventory, bank
@@ -978,11 +979,11 @@ local function renderReagents(recipe, recipes, id, crafts)
         reagents[index]:Hide()
     end
     widgets.reagentContent:SetHeight(math.max(1, y))
-    widgets.reagentScroll:SetHeight(math.max(1, math.min(y, 238)))
-    if widgets.reagentScroll.ScrollBar then widgets.reagentScroll.ScrollBar:SetShown(y > 238) end
+    widgets.reagentScroll:SetHeight(math.max(1, math.min(y, maximumHeight)))
+    if widgets.reagentScroll.ScrollBar then widgets.reagentScroll.ScrollBar:SetShown(y > maximumHeight) end
     widgets.reagentTitle:SetShown(recipe ~= nil)
     widgets.reagentScroll:SetShown(recipe ~= nil)
-    local costY = 124 + math.min(y, 238) + 10
+    local costY = 124 + math.min(y, maximumHeight) + 10
     widgets.cost:ClearAllPoints()
     widgets.cost:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -costY)
     widgets.costHit:ClearAllPoints()
@@ -1021,10 +1022,12 @@ local function renderBankTransfer(recipe, id, key, quantity)
     widgets.bankTransfer:SetShown(shown)
     widgets.bankTransfer:SetEnabled(widgets.bankTransfer.bankEnabled)
     if shown then widgets.bankTransfer:SetText(state.text or L.BANK_TRANSFER_RETRIEVE) end
-    -- Keep the footer controls in place. Only the status gives the bank action
-    -- one row; its complete text remains available on hover.
-    widgets.status:SetHeight(shown and 20 or 48)
-    widgets.status:SetMaxLines(shown and 1 or 3)
+    -- Keep all three status lines above the bank action. Long reagent lists
+    -- scroll in a slightly shorter viewport so their cost cannot overlap it.
+    widgets.status:ClearAllPoints()
+    widgets.status:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, shown and -390 or -420)
+    widgets.status:SetHeight(48)
+    widgets.status:SetMaxLines(3)
     return shown and state or nil
 end
 
@@ -1122,7 +1125,8 @@ function UI.Render()
     UI.FitActionButton(widgets.cancel, job and job.pending and L.STOP_BATCH or L.CANCEL, actionWidth)
     widgets.cancel:SetShown(canCancel)
     widgets.cancel:SetEnabled(canCancel)
-    renderReagents(recipe, recipes, id, crafts)
+    local transferState=renderBankTransfer(recipe,id,key,crafts)
+    renderReagents(recipe, recipes, id, crafts, transferState and 206 or 238)
     local quote = recipe and ns.quote
     local cost = ""
     if quote then
@@ -1190,7 +1194,6 @@ function UI.Render()
         end
         if requirementReason and status == requirementReason then status = requirementText(status, requirementKind) end
     end
-    local transferState=renderBankTransfer(recipe,id,key,crafts)
     if transferState and transferState.status then
         status=transferState.status
         statusDetail=transferState.statusDetail or status

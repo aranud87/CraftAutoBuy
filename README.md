@@ -4,7 +4,7 @@
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
 Current stable version: **1.2.1**.
-Public beta: **1.3.0-beta.5**, available on CurseForge.
+Latest beta sources: **1.3.0-beta.6**.
 
 The beta adds an easy way to deposit crafting reagents into your bank and
 withdraw the materials needed for a recipe directly from the CAB tab.
@@ -39,7 +39,7 @@ from the bank. Bag upgrade estimates are simulations and do not move items.
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
 dans **World of Warcraft: Forever**. Version stable : **1.2.1**.
-Bêta publique : **1.3.0-beta.5**, disponible sur CurseForge.
+Sources de la dernière bêta : **1.3.0-beta.6**.
 
 La bêta facilite le dépôt des composants d'artisanat en banque et la
 récupération des ingrédients d'une recette depuis l'onglet CAB.

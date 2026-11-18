@@ -1,8 +1,8 @@
 # CraftAutoBuy
 
-**Version locale de test : 1.3.0-beta.5 — commandes bancaires intégrées.**
+**Version bêta : 1.3.0-beta.6 — commandes bancaires intégrées.**
 
-La version publiée reste la **1.2.1**.
+Version stable : **1.2.1**.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
