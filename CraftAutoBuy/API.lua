@@ -806,6 +806,9 @@ function API.RecipeReady(recipeID)
 end
 
 function API.Craft(recipeID, crafts)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        return false, L.BANK_TRANSFER_BUSY
+    end
     if not positiveInteger(crafts) then return false, L.INVALID_QUANTITY end
     if InCombatLockdown and InCombatLockdown() then return false, L.CRAFT_SUSPENDED_COMBAT end
     local ready, reason = API.RecipeReady(recipeID)

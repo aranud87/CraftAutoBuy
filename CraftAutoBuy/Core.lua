@@ -230,6 +230,9 @@ function ns.Refresh()
         ns.quantity = 1
         quantityRecipeID, quantityProfessionKey = ns.selectedID, ns.selectedProfessionKey
     end
+    -- Banking follows the displayed CAB request. Cancel the previous recipe
+    -- before another transfer can run after any selection/quantity change.
+    if ns.BankTransferUI and ns.BankTransferUI.OnContextChanged then ns.BankTransferUI.OnContextChanged() end
     if not ns.pendingStart and ns.UI and ns.UI.DeactivateIfHidden then ns.UI.DeactivateIfHidden() end
     local recipes = activeRecipes()
     local recipeID = ns.job and ns.job.recipeID or ns.selectedID
@@ -589,6 +592,9 @@ end
 -- Missing tools or stations allow a separate purchase-only action. Check every
 -- dependency first: a cooldown or unavailable recipe must still prevent buying.
 function ns.CraftReadiness(recipeID, plan)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        return false, L.BANK_TRANSFER_BUSY
+    end
     if not recipeID then return false, L.SELECT_RECIPE end
     local seen, requirement = {}, nil
     local function check(id)
@@ -768,6 +774,10 @@ local function castBatch()
 end
 
 function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        ns.status = L.BANK_TRANSFER_BUSY
+        return false
+    end
     purchaseOnlyIntent = purchaseOnlyIntent == true
     if actionIntent == "buy" then allowCraft = false end
     if ns.pendingStart or ns.bankConfirmation then return end
@@ -1120,6 +1130,8 @@ function ns.OnEvent(event, ...)
             for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do ns.vendorItems[id] = enabled end
             if ns.Catalogue then ns.Catalogue.Load() end
             if ns.Stock then ns.Stock.Init() end
+            if ns.BankTransferAPI then ns.BankTransferAPI.Init() end
+            if ns.BankTransferUI then ns.BankTransferUI.Init() end
             if ns.Bootstrap then ns.Bootstrap.Init() end
             if ns.BootstrapUI then ns.BootstrapUI.Init() end
         elseif not initialized then return end

@@ -370,6 +370,25 @@ end
 
 function Stock.IsBankOpen() return bankOpen end
 
+-- Live personal storage only. A remembered bank is never a transfer source.
+-- The third result identifies optional bank containers proven unequipped.
+function Stock.GetOpenBankContainers()
+    if not bankOpen then return nil end
+    local ids, mode = bankContainers()
+    if not ids then return nil end
+    local indices = Enum and Enum.BagIndex
+    local first, last = indices and indices.CharacterBankTab_1, indices and indices.CharacterBankTab_9
+    if mode=="modern" and (not integer(first,1) or not integer(last,first)) then return nil end
+    local result, sizes = {}, {}
+    for index, bag in ipairs(ids) do
+        if mode=="modern" and (bag<first or bag>last) then return nil end
+        local ok, size = call(C_Container and C_Container.GetContainerNumSlots, bag)
+        if not ok or not integer(size) or size > 1000 then return nil end
+        result[index], sizes[bag] = bag, size
+    end
+    return result, mode, emptyBagSlots(sizes)
+end
+
 function Stock.IsBankUnverified()
     ensureLoaded()
     return snapshot.unverified or changePending or (bankOpen and firstReadPending)

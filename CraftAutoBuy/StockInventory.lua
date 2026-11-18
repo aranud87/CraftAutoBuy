@@ -187,6 +187,10 @@ local function bagIDs()
     return result
 end
 
+function Inventory.GetBagIDs()
+    return bagIDs()
+end
+
 function Inventory.ReadBags()
     local failed = {known = false, counts = {}, capacity = unknown()}
     local ids = bagIDs()

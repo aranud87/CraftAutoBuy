@@ -8,6 +8,34 @@ ns.NativeCraft = NativeCraft
 -- Separate sibling controls leave native scripts and crafting APIs untouched.
 local state, refreshing
 
+-- Block native clicks too, including recipes CAB does not replace. Never
+-- rewrite native OnClick handlers or their readiness/enablement state.
+local function transferClickGuards()
+    local blocked = ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy()
+    if blocked and not state.transferGuards then
+        state.transferGuards = {}
+        for index=1,2 do
+            local original = state.originals[index]
+            local guard = CreateFrame("Frame", nil, original)
+            guard:SetAllPoints(original)
+            guard:SetFrameLevel(original:GetFrameLevel()+5)
+            if guard.EnableMouse then guard:EnableMouse(true) end
+            guard:SetScript("OnMouseDown",function() end)
+            guard:SetScript("OnMouseUp",function() end)
+            guard:SetScript("OnEnter",function(self)
+                if GameTooltip then
+                    GameTooltip:SetOwner(self,"ANCHOR_TOP")
+                    GameTooltip:SetText(L.BANK_TRANSFER_BUSY)
+                    GameTooltip:Show()
+                end
+            end)
+            guard:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
+            state.transferGuards[index]=guard
+        end
+    end
+    for _, guard in ipairs(state.transferGuards or {}) do guard:SetShown(blocked and true or false) end
+end
+
 local function clamp(value, maximum)
     value = tonumber(value)
     if not value or value ~= value or value == math.huge or value == -math.huge
@@ -247,6 +275,7 @@ end
 
 function NativeCraft.Refresh()
     if refreshing or not NativeCraft.Install() then return end
+    transferClickGuards()
     refreshing = true
     local id, recipe = current()
     if not id then restore(); refreshing = false; return end

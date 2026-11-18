@@ -1,6 +1,8 @@
 # CraftAutoBuy
 
-**Version stable : 1.2.1**
+**Version locale de test : 1.3.0-beta.5 — commandes bancaires intégrées.**
+
+La version publiée reste la **1.2.1**.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
@@ -68,6 +70,45 @@ directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
 restent pris en compte dans les deux positions de ce filtre. Même avec Banque
 décoché, racheter des fournitures déjà connues en banque demande de confirmer
 **Continuer sans banque** pour le projet en cours.
+
+## Transferts bancaires — version locale de test
+
+Le bouton **Déposer les composants**, à gauche de la recherche de la banque
+personnelle native, dépose les composants des sacs ordinaires dans l'ordre du
+sac à dos puis des sacs équipés, avant les sacs spécialisés.
+
+Le bouton **Récupérer les composants en banque**, en bas de la fiche recette
+de l'onglet CAB, retire les composants disponibles en banque qui manquent pour
+la recette et la quantité déjà sélectionnées. Son infobulle détaille les
+composants à récupérer, avec les intermédiaires connus calculés par CAB.
+Banque fermée, il indique **Banque non ouverte** en grisé. Il reste désactivé
+si aucun composant correspondant n'est à retirer.
+
+Le dépôt suit uniquement le marqueur natif **Composant d'artisanat**, sans se
+limiter aux métiers connus. Un poisson cru marqué par le jeu peut donc être
+déposé même s'il est comestible. Un objet non marqué, comme le jus de melon,
+reste dans les sacs même si une recette l'utilise. Si le marqueur ne peut pas
+encore être vérifié, l'objet reste également sur place.
+La récupération explicite depuis une fiche CAB peut toujours retirer un
+ingrédient demandé par cette recette, même sans ce marqueur natif.
+Les piles dont la nature reste inconnue sont laissées sur place et signalées.
+La récupération reste limitée à la recette apprise affichée dans CAB ; elle
+ne nécessite pas de catalogue de recettes non apprises.
+
+Les déplacements se font un par un, avec vérification des quantités avant
+le suivant. **Arrêter**, fermer la banque, entrer en combat ou commencer une
+incantation interrompt l'opération. Les objets déjà transférés restent à leur
+destination. Aucun achat ni aucune fabrication ne démarre après un retrait.
+Le bouton actif devient **Arrêter** pendant le transfert. Changer la recette
+ou la quantité annule la récupération en cours ; un nouveau clic est nécessaire.
+Une opération non confirmée demande une vérification de l'inventaire avant
+un nouveau clic. Les boutons de fabrication CAB et natifs sont bloqués pendant
+le transfert.
+
+Les commandes sont intégrées aux fenêtres existantes. Un addon qui remplace
+la banque peut masquer le bouton de dépôt natif. Les banques de compte et de
+guilde sont exclues. L'affichage et les transferts réels, notamment avec les
+addons de sacs, restent à tester dans Forever avant publication.
 
 ## Installation
 

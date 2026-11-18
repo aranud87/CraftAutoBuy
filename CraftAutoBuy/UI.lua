@@ -71,6 +71,16 @@ function UI.FitActionButton(control, text, maximum, minimum)
     return target
 end
 
+-- Keep translated bank labels inside the existing layout. The full label is
+-- retained by the button and shown in its tooltip if the font needs clipping.
+function UI.ConstrainButtonText(control, width)
+    local caption = control.GetFontString and control:GetFontString() or control.Text
+    if not caption then return end
+    if caption.SetWidth then caption:SetWidth(math.max(1, width - 20)) end
+    if caption.SetWordWrap then caption:SetWordWrap(false) end
+    if caption.SetMaxLines then caption:SetMaxLines(1) end
+end
+
 local function label(parent, font, x, y, width, height, text)
     local value = parent:CreateFontString(nil, "OVERLAY", font)
     value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -598,8 +608,32 @@ function UI.Install()
         tooltip(self, "CraftAutoBuy", widgets.statusDetail or widgets.status:GetText())
     end)
     widgets.statusHit:SetScript("OnLeave", tooltipHide)
+    widgets.bankTransfer = button("CraftAutoBuyBankWithdrawButton", detail, L.BANK_TRANSFER_RETRIEVE,
+        302, 20, -444, function(self)
+            local bank = ns.BankTransferUI
+            if not bank or type(bank.WithdrawRecipe) ~= "function" then return end
+            -- Losing focus commits the typed quantity. Repaint afterwards so
+            -- a filtered/changed recipe or a newly closed bank cannot reuse
+            -- the intent that was displayed before this click.
+            widgets.quantity:ClearFocus()
+            UI.Render()
+            local request = self.request
+            if not UI.IsActive() or not self:IsShown() or not self.bankEnabled or not request then return end
+            bank.WithdrawRecipe({professionKey=request.professionKey,recipeID=request.recipeID,quantity=request.quantity})
+        end)
+    widgets.bankTransfer:SetNormalFontObject("GameFontNormalSmall")
+    widgets.bankTransfer:SetHighlightFontObject("GameFontHighlightSmall")
+    widgets.bankTransfer:SetDisabledFontObject("GameFontDisableSmall")
+    UI.ConstrainButtonText(widgets.bankTransfer, 302)
+    if widgets.bankTransfer.SetMotionScriptsWhileDisabled then widgets.bankTransfer:SetMotionScriptsWhileDisabled(true) end
+    widgets.bankTransfer:SetScript("OnEnter", function(self)
+        tooltip(self, self:GetText(), self.help or L.BANK_TRANSFER_RECIPE_HINT)
+    end)
+    widgets.bankTransfer:SetScript("OnLeave", tooltipHide)
+    widgets.bankTransfer:Hide()
     detail.OutputButton, detail.RecipeName, detail.ProfessionName = widgets.output, widgets.recipeName, widgets.profession
     detail.ReagentsLabel, detail.CostText, detail.StatusText = widgets.reagentTitle, widgets.cost, widgets.status
+    detail.BankWithdrawButton = widgets.bankTransfer
 
     -- Max only selects a quantity. Buying and crafting share one explicit
     -- action, whose rendered intent is revalidated by Core at the click.
@@ -968,6 +1002,32 @@ local function detailBackground(key)
     widgets.detail.Background:SetAtlas(atlas)
 end
 
+local function renderBankTransfer(recipe, id, key, quantity)
+    local function valid(value, maximum)
+        return not (issecretvalue and issecretvalue(value)) and type(value)=="number"
+            and value>=1 and value<=maximum and value==math.floor(value)
+    end
+    local request
+    if recipe and recipe.learned~=false and recipe.supported~=false
+        and valid(id,2147483647) and valid(key,2147483647) and valid(quantity,1000) then
+        request={professionKey=key,recipeID=id,quantity=quantity}
+    end
+    local service=ns.BankTransferUI
+    local state=service and type(service.GetRecipeState)=="function" and service.GetRecipeState(request)
+    local shown=request~=nil and type(state)=="table" and state.visible==true
+    widgets.bankTransfer.request=shown and request or nil
+    widgets.bankTransfer.bankEnabled=shown and state.enabled==true or false
+    widgets.bankTransfer.help=shown and state.tooltip or nil
+    widgets.bankTransfer:SetShown(shown)
+    widgets.bankTransfer:SetEnabled(widgets.bankTransfer.bankEnabled)
+    if shown then widgets.bankTransfer:SetText(state.text or L.BANK_TRANSFER_RETRIEVE) end
+    -- Keep the footer controls in place. Only the status gives the bank action
+    -- one row; its complete text remains available on hover.
+    widgets.status:SetHeight(shown and 20 or 48)
+    widgets.status:SetMaxLines(shown and 1 or 3)
+    return shown and state or nil
+end
+
 function UI.Render()
     if rendering or not UI.Install() or not UI.IsActive() then return end
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then
@@ -1129,6 +1189,11 @@ function UI.Render()
             status = shortfallText(shortMoney(quote.shortfall), crafts)
         end
         if requirementReason and status == requirementReason then status = requirementText(status, requirementKind) end
+    end
+    local transferState=renderBankTransfer(recipe,id,key,crafts)
+    if transferState and transferState.status then
+        status=transferState.status
+        statusDetail=transferState.statusDetail or status
     end
     widgets.status:SetText(status)
     widgets.statusDetail = statusDetail
