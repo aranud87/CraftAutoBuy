@@ -3,11 +3,14 @@ local L = ns.L
 local NativeUI = {}
 ns.NativeUI = NativeUI
 
--- Only decorate text after Blizzard has populated its real controls. The game
--- APIs, recipe records, reagent allocations and protected buttons are untouched.
+-- Decorate Blizzard's populated controls and keep long reagent lists within
+-- the form. Recipe records, reagent allocations and protected buttons are untouched.
 local rowStates, slotStates = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
 local installedForms, installedScrollBoxes = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
 local layoutArguments, pendingLayouts = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
+local correctingLayouts = setmetatable({}, {__mode = "k"})
+local reagentViewports = setmetatable({}, {__mode = "k"})
+local deferredLayouts = setmetatable({}, {__mode = "k"})
 local layoutHooked
 local context
 local GREEN, BLUE, GOLD, RESET = "|cff80ff80", "|cff59b3ff", "|cffffd100", "|r"
@@ -56,30 +59,36 @@ local function recipeStock(current, id)
 end
 
 function NativeUI.FormatQuantity(owned, potential, required, colored)
-    local extra = ""
-    if potential > owned then
-        extra = " " .. (colored and GOLD or "") .. "(" .. potential .. ")" .. (colored and RESET or "")
-    end
-    return tostring(owned) .. extra .. " / " .. tostring(required)
+    return tostring(owned) .. " / " .. tostring(required)
 end
 
-function NativeUI.FormatSources(bankCount, vendorSource, colored)
+function NativeUI.FormatSources(bankCount, vendorSource, colored, toBuy, separatePurchaseLine)
     local parts = {}
     if type(bankCount) == "number" and bankCount > 0 then
         local unverified = ns.Stock and ns.Stock.IsBankUnverified and ns.Stock.IsBankUnverified()
-        parts[#parts + 1] = (unverified and L.BANK_REAGENT_UNVERIFIED or L.BANK_REAGENT):format(bankCount)
+        local bankText = (unverified and L.BANK_REAGENT_UNVERIFIED or L.BANK_REAGENT):format(bankCount)
+        parts[#parts + 1] = colored and (BLUE .. bankText .. RESET) or bankText
     end
+    local vendorText
     if vendorSource == true then
-        parts[#parts + 1] = L.MERCHANT_REAGENT_AVAILABLE
+        vendorText = L.MERCHANT_REAGENT_AVAILABLE
     elseif vendorSource == "here" then
-        parts[#parts + 1] = L.MERCHANT_REAGENT_HERE
+        vendorText = L.MERCHANT_REAGENT_HERE
     elseif vendorSource == false then
-        parts[#parts + 1] = L.MERCHANT_REAGENT_NOT_HERE
+        vendorText = L.MERCHANT_REAGENT_NOT_HERE
     elseif type(vendorSource) == "number" and vendorSource >= 0 and vendorSource < math.huge then
-        parts[#parts + 1] = L.MERCHANT_REAGENT_STOCK:format(vendorSource)
+        vendorText = L.MERCHANT_REAGENT_STOCK:format(vendorSource)
     end
-    local text = table.concat(parts, "\n")
-    return colored and text ~= "" and (GOLD .. text .. RESET) or text
+    if vendorText then
+        if type(toBuy) == "number" and toBuy >= 0 and toBuy < math.huge then
+            vendorText = vendorText .. (separatePurchaseLine and "\n" or " — ") .. L.REAGENT_TO_BUY:format(toBuy)
+        end
+        parts[#parts + 1] = colored and (GOLD .. vendorText .. RESET) or vendorText
+    elseif type(toBuy) == "number" and toBuy > 0 and toBuy < math.huge then
+        local buyText = L.REAGENT_TO_BUY:format(toBuy)
+        parts[#parts + 1] = colored and (GOLD .. buyText .. RESET) or buyText
+    end
+    return table.concat(parts, "\n")
 end
 
 function NativeUI.VendorHint(itemID)
@@ -134,7 +143,8 @@ function NativeUI.Project(recipeID, recipes, inventory, vendors, crafts, purchas
             else vendorSource = true end
         end
         result.reagents[reagent.itemID] = {itemID = reagent.itemID, owned = owned, bank = inBank, potential = potential,
-            required = reagent.quantity, vendorSource = vendorSource}
+            required = reagent.quantity, vendorSource = vendorSource,
+            purchaseNeeded = plan.purchases[reagent.itemID] or 0}
     end
     return result
 end
@@ -277,6 +287,142 @@ local function attachRow(row)
     applyRow(row)
 end
 
+local function combatLayout()
+    return type(InCombatLockdown)=="function" and InCombatLockdown()
+end
+
+local function restoreViewportSlot(slot,saved,content)
+    if slot:GetParent()~=content then return end
+    slot:SetParent(saved.parent)
+    if saved.points then
+        slot:ClearAllPoints()
+        for _,point in ipairs(saved.points)do slot:SetPoint(unpack(point))end
+    end
+end
+
+local function restoreViewport(container)
+    local view=reagentViewports[container]
+    if not view or not view.active then return false end
+    if combatLayout() then view.deferred=true;return false end
+    for slot,saved in pairs(view.parents) do
+        restoreViewportSlot(slot,saved,view.content)
+    end
+    view.parents={};view.active=false;view.deferred=false
+    view.scroll:Hide()
+    return true
+end
+
+local function viewportBudget(form,container)
+    -- Camelot's form is fixed-height and has no native scroll view. Leave room
+    -- below the reagents for price lines and the tracking/footer controls.
+    local height=230
+    if form and form.GetBottom and container.GetTop then
+        local top,bottom=container:GetTop(),form:GetBottom()
+        if type(top)=="number" and type(bottom)=="number" then height=math.min(height,top-bottom-104) end
+    end
+    return math.max(40,height)
+end
+
+local function useViewport(slots,container,form,width,height,limit)
+    if type(CreateFrame)~="function" or combatLayout() then return nil end
+    for _,slot in ipairs(slots)do if not slot.GetParent or not slot.SetParent then return nil end end
+    local view=reagentViewports[container]
+    if not view then
+        local scroll=CreateFrame("ScrollFrame",nil,container,"UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT",container,"TOPLEFT",1,-20)
+        local content=CreateFrame("Frame",nil,scroll)
+        scroll:SetScrollChild(content)
+        view={scroll=scroll,content=content,parents={}}
+        reagentViewports[container]=view
+    end
+    view.form=form;view.active=true;view.deferred=false
+    -- Camelot narrows slots to 160 pixels. Preserve their full text width;
+    -- the scrolling layout uses one column and leaves room for the scrollbar.
+    view.scroll:SetSize(width,limit)
+    view.content:SetSize(width,height)
+    local current={}
+    for _,slot in ipairs(slots)do
+        current[slot]=true
+        if not view.parents[slot]then
+            local points
+            if slot.GetNumPoints and slot.GetPoint then
+                points={}
+                for index=1,slot:GetNumPoints()do points[#points+1]={slot:GetPoint(index)}end
+            end
+            view.parents[slot]={parent=slot:GetParent(),points=points}
+        end
+        if slot:GetParent()~=view.content then slot:SetParent(view.content)end
+    end
+    for slot,saved in pairs(view.parents)do
+        if not current[slot]then
+            restoreViewportSlot(slot,saved,view.content)
+            view.parents[slot]=nil
+        end
+    end
+    view.scroll:SetVerticalScroll(math.min(view.scroll:GetVerticalScroll() or 0,math.max(0,height-limit)))
+    view.scroll:Show()
+    return view.content
+end
+
+local function correctGridHeight(slots, container, spacingX, spacingY, stride, direction)
+    if not container or correctingLayouts[container] then return end
+    if not slots or not slots[1] then
+        if restoreViewport(container) and container.Layout then container:Layout()end
+        return
+    end
+    if not AnchorUtil
+        or not AnchorUtil.CreateGridLayout or not AnchorUtil.GridLayout then return end
+    if combatLayout() then
+        local view=reagentViewports[container]
+        if view and view.active then view.deferred=true end
+        for _,slot in ipairs(slots)do
+            local state=slotStates[slot]
+            if state and state.form then deferredLayouts[state.form]=true;break end
+        end
+        return
+    end
+    local firstHeight, maximum, decorated, form = slots[1]:GetHeight(), 0, false, nil
+    for _, slot in ipairs(slots) do
+        maximum = math.max(maximum, slot:GetHeight())
+        local state = slotStates[slot]
+        decorated = decorated or (state and state.appliedHeight ~= nil)
+        form=form or state and state.form
+    end
+    if not active() then decorated=false end
+    local vertical=type(direction)=="table" and direction.isVertical
+    local rows=vertical and math.min(#slots,stride) or math.ceil(#slots/stride)
+    local cols=vertical and math.ceil(#slots/stride) or math.min(#slots,stride)
+    local height=rows*maximum+(rows-1)*(spacingY or 0)
+    local width=cols*slots[1]:GetWidth()+(cols-1)*(spacingX or 0)
+    local limit=viewportBudget(form,container)
+    local content
+    if decorated and height>limit then
+        -- Only the overflow view uses one column. Two native 160-wide columns
+        -- plus a scrollbar would exceed the fixed 360-wide Camelot form.
+        height=#slots*maximum+(#slots-1)*(spacingY or 0)
+        width=slots[1]:GetWidth()
+        content=useViewport(slots,container,form,width,height,limit)
+    end
+    local restored=not content and restoreViewport(container)
+    if not content and not restored and (not decorated or maximum <= firstHeight + SIZE_TOLERANCE) then return end
+    local makeAnchor = AnchorUtil.CreateAnchor or CreateAnchor
+    if not makeAnchor then return end
+    -- Forever's AnchorUtil.GridLayout uses the FIRST slot's height as the
+    -- uniform row stride. Source lines can make a later slot taller; supply
+    -- the measured maximum explicitly instead of letting that slot overlap
+    -- the following row. Preserve the native direction, columns and spacing.
+    correctingLayouts[container] = true
+    local ok, reason = pcall(function()
+        local gridStride=content and (vertical and #slots or 1) or stride
+        local layout = AnchorUtil.CreateGridLayout(direction, gridStride, spacingX, spacingY, nil, maximum)
+        local anchor = makeAnchor("TOPLEFT", content or container, "TOPLEFT", content and 0 or 1, content and 0 or -20)
+        AnchorUtil.GridLayout(slots, anchor, layout)
+        if container.Layout then container:Layout() end
+    end)
+    correctingLayouts[container] = nil
+    if not ok then error(reason) end
+end
+
 local function reflowSlots()
     for form in pairs(pendingLayouts) do
         pendingLayouts[form] = nil
@@ -319,6 +465,8 @@ local function restoreSources(slot, state)
             pendingLayouts[state.form] = true
         end
     end
+    local view=state.form and reagentViewports[state.form.Reagents]
+    if view and view.active then pendingLayouts[state.form]=true end
     state.appliedHeight = nil
 end
 
@@ -386,17 +534,13 @@ local function restoreSlot(slot, state)
 end
 
 local function nativeReagentText(slot, itemData, required, name)
-    local owned = tostring(itemData.owned)
-    local remainder = " / " .. tostring(required) .. " " .. name
+    local value = tostring(itemData.owned) .. " / " .. tostring(required) .. " " .. name
     local ok, color = false, nil
     if type(slot.GetNameColor) == "function" then ok, color = pcall(slot.GetNameColor, slot) end
     if ok and color and type(color.WrapTextInColorCode) == "function" then
-        -- Each native part needs its own color code: the gold potential's |r
-        -- resets to the font color, not to an enclosing native gray/white code.
-        owned = color:WrapTextInColorCode(owned)
-        remainder = color:WrapTextInColorCode(remainder)
+        return color:WrapTextInColorCode(value)
     end
-    return owned .. " " .. GOLD .. "(" .. itemData.potential .. ")" .. RESET .. remainder
+    return value
 end
 
 local function applySlot(slot)
@@ -421,15 +565,10 @@ local function applySlot(slot)
     local name = ns.ItemName and ns.ItemName(reagent.itemID) or tostring(reagent.itemID)
     -- Keep the native font and text width. Source decoration measures the two
     -- text blocks and restores the original geometry when it is removed.
-    if itemData.potential > itemData.owned then
-        state.applied = nativeReagentText(slot, itemData, required, name)
-        slot.Name:SetText(state.applied)
-    elseif state.applied then
-        if slot.Name:GetText() == state.applied then slot.Name:SetText(state.original) end
-        state.applied = nil
-    end
+    state.applied = nativeReagentText(slot, itemData, required, name)
+    slot.Name:SetText(state.applied)
     state.projection = itemData
-    applySources(slot, state, NativeUI.FormatSources(itemData.bank, itemData.vendorSource, true))
+    applySources(slot, state, NativeUI.FormatSources(itemData.bank, itemData.vendorSource, true, itemData.purchaseNeeded, true))
 end
 
 local function updateSlot(slot)
@@ -450,7 +589,8 @@ local function attachSlot(slot)
                     GameTooltip:AddLine(L.REAGENT_TOOLTIP_TITLE, 1, .82, 0)
                     GameTooltip:AddLine(L.REAGENT_TOOLTIP_EXPLANATION, 1, 1, 1, true)
                     GameTooltip:AddLine(L.NATIVE_QUANTITY_HELP, 1, 1, 1, true)
-                    local sources = NativeUI.FormatSources(state.projection.bank, state.projection.vendorSource)
+                    local sources = NativeUI.FormatSources(state.projection.bank, state.projection.vendorSource, true,
+                        state.projection.purchaseNeeded, true)
                     if sources ~= "" then
                         GameTooltip:AddLine(sources, 1, .82, 0, true)
                         GameTooltip:AddLine(L.REAGENT_SOURCE_HELP, 1, 1, 1, true)
@@ -482,6 +622,7 @@ function NativeUI.Install()
         layoutHooked = true
         hooksecurefunc(Professions, "LayoutReagentSlots", function(slots, container, ...)
             layoutArguments[container] = {slots, container, ...}
+            correctGridHeight(slots, container, ...)
         end)
     end
     if not installedForms[form] then
@@ -508,6 +649,12 @@ end
 
 function NativeUI.Refresh()
     context = nil
+    if not combatLayout() then
+        for form in pairs(deferredLayouts)do pendingLayouts[form]=true;deferredLayouts[form]=nil end
+        for _,view in pairs(reagentViewports)do
+            if view.deferred and view.form then pendingLayouts[view.form]=true end
+        end
+    end
     if not active() then
         for row, state in pairs(rowStates) do restoreRow(row, state) end
         for slot, state in pairs(slotStates) do restoreSlot(slot, state) end

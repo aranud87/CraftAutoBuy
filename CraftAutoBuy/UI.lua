@@ -126,9 +126,9 @@ local function itemTooltip(self)
     if self.isReagent then
         GameTooltip:AddLine("CraftAutoBuy", 1, .82, 0)
         GameTooltip:AddLine(L.NATIVE_QUANTITY_HELP, 1, 1, 1, true)
-        local source = ns.NativeUI.FormatSources(self.bankCount, self.vendorSource)
+        local source = ns.NativeUI.FormatSources(self.bankCount, self.vendorSource, true, self.purchaseNeeded)
         if source ~= "" then
-            GameTooltip:AddLine(source, 1, .82, 0, true)
+            GameTooltip:AddLine(source, 1, 1, 1, true)
             GameTooltip:AddLine(L.REAGENT_SOURCE_HELP, 1, 1, 1, true)
             local vendorHint = ns.NativeUI.VendorHint and ns.NativeUI.VendorHint(self.itemID)
             if vendorHint then GameTooltip:AddLine(vendorHint, 1, 1, 1, true) end
@@ -174,7 +174,10 @@ end
 function UI.CostSummary(quote, displayedReason, plan)
     if not quote then return L.COST_SELECT_RECIPE end
     local lines = {}
-    if quote.complete then
+    if quote.partial then
+        lines[#lines + 1] = L.ACTION_BUY_HERE .. ": " .. moneyText(quote.totalCost)
+        lines[#lines + 1] = L.PURCHASE_OTHER_VENDOR
+    elseif quote.complete then
         lines[#lines + 1] = (quote.live and L.COST_VENDOR_TOTAL or L.COST_VENDOR_ESTIMATE):format(moneyText(quote.totalCost))
     else
         lines[#lines + 1] = L.COST_VENDOR_INCOMPLETE:format(moneyText(quote.totalCost))
@@ -213,6 +216,10 @@ local function bankAlternative(recipes, plan)
     -- supplies already stored there. Advertise the same project confirmation.
     if not message and ns.BankPurchaseWarning then message = ns.BankPurchaseWarning(recipes, plan) end
     if not message then return nil, false end
+    if ns.Bank.Purchase then
+        local purchasePlan, quote, allowed, reason = ns.Bank.Purchase(recipes, plan)
+        if purchasePlan then return message, allowed == true, purchasePlan, quote, reason, true end
+    end
     if type(ns.Bank.Alternative) ~= "function" then return message, false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, plan)
     return message, allowed == true, alternative, quote, reason
@@ -220,10 +227,10 @@ end
 
 -- A bag-only material plan may still require a missing station or tool. Only
 -- advertise confirmation when the displayed action can use that alternative.
-local function bankActionMessage(message, allowed, quote, reason, craftReady, plan)
+local function bankActionMessage(message, allowed, quote, reason, craftReady, plan, prebuy)
     if not message then return nil end
     local displayedReason
-    if allowed and craftReady then
+    if allowed and craftReady and not prebuy then
         message = message .. "\n\n" .. L.BANK_OVERRIDE_NOTICE
     elseif reason and reason ~= message then
         message = message .. "\n\n" .. reason
@@ -301,14 +308,14 @@ local function actionTooltip(button, defaultHelp)
         tooltip(button, L.CATALOG_VERIFY, table.concat(lines, "\n\n"))
         return
     end
-    local lines = {button.actionIntent == "buy" and L.ACTION_BUY_HELP
+    local lines = {button.partialPurchase and L.ACTION_BUY_HERE_HELP or button.actionIntent == "buy" and L.ACTION_BUY_HELP
         or button.actionIntent == "craft" and L.ACTION_CRAFT_HELP or defaultHelp}
     if button.requirementReason then
         lines[#lines + 1] = requirementText(button.requirementReason, button.requirementKind)
     end
     if button.bankMessage then lines[#lines + 1] = button.bankMessage end
     addCost(lines)
-    tooltip(button, button.actionIntent == "buy" and L.ACTION_BUY
+    tooltip(button, button.partialPurchase and L.ACTION_BUY_HERE or button.actionIntent == "buy" and L.ACTION_BUY
         or ns.ActionButtons.CraftText(button.craftQuantity), table.concat(lines, "\n\n"))
 end
 
@@ -762,7 +769,7 @@ local function renderSkillUps(row, recipe, selectable)
 end
 
 local function makeRow(index)
-    local row = CreateFrame("Button", nil, widgets.listContent)
+    local row = CreateFrame("Button", nil, widgets.listContent, "InsecureActionButtonTemplate")
     row:SetSize(265, 20)
     row.Label = label(row, "GameFontHighlight", 30, -3, 184, 16)
     row.Profession = label(row, "GameFontDisableSmall", 30, -19, 220, 14)
@@ -771,7 +778,7 @@ local function makeRow(index)
     row.Count:SetJustifyH("RIGHT")
     row.Selection = texture(row, "Professions_Recipe_Active", "BACKGROUND")
     row.Highlight = texture(row, "Professions_Recipe_Hover", "HIGHLIGHT")
-    row.SkillUps = CreateFrame("Button", nil, row)
+    row.SkillUps = CreateFrame("Button", nil, row, "InsecureActionButtonTemplate")
     row.SkillUps:SetSize(26, 15)
     row.SkillUps:SetPoint("LEFT", row, "LEFT", 0, 0)
     row.SkillUps.Icon = row.SkillUps:CreateTexture(nil, "ARTWORK")
@@ -780,19 +787,25 @@ local function makeRow(index)
     row.SkillUps.Text:SetHeight(13)
     row.SkillUps.Text:SetPoint("RIGHT", row.SkillUps.Icon, "LEFT", 0, 1)
     row.SkillUps.Text:SetTextColor(1, .5, .25)
-    row.SkillUps:SetScript("OnClick", function() row:Click() end)
     row.SkillUps:SetScript("OnEnter", function(self)
         if row.entry and row.skillUpText then tooltip(self, row.entry.name, row.skillUpText) end
     end)
     row.SkillUps:SetScript("OnLeave", tooltipHide)
-    row:SetScript("OnClick", function(self)
-        if self.entry then
-            widgets.reagentScroll:SetVerticalScroll(0)
-            selectionRestored = true
-            saveSelection(self.entry.recipeID, self.entry.professionKey)
-            ns.SelectCatalogRecipe(self.entry.recipeID, self.entry.professionKey)
+    local function selectFromClick(_, id, key)
+        local restored = selectionRestored
+        selectionRestored = true
+        if ns.SelectCatalogRecipe(id, key) == false then
+            selectionRestored = restored
+            return false
         end
-    end)
+        widgets.reagentScroll:SetVerticalScroll(0)
+        saveSelection(ns.selectedID, ns.selectedProfessionKey)
+        return true
+    end
+    -- Preserve each button's native spell action. The row and its skill-gain
+    -- icon both receive the user's click directly, without forwarding a click.
+    ns.ActionButtons.BindRecipeProfession(row, selectFromClick)
+    ns.ActionButtons.BindRecipeProfession(row.SkillUps, selectFromClick)
     row:SetScript("OnEnter", function(self)
         if self.entry then
             tooltip(self, self.entry.name, self.entry.bankMessage or self.entry.professionName or "")
@@ -882,6 +895,7 @@ local function renderList()
             rowCount = rowCount + 1
             local row = rows[rowCount] or makeRow(rowCount)
             row.entry = entry
+            row.SkillUps.entry = entry
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 0, -y)
             row.Label:SetText(entry.name)
@@ -902,7 +916,10 @@ local function renderList()
         end
     end
     for _, node in ipairs(roots) do renderGroup(node) end
-    for index = rowCount + 1, #rows do rows[index].entry = nil; rows[index]:Hide() end
+    for index = rowCount + 1, #rows do
+        rows[index].entry, rows[index].SkillUps.entry = nil, nil
+        rows[index]:Hide()
+    end
     for index = categoryCount + 1, #categories do categories[index]:Hide() end
     widgets.listContent:SetHeight(math.max(464, y))
     restoringScroll = true
@@ -938,20 +955,22 @@ local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
             local value = reagents[index] or makeReagent(index)
             local projected = projection and projection.reagents[reagent.itemID]
             local owned = inventory[reagent.itemID] or 0
-            local potential = projected and projected.potential or owned
-            local amounts = ns.NativeUI and ns.NativeUI.FormatQuantity(owned, potential, reagent.quantity, true)
+            local amounts = ns.NativeUI and ns.NativeUI.FormatQuantity(owned, owned, reagent.quantity, true)
                 or (tostring(owned) .. " / " .. tostring(reagent.quantity))
             value.itemID = reagent.itemID
             value.bankCount = knownBank and knownBank[reagent.itemID] or (bank and bank[reagent.itemID]) or 0
             value.vendorSource = projected and projected.vendorSource
+            value.purchaseNeeded = projected and projected.purchaseNeeded
             if value.vendorSource == nil and ns.vendorItems and ns.vendorItems[reagent.itemID] then
                 if ns.Merchant.GetReagentSourceStock then value.vendorSource = ns.Merchant.GetReagentSourceStock(reagent.itemID)
                 else value.vendorSource = true end
             end
             value.Icon:SetTexture(itemIcon(reagent.itemID))
             value.Name:SetText(amounts .. " " .. ns.ItemName(reagent.itemID))
-            local sourceText = ns.NativeUI.FormatSources(value.bankCount, value.vendorSource, true)
-            if not UI.IncludesBank() and value.bankCount > 0 then sourceText = sourceText .. "\n" .. L.CATALOG_BANK_EXCLUDED end
+            local sourceText = ns.NativeUI.FormatSources(value.bankCount, value.vendorSource, true, value.purchaseNeeded)
+            if not UI.IncludesBank() and value.bankCount > 0 then
+                sourceText = sourceText .. "\n|cff59b3ff" .. L.CATALOG_BANK_EXCLUDED .. "|r"
+            end
             value.SourceLine:SetText(sourceText)
             value.SourceLine:SetShown(sourceText ~= "")
             -- Measure the actual text, rather than reserving two name lines
@@ -974,7 +993,7 @@ local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
         end
     end
     for index = count + 1, #reagents do
-        reagents[index].itemID, reagents[index].bankCount, reagents[index].vendorSource = nil, nil, nil
+        reagents[index].itemID, reagents[index].bankCount, reagents[index].vendorSource, reagents[index].purchaseNeeded = nil, nil, nil, nil
         reagents[index].SourceLine:Hide()
         reagents[index]:Hide()
     end
@@ -1066,8 +1085,10 @@ function UI.Render()
     widgets.decrease:SetEnabled(canEdit and crafts > 1)
     widgets.increase:SetEnabled(canEdit and crafts < 1000)
     local needsBuy = recipe and ns.plan and next(ns.plan.purchases or {}) ~= nil
-    local bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason
-    if recipe then bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason = bankAlternative(recipes, ns.plan) end
+    local bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason, prebuy
+    if recipe then bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason, prebuy = bankAlternative(recipes, ns.plan) end
+    local actionQuote = bankQuote or ns.quote
+    local partialPurchase = actionQuote and actionQuote.partial == true
     local autoBuy = CraftAutoBuyDB and CraftAutoBuyDB.autoBuy == true
     local purchaseReady = not needsBuy or (autoBuy and ns.Merchant.IsOpen() and ns.quote and ns.quote.canBuy)
     local idle = not ns.pendingStart and not ns.bankConfirmation and not (job and (job.running or job.pending or job.awaitingPurchase))
@@ -1076,8 +1097,9 @@ function UI.Render()
     ns.readinessPlan = alternativePlan or ns.plan
     local craftReady, requirementReason, purchaseOnly, requirementKind = false, nil, false, nil
     if recipe then craftReady, requirementReason, purchaseOnly, requirementKind = craftAction(id, key, ns.readinessPlan) end
-    widgets.craft.bankMessage = bankActionMessage(bankMessage, bankAllowed, bankQuote, bankReason, craftReady, alternativePlan)
-    widgets.craft.requirementReason, widgets.craft.purchaseOnly = requirementReason, purchaseOnly
+    widgets.craft.bankMessage = bankActionMessage(bankMessage, bankAllowed, bankQuote, bankReason, craftReady, alternativePlan, prebuy)
+    widgets.craft.requirementReason, widgets.craft.purchaseOnly = requirementReason, purchaseOnly or prebuy == true or partialPurchase
+    widgets.craft.partialPurchase = partialPurchase
     widgets.craft.requirementKind = requirementKind
     local actionPlan = alternativePlan or ns.plan
     widgets.craft.actionIntent = actionPlan and next(actionPlan.purchases or {}) and "buy" or "craft"
@@ -1104,7 +1126,7 @@ function UI.Render()
         control:SetPoint("TOPLEFT", panel, "TOPLEFT", actionLeft, -482)
     end
     UI.FitActionButton(widgets.craft,
-        widgets.craft.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(crafts), actionWidth)
+        partialPurchase and L.ACTION_BUY_HERE or widgets.craft.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(crafts), actionWidth)
     UI.FitActionButton(widgets.openProfession, L.CATALOG_VERIFY, actionWidth)
     local canCraft = recipe ~= nil and ns.plan and ns.plan.craftable and ready and craftReady and idle or false
     if needsVerification then
@@ -1130,7 +1152,9 @@ function UI.Render()
     local quote = recipe and ns.quote
     local cost = ""
     if quote then
-        if quote.complete then
+        if quote.partial then
+            cost = L.ACTION_BUY_HERE .. ": " .. shortMoney(quote.totalCost)
+        elseif quote.complete then
             cost = (quote.live and L.CATALOG_COST or L.CATALOG_ESTIMATE):format(shortMoney(quote.totalCost))
         elseif quote.totalCost > 0 then
             cost = L.CATALOG_COST_PARTIAL:format(shortMoney(quote.totalCost))
@@ -1150,7 +1174,7 @@ function UI.Render()
         -- "Vérifier" is disabled while a project exists: ask to reopen its profession.
         elseif needsVerification then status = job and L.PROJECT_PAUSED_REOPEN or L.CATALOG_VERIFY_HELP
         elseif bankMessage then
-            status = bankAllowed and craftReady and L.BANK_OVERRIDE_NOTICE or L.BANK_NOTICE
+            status = bankAllowed and craftReady and not prebuy and L.BANK_OVERRIDE_NOTICE or L.BANK_NOTICE
             if ns.Stock and ns.Stock.IsBankUnverified and ns.Stock.IsBankUnverified() then
                 -- The compact status has room for three lines. The unverified
                 -- notice already explains both choices; keep details on hover.
@@ -1179,6 +1203,7 @@ function UI.Render()
                 status = L.OPEN_MERCHANT_SHORTFALL:format(shortMoney(quote.shortfall))
             else status = L.OPEN_MERCHANT_NEEDED end
         elseif needsBuy and quote and not quote.canBuy then status = ns.Merchant.QuoteReason(quote) or ""
+        elseif needsBuy and partialPurchase then status = L.PURCHASE_OTHER_VENDOR
         elseif not needsBuy and craftReady and (ns.status == L.BUY_ONLY_COMPLETE or ns.status == L.BUY_ONLY_READY) then
             -- The station or tool is now available: the instruction to reach it
             -- is obsolete. Offer the craft, recalling an order never confirmed.
@@ -1235,5 +1260,32 @@ function UI.Show()
     switching = false
     displayPage()
     if ns.Refresh then ns.Refresh() else UI.Render() end
+    return true
+end
+
+-- A native profession switch can close and reopen the book within the same
+-- click. Restore only the recipe that this click already saved, never a newer
+-- selection or another page the player chose.
+function UI.RestoreAfterProfessionClick(id, key, quantity)
+    if (ns.InCombat and ns.InCombat()) or (InCombatLockdown and InCombatLockdown())
+        or ns.job or ns.pendingStart or ns.bankConfirmation or ns.stockActive
+        or ns.Merchant.IsBusy()
+        or (ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy())
+        or (ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode()) then return false end
+    local function sameSource(left, right)
+        if not left or not right then return false end
+        if left == right then return true end
+        return ns.API.GetProfessionParentKey
+            and ns.API.GetProfessionParentKey(left) == ns.API.GetProfessionParentKey(right)
+    end
+    local saved = view()
+    if saved.selectedID ~= id or not sameSource(saved.selectedProfessionKey, key) then return false end
+    if ns.selectedID and (ns.selectedID ~= id
+        or not sameSource(ns.selectedProfessionKey, key)) then return false end
+    local recipes = ns.Catalogue and ns.Catalogue.GetRecipes(key)
+    local recipe = recipes and recipes[id]
+    if not recipe or recipe.supported == false or recipe.learned == false then return false end
+    if not UI.Show() or ns.selectedID ~= id or not sameSource(ns.selectedProfessionKey, key) then return false end
+    if quantity ~= nil and ns.SetQuantity then ns.SetQuantity(quantity) end
     return true
 end

@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version bêta : 1.3.0-beta.6 — commandes bancaires intégrées.**
+**Version locale de test : 1.3.0-beta.7 — activation des métiers au clic sur une recette.**
 
 Version stable : **1.2.1**.
 
@@ -146,19 +146,40 @@ son catalogue natif complet.
 
 ## Acheter puis fabriquer
 
+Dans les composants, la première quantité est le stock réellement présent en
+sacs ; le nombre après `/` reste le besoin d'une fabrication. Les sources sont
+séparées : **banque en bleu**, **marchand en jaune**, avec le besoin **À acheter**
+pour le lot sélectionné. Les recettes de la liste conservent leur compteur de
+fabrications possibles. Les quantités ne sont plus mélangées entre parenthèses.
+
+Tu peux acheter les fournitures PNJ manquantes **avant** de récupérer les autres
+ingrédients en banque. Le devis tient compte du stock bancaire connu pour éviter
+de racheter ce qui s'y trouve déjà. Après cet achat, récupère les composants
+nécessaires puis lance la fabrication par un nouveau clic ; l'achat seul ne
+fabrique rien.
+
+Si une recette demande des fournitures de plusieurs vendeurs, **Acheter ici**
+achète uniquement les composants disponibles chez le marchand ouvert. Le prix
+affiché concerne cet achat ; les besoins auprès des autres vendeurs restent
+visibles sur la recette. Rends-toi chez le vendeur suivant puis clique à nouveau.
+Changer de vendeur ne déclenche aucun achat et un achat partiel ne lance pas
+la fabrication.
+
 1. Sélectionne une recette dans le métier habituel ou dans l'onglet CAB.
 2. Choisis la **quantité** souhaitée. **Max** remplit seulement cette quantité
    avec le maximum calculé : il n'achète rien et ne fabrique rien.
-3. Si CAB doit charger le métier, clique **Charger le métier**. Cela charge ses
-   données avec son sort du grimoire, sans achat ni fabrication. Si le chargement
-   est indisponible, clique sur l'onglet du métier à droite, puis reviens dans CAB.
-   Cette étape est normale après `/reload` ou après avoir ouvert un autre métier,
-   même si le catalogue est mémorisé. Le bouton disparaît lorsque le métier de
-   la recette est chargé ; aucun sort de métier n'est lancé automatiquement.
-4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter**. Avec
-   l'achat automatique activé, ouvre un marchand qui les vend et clique dessus.
-   Le devis porte sur l'ensemble des fournitures nécessaires à la quantité choisie.
-5. Après leur réception, le bouton affiche **Créer × N**, où N est le nombre
+3. Le clic sur une recette de CAB active son métier avec son sort du grimoire,
+   y compris dans les favoris. Passer à une autre recette du même métier ne le
+   rouvre pas. Consulter CAB, restaurer une sélection ou changer un filtre
+   n'active aucun métier. Si les données restent indisponibles, le bouton
+   **Charger le métier** reste proposé ; tu peux aussi ouvrir l'onglet du métier
+   à droite, puis revenir dans CAB. Cette activation ne déclenche aucun achat
+   ni aucune fabrication et reste bloquée en combat ou pendant une opération.
+4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter** ou
+   **Acheter ici**. Avec l'achat automatique activé, ouvre un marchand qui les
+   vend et clique dessus. Le devis porte sur les fournitures de ce vendeur pour
+   la quantité choisie.
+5. Une fois tous les ingrédients en sacs, le bouton affiche **Créer × N**, où N est le nombre
    de fabrications sélectionné. Clique dessus pour
    fabriquer le lot choisi.
 
@@ -176,20 +197,26 @@ que la recette choisie.
 
 ## Lire les composants
 
-Le détail indique **en sacs (potentiel) / requis par fabrication**. Le potentiel
-utilise les sources retenues pour le calcul, les intermédiaires et les achats
-PNJ ; la banque connue ne compte que si elle est incluse dans ce calcul. Il peut
-dépasser le besoin si le marchand vend des lots. Les matières partagées sont
-réservées une seule fois dans le plan complet.
+Le détail indique **stock réel en sacs / requis par fabrication**, sans y
+ajouter la banque, les achats à venir ou les recettes intermédiaires. Le
+compteur des recettes conserve son calcul global, qui réserve les matières
+partagées une seule fois.
+
+La liste des composants défile si elle dépasse la place disponible dans CAB.
+Dans la fenêtre native, une longue liste passe sur une colonne défilante pour
+garder les noms et les sources lisibles, sans recouvrir les coûts ni les boutons.
 
 Sous chaque composant, les indications de source sont séparées :
 
-- **Banque : n** : stock personnel connu de ce composant.
-- **Marchand : oui** : fourniture PNJ reconnue, hors marchand ou pendant le
+- **Banque : n**, en bleu : stock personnel connu de ce composant.
+- **Marchand : oui**, en jaune : fourniture PNJ reconnue, hors marchand ou pendant le
   chargement de son inventaire.
 - **Vendu par ce PNJ / Non vendu par ce PNJ** : disponibilité chez le marchand
   actuellement ouvert, après lecture de ses articles.
 - Une quantité marchande indique un stock limité.
+- **À acheter : n** : quantité manquante à acheter pour le lot sélectionné,
+  intermédiaires compris. Le marchand peut imposer des paquets et donc vendre
+  davantage ; le devis détaille alors le surplus.
 
 L'infobulle peut indiquer le dernier vendeur observé. C'est un historique,
 pas une garantie de disponibilité actuelle chez ce vendeur ou dans la zone.
@@ -275,10 +302,11 @@ compris celles des intermédiaires. Les objets déjà possédés ne sont pas val
 Chez le marchand, le devis utilise ses prix et remises actuels. Ailleurs, les
 derniers prix observés donnent une estimation ; un prix inconnu reste signalé.
 
-Un clic sur **Tout acheter** peut acheter plusieurs composants différents.
-Les commandes sont envoyées successivement et leur réception est vérifiée.
-Le marchand ouvert doit vendre tout le panier, et l'argent doit couvrir son
-coût total avant le premier achat.
+Un clic sur **Tout acheter** ou **Acheter ici** peut acheter plusieurs composants
+différents. Les commandes sont envoyées successivement et leur réception est
+vérifiée. Si des fournitures restent à acheter ailleurs, le panier et le devis
+sont limités au vendeur ouvert. L'argent doit couvrir ce panier avant le premier
+achat ; chaque vendeur supplémentaire demande un nouveau clic.
 
 Chaque article conserve sa propre taille de lot. Deux fioles nécessaires,
 vendues par cinq à 20 cuivre, font acheter cinq fioles pour 20 cuivre : les
