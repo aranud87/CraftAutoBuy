@@ -289,6 +289,27 @@ function Merchant.Quote(purchases)
     return quoteBasket(purchases)
 end
 
+-- A recipe can need supplies from several sellers. Return only this seller's
+-- offered items for an explicit purchase phase, plus the untouched deficits
+-- that must be bought elsewhere. Start remains strict about its given basket.
+function Merchant.AvailablePurchases(purchases)
+    local available = catalog()
+    local fullQuote = quoteBasket(purchases, available)
+    if fullQuote.invalid then return nil, fullQuote, {} end
+    local basket, deferred = {}, {}
+    for itemID, quantity in pairs(purchases) do
+        if quantity > 0 then
+            local entry = available[itemID]
+            if entry and validInfo(entry.info) then basket[itemID] = quantity
+            else deferred[itemID] = quantity end
+        end
+    end
+    if not opened or not next(basket) then return nil, fullQuote, deferred end
+    -- Do not shrink a requested quantity to a vendor's limited stock. The live
+    -- quote retains the usual stock, money, bundle and unconfirmed-order vetoes.
+    return basket, quoteBasket(basket, available), deferred
+end
+
 function Merchant.QuoteReason(quote)
     if quote and quote.canBuy then return nil end
     if not opened then

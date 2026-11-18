@@ -3,7 +3,12 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Current stable version: **1.2.1**.
+Latest published stable: **1.2.1**.
+Prepared locally on this branch: **1.2.2**.
+
+This branch backports clearer bag, bank and vendor quantities, bounded reagent layouts,
+bank-aware prepurchases and purchases across multiple vendors. Bank transfers
+and profession activation on recipe clicks remain on the 1.3 beta branch.
 
 The craft button now shows **Craft × N**, the selected number of crafts.
 

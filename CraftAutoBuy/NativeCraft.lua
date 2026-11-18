@@ -58,12 +58,16 @@ local function quotePlan(plan)
     local bankMessage = ns.Bank and ns.Bank.Message(plan)
         or (ns.BankPurchaseWarning and ns.BankPurchaseWarning(ns.recipes, plan))
     if bankMessage then
+        if ns.Bank.Purchase then
+            local purchasePlan, quote, allowed, reason = ns.Bank.Purchase(ns.recipes, plan)
+            if purchasePlan then return allowed, reason, quote, bankMessage, nil, purchasePlan, true end
+        end
         local alternativePlan, alternativeQuote, allowed, reason = ns.Bank.Alternative(ns.recipes, plan)
         return allowed, allowed and L.BANK_OVERRIDE_NOTICE or reason,
-            ns.Merchant.Quote(plan.purchases), bankMessage, alternativeQuote, alternativePlan
+            (ns.PurchaseQuote or ns.Merchant.Quote)(plan.purchases), bankMessage, alternativeQuote, alternativePlan
     end
     if not next(plan.purchases or {}) then return true, nil, nil, nil, nil, plan end
-    local quote = ns.Merchant.Quote(plan.purchases)
+    local quote = (ns.PurchaseQuote or ns.Merchant.Quote)(plan.purchases)
     if not CraftAutoBuyDB or CraftAutoBuyDB.autoBuy ~= true then
         return false, L.CATALOG_AUTO_BUY_DISABLED, quote, nil, nil, plan
     end
@@ -108,8 +112,8 @@ local function showTooltip(button)
         return
     end
     local buying = button.actionIntent == "buy"
-    GameTooltip:SetText(buying and L.ACTION_BUY or ns.ActionButtons.CraftText(button.craftQuantity))
-    GameTooltip:AddLine(buying and L.ACTION_BUY_HELP or L.ACTION_CRAFT_HELP, 1, 1, 1, true)
+    GameTooltip:SetText(button.partialPurchase and L.ACTION_BUY_HERE or buying and L.ACTION_BUY or ns.ActionButtons.CraftText(button.craftQuantity))
+    GameTooltip:AddLine(button.partialPurchase and L.ACTION_BUY_HERE_HELP or buying and L.ACTION_BUY_HELP or L.ACTION_CRAFT_HELP, 1, 1, 1, true)
     -- Reagent rows already identify bank stock. Keep the detailed warning in
     -- the action tooltip, where it cannot overlap reagent names, prices or tracking.
     if button.bankMessage then GameTooltip:AddLine(button.bankMessage, 1, .82, 0, true) end
@@ -285,9 +289,11 @@ function NativeCraft.Refresh()
 
     local plan = quantity == maximum and maximumPlan
         or ns.Planner.Plan(ns.recipes, inventory, ns.vendorItems, id, quantity, bank)
-    local canCreate, createReason, createQuote, createBank, createAlternative, createPlan = quotePlan(plan)
+    local canCreate, createReason, createQuote, createBank, createAlternative, createPlan, prebuy = quotePlan(plan)
     local ready, reason, kind = craftReadiness(id, createPlan)
-    local buyOnly = purchaseOnly(ready, kind, createPlan)
+    local actionQuote = createAlternative or createQuote
+    local partialPurchase = actionQuote and actionQuote.partial == true
+    local buyOnly = ((prebuy or partialPurchase) and (ready or kind == "requirements")) or purchaseOnly(ready, kind, createPlan)
     local idle = not busy() and (not ns.job or matchingJob)
     local canEdit = idle and (not ns.CanEditQuantity or ns.CanEditQuantity())
     state.createQuote, state.allQuote = createQuote, nil
@@ -295,6 +301,7 @@ function NativeCraft.Refresh()
     -- otherwise it shows the bank-aware quote, which belongs to the bank plan.
     state.create.plan = createAlternative and createPlan or plan
     state.create.buyOnly = buyOnly
+    state.create.partialPurchase = partialPurchase
     state.create.actionIntent = createPlan and next(createPlan.purchases or {}) and "buy" or "craft"
     state.create.requirementReason = buyOnly and reason or nil
     state.create.reason = buyOnly and not canCreate and createReason or (not ready and reason or createReason)
@@ -303,7 +310,7 @@ function NativeCraft.Refresh()
     state.create.bankMessage, state.create.alternativeQuote = createBank, createAlternative
     state.cancel = busy() and true or false
     state.create.craftQuantity = quantity
-    local actionText = state.create.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(quantity)
+    local actionText = partialPurchase and L.ACTION_BUY_HERE or state.create.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(quantity)
     local cancelText = ns.job and ns.job.pending and L.STOP_BATCH or L.CANCEL
     if ns.UI and ns.UI.FitActionButton then
         ns.UI.FitActionButton(state.all, L.MAX_QUANTITY, 64, 40)

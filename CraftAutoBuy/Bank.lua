@@ -57,6 +57,23 @@ function Bank.Message(plan)
     return message
 end
 
+-- Buying the missing vendor supplies does not require withdrawing the other
+-- ingredients first. Keep this basket bank-aware: banked supplies must not be
+-- bought again merely because the character is currently at a merchant.
+function Bank.Purchase(recipes, plan)
+    if not plan or plan.craftable ~= true or not next(plan.purchases or {})
+        or not next(plan.bankWithdrawals or {}) then return nil end
+    local quote = (ns.PurchaseQuote or ns.Merchant.Quote)(plan.purchases)
+    if not CraftAutoBuyDB or CraftAutoBuyDB.autoBuy ~= true then
+        return plan, quote, false, L.CATALOG_AUTO_BUY_DISABLED
+    end
+    if quote.unconfirmed and ns.Merchant.HasUnconfirmedOrder and ns.Merchant.HasUnconfirmedOrder() then
+        return plan, quote, false, L.PURCHASE_STILL_UNCONFIRMED
+    end
+    if not ns.Merchant.IsOpen() then return plan, quote, false, L.OPEN_MERCHANT_NEEDED end
+    return plan, quote, quote.canBuy == true, ns.Merchant.QuoteReason(quote)
+end
+
 -- An alternative is a new plan for this quantity only, never a preference or
 -- a modification of the bank-aware projection displayed beside ingredients.
 function Bank.Alternative(recipes, plan)
@@ -66,7 +83,7 @@ function Bank.Alternative(recipes, plan)
     if not alternative.craftable then
         return alternative, nil, false, Bank.Message(plan) or L.PLAN_UNAVAILABLE
     end
-    local quote = ns.Merchant.Quote(alternative.purchases)
+    local quote = (ns.PurchaseQuote or ns.Merchant.Quote)(alternative.purchases)
     if not next(alternative.purchases or {}) then return alternative, quote, true end
     if not CraftAutoBuyDB or CraftAutoBuyDB.autoBuy ~= true then
         return alternative, quote, false, L.CATALOG_AUTO_BUY_DISABLED

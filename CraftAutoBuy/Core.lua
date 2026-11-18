@@ -127,13 +127,24 @@ end
 -- action plan; a separate physical snapshot may still describe stored stock.
 ns.PlanningStock = planningStock
 
+-- The recipe plan remains complete. Only this explicit merchant phase is
+-- limited to supplies offered here; another visit always needs a new click.
+function ns.PurchaseQuote(purchases)
+    if not ns.Merchant.AvailablePurchases then return ns.Merchant.Quote(purchases) end
+    local basket, quote, deferred = ns.Merchant.AvailablePurchases(purchases)
+    if basket then quote.basket = basket end
+    quote.deferredPurchases = deferred
+    quote.partial = basket ~= nil and next(deferred or {}) ~= nil
+    return quote
+end
+
 local function bankPurchaseOverlap(recipes, plan, quote)
     if catalogueIncludesBank() or not ns.Bank or not ns.Bank.Snapshot or not ns.Bank.Message
         or not plan or not plan.craftable or not next(plan.purchases or {}) then return nil end
     local _, bank = ns.Bank.Snapshot(recipes)
-    quote = quote or ns.Merchant.Quote(plan.purchases)
+    quote = quote or ns.PurchaseQuote(plan.purchases)
     local overlaps, retrievals = {}, {}
-    for itemID, needed in pairs(plan.purchases) do
+    for itemID, needed in pairs(quote and quote.basket or plan.purchases) do
         local purchased = quote and quote.purchaseQuantities and quote.purchaseQuantities[itemID] or needed
         local stored = bank and bank[itemID] or 0
         if type(purchased) == "number" and purchased > 0 and stored > 0 then
@@ -168,6 +179,10 @@ end
 
 local function bankMessage()
     return ns.Bank and ns.Bank.Message(ns.plan)
+end
+
+local function bankPurchasePlan()
+    if ns.Bank and ns.Bank.Purchase then return ns.Bank.Purchase(activeRecipes(), ns.plan) end
 end
 
 local function clearBankApproval()
@@ -251,7 +266,7 @@ function ns.Refresh()
             ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank)
             ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank)
         end
-        ns.quote = ns.Merchant.Quote(ns.plan.purchases)
+        ns.quote = ns.PurchaseQuote(ns.plan.purchases)
     else
         ns.plan, ns.maxCrafts, ns.quote = nil, 0, nil
     end
@@ -398,10 +413,22 @@ local function prepareJob()
     return true
 end
 
+-- A vendor-only preparation can reuse a partially completed project. Once its
+-- temporary job ends, keep the displayed remainder rather than the original
+-- quantity that created the project.
+local function preserveBankPurchaseQuantity(job)
+    if job and job.purchaseOnly and ns.selectedID == job.recipeID
+        and ns.selectedProfessionKey == job.professionKey then
+        ns.quantity = job.remaining
+        quantityRecipeID, quantityProfessionKey = job.recipeID, job.professionKey
+    end
+end
+
 function ns.Cancel(stopRequested)
     -- All callers are explicit user actions (Cancel buttons or /cab stop).
     -- Detach first: the client can synchronously emit interruption events.
     local pending = ns.job and ns.job.pending
+    preserveBankPurchaseQuantity(ns.job)
     clearBankApproval()
     ns.job = nil
     ns.pendingStart = nil
@@ -478,6 +505,14 @@ local function purchaseGuard(job)
         if ns.BankPurchaseWarning(job.recipes, purchasePlan, remainingQuote) then
             return false, L.BANK_OVERRIDE_CHANGED
         end
+        if job.bankPurchaseOnly or job.partialPurchaseOnly then
+            -- The queue's targets are fixed at the click. Stop if newly known
+            -- bank supplies or another receipt remove any of that deficit.
+            for itemID, needed in pairs(remainingBasket or plan.purchases or {}) do
+                if needed > (plan.purchases[itemID] or 0) then return false, L.BANK_OVERRIDE_CHANGED end
+            end
+            return true
+        end
         return not (ns.Bank and ns.Bank.Message(plan)), L.BANK_OVERRIDE_CHANGED
     end
 end
@@ -494,11 +529,13 @@ local function buyForCraft()
     if ns.job.pending then return false end
     ns.Refresh()
     if ns.plan and ns.plan.craftable then
-        if bankMessage() then ns.status = bankMessage(); ns.Refresh(); return false end
+        if bankMessage() and not (ns.job.bankPurchaseOnly and bankPurchasePlan()) then
+            ns.status = bankMessage(); ns.Refresh(); return false
+        end
         if ns.BankPurchaseWarning(ns.job.recipes, ns.plan, ns.quote) then
             clearBankApproval(); ns.status = L.BANK_OVERRIDE_CHANGED; ns.Refresh(); return false
         end
-        local ok, reason = ns.Merchant.Start(ns.plan.purchases, ns.job.bankApproval, purchaseGuard(ns.job))
+        local ok, reason = ns.Merchant.Start(ns.quote.basket or ns.plan.purchases, ns.job.bankApproval, purchaseGuard(ns.job))
         if ok then commitAllQuantity() end
         if not ok then
             ns.status = reason or L.PURCHASES_CANNOT_START
@@ -531,6 +568,7 @@ function ns.PausePurchaseContinuation()
         -- reuse the original ceiling after a partial/interrupted basket.
         if complete then clearSpendingApproval() else clearBankApproval() end
         if purchaseOnly then
+            preserveBankPurchaseQuantity(job)
             ns.job = nil
             ns.Merchant.Stop()
         end
@@ -544,6 +582,7 @@ local function pause(message, alreadyReported)
     lastPause = message
     if ns.job then ns.job.running = false end
     if ns.job and ns.job.purchaseOnly then
+        preserveBankPurchaseQuantity(ns.job)
         clearBankApproval()
         ns.job = nil
         ns.Merchant.Stop()
@@ -626,7 +665,7 @@ end
 local function matchesActionIntent(actionIntent)
     if actionIntent == nil then return true end
     local plan = ns.plan
-    if bankMessage() and ns.Bank then plan = ns.Bank.Alternative(activeRecipes(), plan) end
+    if bankMessage() and ns.Bank then plan = bankPurchasePlan() or ns.Bank.Alternative(activeRecipes(), plan) end
     local needsPurchase = plan and next(plan.purchases or {}) ~= nil
     return actionIntent == (needsPurchase and "buy" or "craft")
 end
@@ -643,6 +682,10 @@ end
 
 local function requestBankConfirmation(purchaseOnly, actionIntent)
     local recipes = activeRecipes()
+    -- This action buys only the preferred plan's missing vendor supplies.
+    -- A bank withdrawal is still needed afterwards, but does not authorize a
+    -- bags-only replan or a repurchase of banked supplies.
+    if bankPurchasePlan() and not ns.BankPurchaseWarning(recipes, ns.plan, ns.quote) then return false end
     local message = bankMessage() or ns.BankPurchaseWarning(recipes, ns.plan, ns.quote)
     if not message then return false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, ns.plan)
@@ -787,6 +830,9 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
     local key = ns.job and ns.job.professionKey or ns.selectedProfessionKey or ns.professionKey
     if not id or not key then pause(L.SELECT_RECIPE); return end
     ns.Refresh()
+    local prebuy = bankPurchasePlan() ~= nil
+    local partialPurchase = ns.quote and ns.quote.partial == true
+    if prebuy or partialPurchase then purchaseOnlyIntent, allowCraft = true, false end
     -- Inventory may have changed since the action label was rendered. A Buy
     -- click never turns into a cast; a Craft click never authorizes a purchase.
     if not matchesActionIntent(actionIntent) then refuseClick(L.ACTION_CHANGED); return end
@@ -794,7 +840,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
     -- profession switch, even if a station becomes available while waiting.
     if not purchaseOnlyIntent and ns.API.IsOwnProfession() and ns.API.GetProfessionKey() == key then
         local readinessPlan = ns.plan
-        if bankMessage() and ns.Bank then readinessPlan = ns.Bank.Alternative(activeRecipes(), ns.plan) end
+        if bankMessage() and ns.Bank then readinessPlan = bankPurchasePlan() or ns.Bank.Alternative(activeRecipes(), ns.plan) end
         if readinessPlan and next(readinessPlan.purchases or {}) then
             local _, _, kind = ns.CraftReadiness(id, readinessPlan)
             purchaseOnlyIntent = kind == "requirements"
@@ -837,6 +883,9 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
         refuseClick(err or L.CATALOGUE_RECIPE_CHANGED); return
     end
     if ns.job then ns.job.recipes = recipes; ns.Refresh() end
+    prebuy = bankPurchasePlan() ~= nil
+    partialPurchase = ns.quote and ns.quote.partial == true
+    if prebuy or partialPurchase then purchaseOnlyIntent, allowCraft = true, false end
     if not matchesActionIntent(actionIntent) then refuseClick(L.ACTION_CHANGED); return end
     if requestBankConfirmation(purchaseOnlyIntent, actionIntent) then return end
     if not approvedBasket(ns.plan, ns.quote, bankOverride or (ns.job and ns.job.bankApproval)) then
@@ -845,7 +894,11 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
     end
     local existingProject = ns.job ~= nil and not ns.job.purchaseOnly
     if not ns.job and not prepareJob() then return end
-    if purchaseOnlyIntent then ns.job.purchaseOnly = true end
+    if purchaseOnlyIntent then
+        ns.job.purchaseOnly = true
+        ns.job.bankPurchaseOnly = prebuy or nil
+        ns.job.partialPurchaseOnly = partialPurchase or nil
+    end
     local ready, reason, kind = ns.CraftReadiness(id, ns.plan)
     if not ready and kind ~= "requirements" then pause(reason); return end
     if not matchesActionIntent(actionIntent) then refuseClick(L.ACTION_CHANGED); return end
@@ -883,7 +936,8 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
             pause(reason, reason == L.BANK_OVERRIDE_CHANGED)
             explainRefusal(reason)
         else
-            ns.status = purchaseOnly and L.BUY_ONLY_HELP or L.BUY_THEN_CRAFT
+            ns.status = ns.job.partialPurchaseOnly and L.ACTION_BUY_HERE_HELP
+                or (ns.job.bankPurchaseOnly and L.BUY_THEN_CRAFT or (purchaseOnly and L.BUY_ONLY_HELP or L.BUY_THEN_CRAFT))
         end
         ns.Refresh()
         return
@@ -1272,16 +1326,25 @@ frame:SetScript("OnUpdate", function()
         if job.purchaseOnly or not readyWithoutPurchase then clearBankApproval() else clearSpendingApproval() end
         if job.purchaseOnly then
             local complete = readyWithoutPurchase
+            local bankComplete = job.bankPurchaseOnly and ns.plan and ns.plan.craftable
+                and not next(ns.plan.purchases or {})
+            local withdrawal = bankComplete and ns.Bank and ns.Bank.Message(ns.plan)
             local approvalChanged = ns.Merchant.GetStatus() == L.BANK_OVERRIDE_CHANGED
             -- Supplies from another source can complete the bags of an order that
             -- timed out, or of a phase that sent no order: never announce that
             -- a purchase was received then.
             local unconfirmed = ns.Merchant.HasUnconfirmedOrder and ns.Merchant.HasUnconfirmedOrder()
                 or (ns.Merchant.PhaseOrdered and not ns.Merchant.PhaseOrdered())
+            local partialComplete = job.partialPurchaseOnly and ns.plan and ns.plan.craftable
+                and next(ns.plan.purchases or {}) and not unconfirmed
+                and ns.Merchant.GetStatus() == L.REAGENTS_PURCHASED
+            preserveBankPurchaseQuantity(job)
             ns.job, job = nil, nil
-            ns.status = complete and (unconfirmed and L.BUY_ONLY_READY or L.BUY_ONLY_COMPLETE)
+            ns.status = partialComplete and (L.REAGENTS_PURCHASED .. "\n" .. L.PURCHASE_OTHER_VENDOR)
+                or bankComplete and not unconfirmed and (withdrawal and (L.REAGENTS_PURCHASED .. "\n" .. withdrawal) or L.PURCHASE_READY_CLICK)
+                or complete and (unconfirmed and L.BUY_ONLY_READY or L.BUY_ONLY_COMPLETE)
                 or (approvalChanged and L.BANK_OVERRIDE_CHANGED or L.PURCHASE_CRAFT_INCOMPLETE)
-            if complete then ns.Print(ns.status) end
+            if complete or partialComplete or (bankComplete and not unconfirmed) then ns.Print(ns.status) end
             ns.Refresh()
         elseif readyWithoutPurchase then
             pause(L.PURCHASE_READY_CLICK)
