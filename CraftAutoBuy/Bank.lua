@@ -186,11 +186,11 @@ function Bank.RequestConfirmation(message, quote, onAccept, onCancel, complement
     pendingConfirmation = data
     local text
     if choices then
-        text = L.BANK_OVERRIDE_TITLE .. "\n\n" .. L.BANK_BUY_CHOICE_PROMPT
-            .. "\n\n" .. (message or "")
-            .. "\n\n" .. L.BANK_BUY_WITHOUT .. "\n" .. L.BANK_BUY_WITHOUT_HELP
+        text = L.BANK_BUY_CHOICE_PROMPT
+            .. "\n\n|cff59b3ff" .. (message or "") .. "|r"
+            .. "\n\n|cffffd100" .. L.BANK_BUY_WITHOUT .. "|r\n\n|cffbfbfbf" .. L.BANK_BUY_WITHOUT_HELP .. "|r"
             .. "\n" .. purchaseContents(quote) .. "\n" .. ns.UI.CostSummary(quote)
-            .. "\n\n" .. L.BANK_BUY_COMPLEMENT .. "\n" .. L.BANK_BUY_COMPLEMENT_HELP
+            .. "\n\n|cffffd100" .. L.BANK_BUY_COMPLEMENT .. "|r\n\n|cffbfbfbf" .. L.BANK_BUY_COMPLEMENT_HELP .. "|r"
             .. "\n" .. purchaseContents(complement.quote) .. "\n" .. ns.UI.CostSummary(complement.quote)
     else
         text = L.BANK_OVERRIDE_TITLE .. "\n\n"
