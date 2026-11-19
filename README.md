@@ -5,6 +5,10 @@
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
 Current stable version: **1.2.2**.
 Beta version: **1.3.0-beta.7**.
+Local test version on this branch: **1.2.3**.
+
+This test build restores the confirmation before repurchasing vendor supplies
+already stored in the bank, while retaining bank-aware prepurchases.
 
 This branch backports clearer bag, bank and vendor quantities, bounded reagent layouts,
 bank-aware prepurchases and purchases across multiple vendors. Bank transfers

@@ -1,6 +1,8 @@
 # CraftAutoBuy
 
-**Version stable : 1.2.2 — corrections d’affichage et d’achat.**
+**Version locale de test : 1.2.3 — confirmation du rachat des fournitures bancaires.**
+
+Dernière version stable publiée : **1.2.2**.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 

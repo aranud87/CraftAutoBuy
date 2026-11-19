@@ -13,7 +13,7 @@
 ## Notes-zhCN: 计入商人材料的可制造数量、按需购买和中间材料制造。
 ## Notes-zhTW: 計入商人材料的可製造數量、按需購買與中間材料製造。
 ## Author: aranud87
-## Version: 1.2.2
+## Version: 1.2.3
 ## X-Website: https://github.com/aranud87/CraftAutoBuy
 ## X-License: MIT
 ## SavedVariablesPerCharacter: CraftAutoBuyDB
