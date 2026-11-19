@@ -3,12 +3,12 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Latest published stable: **1.2.1**.
-Prepared locally on this branch: **1.3.0-beta.7**.
+Current stable version: **1.2.2**.
+Version on this branch: **1.3.0-beta.7**.
 
 This branch includes the shared display and purchasing fixes, bank transfers
 and profession activation when a recipe is clicked.
-Latest published beta: **1.3.0-beta.6**.
+Latest beta: **1.3.0-beta.7**.
 
 The beta adds an easy way to deposit crafting reagents into your bank and
 withdraw the materials needed for a recipe directly from the CAB tab.

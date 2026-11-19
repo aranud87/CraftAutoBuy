@@ -1,8 +1,8 @@
 # CraftAutoBuy
 
-**Version locale de test : 1.3.0-beta.7 — activation des métiers au clic sur une recette.**
+**Version bêta : 1.3.0-beta.7 — activation des métiers au clic sur une recette.**
 
-Version stable : **1.2.1**.
+Version stable : **1.2.2**.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
@@ -71,7 +71,7 @@ restent pris en compte dans les deux positions de ce filtre. Même avec Banque
 décoché, racheter des fournitures déjà connues en banque demande de confirmer
 **Continuer sans banque** pour le projet en cours.
 
-## Transferts bancaires — version locale de test
+## Transferts bancaires — version bêta
 
 Le bouton **Déposer les composants**, à gauche de la recherche de la banque
 personnelle native, dépose les composants des sacs ordinaires dans l'ordre du
