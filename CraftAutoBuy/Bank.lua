@@ -63,6 +63,26 @@ end
 function Bank.Purchase(recipes, plan)
     if not plan or plan.craftable ~= true or not next(plan.purchases or {})
         or not next(plan.bankWithdrawals or {}) then return nil end
+    -- Keep the existing "continue without bank" choice when the bank only
+    -- holds vendor supplies and this seller can replace some of them. Raw
+    -- materials and stored intermediates still use the bank-aware prepurchase:
+    -- choosing another route must not silently remake those ingredients.
+    local vendorWithdrawals = true
+    for itemID, quantity in pairs(plan.bankWithdrawals) do
+        if count(quantity) > 0 and not (ns.vendorItems and ns.vendorItems[itemID]) then
+            vendorWithdrawals = false
+            break
+        end
+    end
+    if vendorWithdrawals then
+        local alternative, alternativeQuote, allowed = Bank.Alternative(recipes, plan)
+        if allowed then
+            local basket = alternativeQuote and alternativeQuote.basket or alternative and alternative.purchases or {}
+            for itemID, quantity in pairs(basket) do
+                if count(quantity) > 0 and count(plan.bankWithdrawals[itemID]) > 0 then return nil end
+            end
+        end
+    end
     local quote = (ns.PurchaseQuote or ns.Merchant.Quote)(plan.purchases)
     if not CraftAutoBuyDB or CraftAutoBuyDB.autoBuy ~= true then
         return plan, quote, false, L.CATALOG_AUTO_BUY_DISABLED

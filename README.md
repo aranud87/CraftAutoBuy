@@ -4,7 +4,10 @@
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
 Current stable version: **1.2.2**.
-Version on this branch: **1.3.0-beta.7**.
+Local test version on this branch: **1.3.0-beta.8**.
+
+This test build restores the confirmation before repurchasing vendor supplies
+already stored in the bank, while retaining bank-aware prepurchases.
 
 This branch includes the shared display and purchasing fixes, bank transfers
 and profession activation when a recipe is clicked.

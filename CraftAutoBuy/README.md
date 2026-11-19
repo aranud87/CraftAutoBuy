@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version bêta : 1.3.0-beta.7 — activation des métiers au clic sur une recette.**
+**Version locale de test : 1.3.0-beta.8 — confirmation du rachat des fournitures bancaires.**
 
 Version stable : **1.2.2**.
 
