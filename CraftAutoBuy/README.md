@@ -1,8 +1,6 @@
 # CraftAutoBuy
 
-**Version préparée : 1.2.2 — corrections d’affichage et d’achat.**
-
-Dernière version stable publiée : **1.2.1**.
+**Version stable : 1.2.2 — corrections d’affichage et d’achat.**
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
