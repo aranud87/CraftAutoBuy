@@ -17,7 +17,7 @@ local rescanAt, lastSelectionCheck = nil, 0
 local scanAttempts = 0
 local professionClosed = false
 local openOnMerchantVisit = false
-local bankOverride
+local bankOverride, bankPreparationApproval
 local learnVendors
 local readinessSnapshot
 local initialized = false
@@ -182,11 +182,15 @@ local function bankMessage()
 end
 
 local function bankPurchasePlan()
-    if ns.Bank and ns.Bank.Purchase then return ns.Bank.Purchase(activeRecipes(), ns.plan) end
+    if ns.Bank and ns.Bank.Purchase then
+        return ns.Bank.Purchase(activeRecipes(), ns.plan,
+            bankPreparationApproval ~= nil or (ns.job and ns.job.bankPurchaseOnly) == true)
+    end
 end
 
 local function clearBankApproval()
     bankOverride = nil
+    bankPreparationApproval = nil
     if ns.job then ns.job.ignoreBank, ns.job.bankApproval = false, nil end
 end
 
@@ -195,6 +199,7 @@ end
 -- explicit click can actually craft that intermediate after approval expires.
 local function clearSpendingApproval()
     bankOverride = nil
+    bankPreparationApproval = nil
     if ns.job then ns.job.bankApproval = nil end
 end
 
@@ -409,7 +414,7 @@ local function prepareJob()
     ns.job = {
         recipeID = ns.selectedID, remaining = ns.quantity, total = ns.quantity,
         recipes = activeRecipes(), professionKey = ns.selectedProfessionKey or ns.professionKey, running = false,
-        ignoreBank = bankOverride ~= nil, bankApproval = bankOverride,
+        ignoreBank = bankOverride ~= nil, bankApproval = bankOverride or bankPreparationApproval,
         catalogueIncludeBank = includeBank,
     }
     ns.Refresh()
@@ -686,6 +691,32 @@ local function runWithoutBank(approval, purchaseOnly, actionIntent)
     ns.Refresh()
 end
 
+local function runBankPreparation(approval)
+    local previous = bankPreparationApproval
+    bankPreparationApproval = approval
+    if ns.job then ns.job.ignoreBank, ns.job.bankApproval = false, approval end
+    local ok, err = pcall(ns.Start, true, false, "buy")
+    bankPreparationApproval = previous
+    if not ok then error(err) end
+    ns.Refresh()
+end
+
+local function purchaseApproval(quote, purchases)
+    local approval = {totalCost = quote.totalCost, purchaseQuantities = {}}
+    for id, quantity in pairs(quote.purchaseQuantities or purchases or {}) do
+        approval.purchaseQuantities[id] = quantity
+    end
+    return approval
+end
+
+local function differentPurchaseCarts(left, leftPlan, right, rightPlan)
+    local a = left.purchaseQuantities or left.basket or leftPlan.purchases or {}
+    local b = right.purchaseQuantities or right.basket or rightPlan.purchases or {}
+    for id, quantity in pairs(a) do if quantity ~= (b[id] or 0) then return true end end
+    for id, quantity in pairs(b) do if quantity ~= (a[id] or 0) then return true end end
+    return false
+end
+
 local function requestBankConfirmation(purchaseOnly, actionIntent)
     local recipes = activeRecipes()
     -- This action buys only the preferred plan's missing vendor supplies.
@@ -696,12 +727,17 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
     if not message then return false end
     local alternative, quote, allowed, reason = ns.Bank.Alternative(recipes, ns.plan)
     if not allowed then pause(reason or message); return true end
-    local approval = {totalCost = quote.totalCost, purchaseQuantities = {}}
-    for id, quantity in pairs(quote.purchaseQuantities or alternative.purchases or {}) do
-        approval.purchaseQuantities[id] = quantity
-    end
+    local approval = purchaseApproval(quote, alternative.purchases)
     local _, overlaps = bankPurchaseOverlap(recipes, alternative, quote)
     approval.bankRepurchases = overlaps
+    local complementQuote, complementApproval
+    if ns.Bank.Purchase then
+        local plan, priced, canBuy = ns.Bank.Purchase(recipes, ns.plan, true)
+        if plan and canBuy and differentPurchaseCarts(quote, alternative, priced, plan) then
+            complementQuote = priced
+            complementApproval = purchaseApproval(priced, plan.purchases)
+        end
+    end
     local context = {
         recipeID = ns.job and ns.job.recipeID or ns.selectedID,
         professionKey = ns.job and ns.job.professionKey or ns.selectedProfessionKey,
@@ -711,13 +747,15 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
         purchaseOnly = purchaseOnly == true,
         actionIntent = actionIntent,
         catalogueIncludeBank = catalogueIncludesBank(),
+        complementQuote = complementQuote,
+        complementApproval = complementApproval,
     }
     ns.bankConfirmation = context
     ns.status = message
     local function cancel()
         if ns.bankConfirmation == context then ns.bankConfirmation = nil; ns.Refresh() end
     end
-    local function acceptAction()
+    local function acceptAction(complementChoice)
         if ns.bankConfirmation ~= context then return end
         ns.CancelBankConfirmation()
         local id = ns.job and ns.job.recipeID or ns.selectedID
@@ -735,6 +773,13 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
             if ns.job then ns.job.recipes = fresh end
         end
         ns.Refresh()
+        if complementChoice then
+            local plan, priced, canBuy, why = ns.Bank.Purchase(activeRecipes(), ns.plan, true)
+            if not plan or not canBuy then pause(why or L.BANK_OVERRIDE_CHANGED); return end
+            if not approvedBasket(plan, priced, context.complementApproval) then pause(L.BANK_OVERRIDE_CHANGED); return end
+            runBankPreparation(context.complementApproval)
+            return
+        end
         local freshPlan, freshQuote, canProceed, why = ns.Bank.Alternative(activeRecipes(), ns.plan)
         if not canProceed then pause(why or L.PLAN_UNAVAILABLE); return end
         if not approvedBasket(freshPlan, freshQuote, approval) then pause(L.BANK_OVERRIDE_CHANGED); return end
@@ -742,18 +787,19 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
         if not bankPurchasesApproved(freshOverlaps, approval) then pause(L.BANK_OVERRIDE_CHANGED); return end
         runWithoutBank(approval, context.purchaseOnly, context.actionIntent)
     end
-    local function accept()
+    local function accept(complementChoice)
         if ns.bankConfirmation ~= context then return end
         local request = allQuantityRequest
         if request then request.executing = true; lastPause, lastPrinted = nil, nil end
-        local ok, err = pcall(acceptAction)
+        local ok, err = pcall(acceptAction, complementChoice)
         if request then request.executing = false end
         settleAllQuantity()
         ns.Refresh()
         if not ok then error(err) end
         if request then reportUnstartedAll(request) end
     end
-    local shown = ns.Bank.RequestConfirmation(message, quote, accept, cancel)
+    local complement = complementQuote and {quote = complementQuote, onAccept = function() accept(true) end} or nil
+    local shown = ns.Bank.RequestConfirmation(message, quote, function() accept(false) end, cancel, complement)
     if not shown then ns.bankConfirmation = nil; ns.status = message end
     ns.Refresh()
     return true
@@ -898,7 +944,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
     if prebuy or partialPurchase then purchaseOnlyIntent, allowCraft = true, false end
     if not matchesActionIntent(actionIntent) then refuseClick(L.ACTION_CHANGED); return end
     if requestBankConfirmation(purchaseOnlyIntent, actionIntent) then return end
-    if not approvedBasket(ns.plan, ns.quote, bankOverride or (ns.job and ns.job.bankApproval)) then
+    if not approvedBasket(ns.plan, ns.quote, bankPreparationApproval or bankOverride or (ns.job and ns.job.bankApproval)) then
         clearBankApproval()
         pause(L.BANK_OVERRIDE_CHANGED); return
     end

@@ -4,6 +4,13 @@
 
 Version stable : **1.2.2**.
 
+Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
+**Acheter sans utiliser la banque** tient compte des sacs seuls ;
+**Acheter le complément** tient aussi compte du stock bancaire connu.
+Les quantités réellement achetées, y compris les lots du vendeur, sont indiquées
+pour chaque choix. **Annuler** et **Échap** ne déclenchent aucun achat.
+Après un complément, les composants bancaires restent à récupérer avant de fabriquer.
+
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 La 1.2.1 remplace le libellé ambigu « Tout créer » par **Créer × N**, avec le
@@ -175,7 +182,7 @@ la fabrication.
    **Charger le métier** reste proposé ; tu peux aussi ouvrir l'onglet du métier
    à droite, puis revenir dans CAB. Cette activation ne déclenche aucun achat
    ni aucune fabrication et reste bloquée en combat ou pendant une opération.
-4. Si des fournitures PNJ manquent, le bouton affiche **Tout acheter** ou
+4. Si des fournitures PNJ manquent, le bouton affiche **Acheter** ou
    **Acheter ici**. Avec l'achat automatique activé, ouvre un marchand qui les
    vend et clique dessus. Le devis porte sur les fournitures de ce vendeur pour
    la quantité choisie.
@@ -302,7 +309,7 @@ compris celles des intermédiaires. Les objets déjà possédés ne sont pas val
 Chez le marchand, le devis utilise ses prix et remises actuels. Ailleurs, les
 derniers prix observés donnent une estimation ; un prix inconnu reste signalé.
 
-Un clic sur **Tout acheter** ou **Acheter ici** peut acheter plusieurs composants
+Un clic sur **Acheter** ou **Acheter ici** peut acheter plusieurs composants
 différents. Les commandes sont envoyées successivement et leur réception est
 vérifiée. Si des fournitures restent à acheter ailleurs, le panier et le devis
 sont limités au vendeur ouvert. L'argent doit couvrir ce panier avant le premier
@@ -323,7 +330,7 @@ Vérifie tes sacs et ton argent, puis suis le message affiché avant de reprendr
 
 ## Feu, forge et outils
 
-Les prérequis manquants apparaissent en rouge. **Tout acheter** peut acheter
+Les prérequis manquants apparaissent en rouge. **Acheter** peut acheter
 les fournitures même sans le feu de cuisine, la forge, l'enclume ou l'outil
 nécessaire. Rejoins ensuite le lieu adapté ou récupère l'outil, puis clique sur
 **Créer × N**. Arriver sur place ne lance aucune fabrication.
@@ -348,7 +355,7 @@ pour reprendre ; aucune reprise de fabrication ne se déclenche toute seule.
 Saisis **`/cab`** pour ouvrir les réglages :
 
 - **Achat automatique**, activé par défaut : autorise les achats nécessaires
-  au clic sur Tout acheter, avec un marchand adapté ouvert.
+  au clic sur Acheter, avec un marchand adapté ouvert.
 - **Ouvrir les métiers chez les vendeurs de fournitures**, désactivé par
   défaut : ouvre CAB à la prochaine visite d'un marchand qui vend des
   fournitures de craft reconnues. Le contenu du marchand est utilisé, pas son
