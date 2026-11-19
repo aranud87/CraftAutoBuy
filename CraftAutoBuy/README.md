@@ -1,8 +1,6 @@
 # CraftAutoBuy
 
-**Version locale de test : 1.2.3 — confirmation du rachat des fournitures bancaires.**
-
-Dernière version stable publiée : **1.2.2**.
+**Version stable : 1.2.3 — choix d'achat avec ou sans stock bancaire.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -76,7 +74,7 @@ Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
 directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
 restent pris en compte dans les deux positions de ce filtre. Même avec Banque
 décoché, racheter des fournitures déjà connues en banque demande de confirmer
-**Continuer sans banque** pour le projet en cours.
+le devis pour le projet en cours.
 
 ## Installation
 
@@ -250,9 +248,10 @@ de vérification nécessaire ; rouvre la banque pour actualiser le relevé.
 
 Avec le filtre **Banque** activé, quand la quantité choisie nécessite des
 composants en banque, tu peux aller les récupérer. Si les sacs et les achats
-permettent une autre solution, le bouton
-d'action propose **Continuer sans banque** avec confirmation du nouveau devis,
-des lots et du surplus. Ce choix concerne seulement le projet en cours ; il
+permettent une autre solution, **Acheter** demande de confirmer le nouveau devis,
+les lots et le surplus. Quand les deux modes sont possibles, la fenêtre propose
+**Acheter sans utiliser la banque** ou **Acheter le complément**, avec les
+quantités réellement achetées et leur prix. Ce choix concerne seulement le projet en cours ; il
 n'est pas une préférence permanente. Annuler cette confirmation ne dépense rien.
 Avec Banque décoché, le calcul reste sans banque, mais cette confirmation est
 également demandée avant de racheter des fournitures déjà connues en banque.

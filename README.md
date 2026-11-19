@@ -3,12 +3,12 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Current stable version: **1.2.2**.
-Beta version: **1.3.0-beta.7**.
-Local test version on this branch: **1.2.3**.
+Current stable version: **1.2.3**.
+Beta version: **1.3.0-beta.8**.
 
-This test build restores the confirmation before repurchasing vendor supplies
-already stored in the bank, while retaining bank-aware prepurchases.
+This update restores the choice between buying without using bank stock and
+buying only the remainder. Each option shows its actual quantities and price,
+including vendor bundles, before you confirm.
 
 This branch backports clearer bag, bank and vendor quantities, bounded reagent layouts,
 bank-aware prepurchases and purchases across multiple vendors. Bank transfers
@@ -43,7 +43,10 @@ from the bank. Bag upgrade estimates are simulations and do not move items.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version stable : **1.2.1**.
+dans **World of Warcraft: Forever**. Version stable : **1.2.3**.
+
+La confirmation d'achat permet de choisir entre acheter sans utiliser la banque
+et acheter le complément, avec les quantités et le prix de chaque option.
 
 Le bouton de fabrication affiche désormais **Créer × N**, le nombre de
 fabrications sélectionné.
