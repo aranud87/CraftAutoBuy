@@ -3,15 +3,15 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Current stable version: **1.2.2**.
-Local test version on this branch: **1.3.0-beta.8**.
+Current stable version: **1.2.3**.
+Beta version on this branch: **1.3.0-beta.8**.
 
-This test build restores the confirmation before repurchasing vendor supplies
-already stored in the bank, while retaining bank-aware prepurchases.
+This update includes the purchasing regression fix from 1.2.3: choose between
+buying without using bank stock and buying only the remainder, with actual
+quantities and prices shown before confirmation.
 
 This branch includes the shared display and purchasing fixes, bank transfers
 and profession activation when a recipe is clicked.
-Latest beta: **1.3.0-beta.7**.
 
 The beta adds an easy way to deposit crafting reagents into your bank and
 withdraw the materials needed for a recipe directly from the CAB tab.
@@ -45,8 +45,11 @@ from the bank. Bag upgrade estimates are simulations and do not move items.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version stable : **1.2.1**.
-Sources de la dernière bêta : **1.3.0-beta.6**.
+dans **World of Warcraft: Forever**. Version stable : **1.2.3**.
+Sources de la dernière bêta : **1.3.0-beta.8**.
+
+Cette bêta reprend la correction d'achat de la 1.2.3 : choisir entre acheter
+sans utiliser la banque et acheter le complément, avec les deux devis détaillés.
 
 La bêta facilite le dépôt des composants d'artisanat en banque et la
 récupération des ingrédients d'une recette depuis l'onglet CAB.

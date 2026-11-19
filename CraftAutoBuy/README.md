@@ -1,8 +1,8 @@
 # CraftAutoBuy
 
-**Version locale de test : 1.3.0-beta.8 — confirmation du rachat des fournitures bancaires.**
+**Version bêta : 1.3.0-beta.8 — choix d'achat avec ou sans stock bancaire.**
 
-Version stable : **1.2.2**.
+Version stable : **1.2.3**.
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -76,7 +76,7 @@ Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
 directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
 restent pris en compte dans les deux positions de ce filtre. Même avec Banque
 décoché, racheter des fournitures déjà connues en banque demande de confirmer
-**Continuer sans banque** pour le projet en cours.
+le devis pour le projet en cours.
 
 ## Transferts bancaires — version bêta
 
@@ -114,8 +114,8 @@ le transfert.
 
 Les commandes sont intégrées aux fenêtres existantes. Un addon qui remplace
 la banque peut masquer le bouton de dépôt natif. Les banques de compte et de
-guilde sont exclues. L'affichage et les transferts réels, notamment avec les
-addons de sacs, restent à tester dans Forever avant publication.
+guilde sont exclues. Les interactions avec les addons qui remplacent la banque
+ou les sacs peuvent dépendre de leur propre interface.
 
 ## Installation
 
@@ -290,9 +290,10 @@ de vérification nécessaire ; rouvre la banque pour actualiser le relevé.
 
 Avec le filtre **Banque** activé, quand la quantité choisie nécessite des
 composants en banque, tu peux aller les récupérer. Si les sacs et les achats
-permettent une autre solution, le bouton
-d'action propose **Continuer sans banque** avec confirmation du nouveau devis,
-des lots et du surplus. Ce choix concerne seulement le projet en cours ; il
+permettent une autre solution, **Acheter** demande de confirmer le nouveau devis,
+les lots et le surplus. Quand les deux modes sont possibles, la fenêtre propose
+**Acheter sans utiliser la banque** ou **Acheter le complément**, avec les
+quantités réellement achetées et leur prix. Ce choix concerne seulement le projet en cours ; il
 n'est pas une préférence permanente. Annuler cette confirmation ne dépense rien.
 Avec Banque décoché, le calcul reste sans banque, mais cette confirmation est
 également demandée avant de racheter des fournitures déjà connues en banque.
