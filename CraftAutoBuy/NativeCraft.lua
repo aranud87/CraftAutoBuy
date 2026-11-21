@@ -8,6 +8,34 @@ ns.NativeCraft = NativeCraft
 -- Separate sibling controls leave native scripts and crafting APIs untouched.
 local state, refreshing
 
+-- Block native clicks too, including recipes CAB does not replace. Never
+-- rewrite native OnClick handlers or their readiness/enablement state.
+local function transferClickGuards()
+    local blocked = ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy()
+    if blocked and not state.transferGuards then
+        state.transferGuards = {}
+        for index=1,2 do
+            local original = state.originals[index]
+            local guard = CreateFrame("Frame", nil, original)
+            guard:SetAllPoints(original)
+            guard:SetFrameLevel(original:GetFrameLevel()+5)
+            if guard.EnableMouse then guard:EnableMouse(true) end
+            guard:SetScript("OnMouseDown",function() end)
+            guard:SetScript("OnMouseUp",function() end)
+            guard:SetScript("OnEnter",function(self)
+                if GameTooltip then
+                    GameTooltip:SetOwner(self,"ANCHOR_TOP")
+                    GameTooltip:SetText(L.BANK_TRANSFER_BUSY)
+                    GameTooltip:Show()
+                end
+            end)
+            guard:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
+            state.transferGuards[index]=guard
+        end
+    end
+    for _, guard in ipairs(state.transferGuards or {}) do guard:SetShown(blocked and true or false) end
+end
+
 local function clamp(value, maximum)
     value = tonumber(value)
     if not value or value ~= value or value == math.huge or value == -math.huge
@@ -114,6 +142,9 @@ local function showTooltip(button)
     local buying = button.actionIntent == "buy"
     GameTooltip:SetText(button.partialPurchase and L.ACTION_BUY_HERE or buying and L.ACTION_BUY or ns.ActionButtons.CraftText(button.craftQuantity))
     GameTooltip:AddLine(button.partialPurchase and L.ACTION_BUY_HERE_HELP or buying and L.ACTION_BUY_HELP or L.ACTION_CRAFT_HELP, 1, 1, 1, true)
+    if not buying and button.clickContext and button.clickContext.nextStep then
+        GameTooltip:AddLine(button.clickContext.nextStep, 1, 1, 1, true)
+    end
     -- Reagent rows already identify bank stock. Keep the detailed warning in
     -- the action tooltip, where it cannot overlap reagent names, prices or tracking.
     if button.bankMessage then GameTooltip:AddLine(button.bankMessage, 1, .82, 0, true) end
@@ -130,21 +161,30 @@ end
 local function click()
     local intendedPurchaseOnly = state.create.buyOnly == true
     local intendedAction = state.create.actionIntent
+    local rendered = state.create.clickContext
     NativeCraft.Refresh() -- Revalidate current form/stock/price before any action.
-    if not state.active then return end
-    if not state.create:IsEnabled() then return end
+    if not state.active then
+        if ns.Print then ns.Print(L.ACTION_CHANGED) end
+        return
+    end
     -- A delivery or a removed reagent must not turn the label clicked into
     -- the opposite action. Core checks again after its own live recipe scan.
-    if intendedAction ~= state.create.actionIntent then
+    local live = state.create.clickContext
+    if intendedAction ~= state.create.actionIntent or not rendered or not live
+        or rendered.recipeID ~= live.recipeID or rendered.professionKey ~= live.professionKey
+        or rendered.quantity ~= live.quantity or (intendedAction == "craft" and
+        (rendered.stepID ~= live.stepID or rendered.batchCount ~= live.batchCount)) then
         if ns.Print then ns.Print(L.ACTION_CHANGED) end
+        return
+    end
+    if not state.create:IsEnabled() then
+        if state.create.reason and ns.Print then ns.Print(state.create.reason) end
         return
     end
     local id = ns.API.SelectedRecipeID()
     if id ~= state.recipeID then return end
-    local quantity = state.quantity:GetValue()
-    if ns.job then quantity = ns.job.remaining end
     state.quantity:ClearFocus()
-    ns.StartNative(id, clamp(quantity), intendedPurchaseOnly, intendedAction)
+    ns.StartNative(id, rendered.quantity, intendedPurchaseOnly, intendedAction, rendered)
 end
 
 local function selectMaximum()
@@ -251,6 +291,7 @@ end
 
 function NativeCraft.Refresh()
     if refreshing or not NativeCraft.Install() then return end
+    transferClickGuards()
     refreshing = true
     local id, recipe = current()
     if not id then restore(); refreshing = false; return end
@@ -261,18 +302,19 @@ function NativeCraft.Refresh()
         id, recipe = current()
         if not id then restore(); refreshing = false; return end
     end
-    if not recipe or recipe.supported == false then restore(); refreshing = false; return end
+    if not recipe or recipe.supported == false or recipe.hasOptionalSlots then restore(); refreshing = false; return end
     local matchingJob = ns.job and ns.job.recipeID == id and ns.job.professionKey == ns.professionKey
     local matchingStart = ns.pendingStart and ns.pendingStart.recipeID == id
         and ns.pendingStart.professionKey == ns.professionKey
     local ignoreBank = (matchingJob and ns.job.ignoreBank) or (matchingStart and ns.pendingStart.ignoreBank)
     local catalogueBankOff = (matchingJob and ns.job.catalogueIncludeBank == false)
         or (matchingStart and ns.pendingStart.catalogueIncludeBank == false)
-    local inventory, bank
-    if catalogueBankOff and ns.PlanningStock then inventory, bank = ns.PlanningStock(ns.recipes)
-    elseif ns.Bank and not ignoreBank and not catalogueBankOff then inventory, bank = ns.Bank.Snapshot(ns.recipes)
-    else inventory, bank = ns.API.Inventory(ns.recipes), {} end
-    local maximum, maximumPlan = ns.Planner.MaxCrafts(ns.recipes, inventory, ns.vendorItems, id, 1000, bank)
+    local inventory, bank, unknown
+    if catalogueBankOff and ns.PlanningStock then inventory, bank, unknown = ns.PlanningStock(ns.recipes)
+    elseif ns.Bank and not ignoreBank and not catalogueBankOff then inventory, bank, unknown = ns.Bank.Snapshot(ns.recipes)
+    else inventory, unknown = ns.API.Inventory(ns.recipes); bank = {} end
+    local limits = ns.API.RecipeLimits and ns.API.RecipeLimits(ns.professionKey)
+    local maximum, maximumPlan = ns.Planner.MaxCrafts(ns.recipes, inventory, ns.vendorItems, id, 1000, bank, limits)
     if maximum == 0 and not matchingJob then restore(); refreshing = false; return end
 
     local changed = not state.active or state.recipeID ~= id
@@ -288,7 +330,8 @@ function NativeCraft.Refresh()
     for _, original in ipairs(state.originals) do original:Hide() end
 
     local plan = quantity == maximum and maximumPlan
-        or ns.Planner.Plan(ns.recipes, inventory, ns.vendorItems, id, quantity, bank)
+        or ns.Planner.Plan(ns.recipes, inventory, ns.vendorItems, id, quantity, bank, limits)
+    if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(plan, ns.recipes, unknown) end
     local canCreate, createReason, createQuote, createBank, createAlternative, createPlan, prebuy = quotePlan(plan)
     local ready, reason, kind = craftReadiness(id, createPlan)
     local actionQuote = createAlternative or createQuote
@@ -309,8 +352,11 @@ function NativeCraft.Refresh()
     if ns.Merchant.IsBusy() and (not ns.job or matchingJob) then state.create.reason = L.WAIT_PURCHASES_RESUME end
     state.create.bankMessage, state.create.alternativeQuote = createBank, createAlternative
     state.cancel = busy() and true or false
-    state.create.craftQuantity = quantity
-    local actionText = partialPurchase and L.ACTION_BUY_HERE or state.create.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(quantity)
+    local context = ns.ActionButtons.ClickContext(id, ns.professionKey, quantity, createPlan, ns.recipes, actionQuote)
+    context.native = true
+    state.create.clickContext = context
+    state.create.craftQuantity = context.batchCount or quantity
+    local actionText = partialPurchase and L.ACTION_BUY_HERE or state.create.actionIntent == "buy" and L.ACTION_BUY or ns.ActionButtons.CraftText(state.create.craftQuantity)
     local cancelText = ns.job and ns.job.pending and L.STOP_BATCH or L.CANCEL
     if ns.UI and ns.UI.FitActionButton then
         ns.UI.FitActionButton(state.all, L.MAX_QUANTITY, 64, 40)

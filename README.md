@@ -3,18 +3,19 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Current stable version: **1.2.3**.
-Beta version: **1.3.0-beta.8**.
+Stable version **1.3.0**.
 
-This update restores the choice between buying without using bank stock and
-buying only the remainder. Each option shows its actual quantities and price,
-including vendor bundles, before you confirm.
+Deposit crafting reagents at your personal bank or withdraw the materials for
+a selected recipe from its CAB tab. Clicking a recipe can open its profession.
+At a vendor, choose whether to use your bank stock and check the quantities and
+price before buying.
 
-This branch backports clearer bag, bank and vendor quantities, bounded reagent layouts,
-bank-aware prepurchases and purchases across multiple vendors. Bank transfers
-and profession activation on recipe clicks remain on the 1.3 beta branch.
+**Craft × N** shows how many executions the next click will request. For
+intermediate recipes, the tooltip names the recipe and the number of crafts in the next batch.
+In the CAB tab, **Max** fills in the planned quantity, up to **1,000 crafts**
+of the selected recipe. The same cap applies when you type the quantity.
 
-The craft button now shows **Craft × N**, the selected number of crafts.
+For a transmute with a cooldown, such as Iron to Gold, CAB offers at most one craft when it is ready. While its known cooldown is running, it counts as zero even when you view another profession. This also applies to intermediate crafts. Recipes with charges use the charge count reported by the open profession. After a `/reload` or a new login, reopen the relevant profession before relying on **Max** or the purchase quote.
 
 ## Download and updates
 
@@ -33,6 +34,16 @@ This GitHub repository hosts the source code, issue tracker and release notes.
 
 Open your bank once to record its contents, then consult that snapshot away
 from the bank. Bag upgrade estimates are simulations and do not move items.
+If **Reading bank contents…** persists across visits after you removed a bank
+bag that held reagents, equip a bag in that same slot. An empty bag is enough
+for CAB to read the slot again.
+
+| Chat command | What it does |
+|---|---|
+| `/cab config` | Opens the settings, just like `/cab`. |
+| `/cab scan` | Rereads the recipes in your open profession window. |
+| `/cab debug` | Prints the addon and game versions, selected recipe and catalogue counts. |
+| `/cab vendor <itemID>` | Toggles whether CAB treats that item as a vendor supply for this character. Enter the item's positive numeric ID. |
 
 [Documentation (French)](CraftAutoBuy/README.md) ·
 [Release notes](https://github.com/aranud87/CraftAutoBuy/releases) ·
@@ -43,13 +54,19 @@ from the bank. Bag upgrade estimates are simulations and do not move items.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version stable : **1.2.3**.
+dans **World of Warcraft: Forever**. Version stable **1.3.0**.
 
-La confirmation d'achat permet de choisir entre acheter sans utiliser la banque
-et acheter le complément, avec les quantités et le prix de chaque option.
+Déposez les composants à la banque personnelle ou retirez les ingrédients
+d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son
+métier. Chez le marchand, choisissez si le devis tient compte de la banque
+et vérifiez les quantités et le prix avant l’achat.
 
-Le bouton de fabrication affiche désormais **Créer × N**, le nombre de
-fabrications sélectionné.
+Le bouton **Créer × N** affiche le nombre de fabrications du prochain clic.
+Pour un intermédiaire, l’infobulle indique la recette et le nombre de fabrications du prochain lot.
+Dans l’onglet CAB, **Max** remplit la quantité prévue, jusqu’à **1 000 fabrications**
+de la recette choisie. Ce plafond vaut aussi pour la quantité saisie à la main.
+
+Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. Après un `/reload` ou une reconnexion, rouvre le métier concerné avant de te fier à **Max** ou au devis d’achat.
 
 - **Catalogue CAB :** recettes fabricables de vos métiers, favoris, recherche
   et filtres Banque/Progression.
@@ -62,6 +79,16 @@ fabrications sélectionné.
 
 Ouvrez la banque une première fois pour enregistrer son contenu et consulter
 ce relevé à distance. Les simulations de sacs ne déplacent aucun objet.
+Si « Lecture de la banque en cours… » persiste à chaque visite après le retrait
+d’un sac de banque qui contenait des composants, équipez un sac dans le même
+emplacement. Un sac vide suffit pour que CAB puisse relire cet emplacement.
+
+| Commande de discussion | Effet |
+|---|---|
+| `/cab config` | Ouvre les réglages, comme `/cab`. |
+| `/cab scan` | Relit les recettes de votre métier ouvert. |
+| `/cab debug` | Affiche les versions de l’addon et du jeu, la recette sélectionnée et les compteurs du catalogue. |
+| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ce personnage. Remplacez `<ID>` par le numéro entier positif de l’objet. |
 
 GitHub reste consacré au code source, aux signalements et aux changelogs.
 Pour installer l'addon ou le mettre à jour, utilisez CurseForge.

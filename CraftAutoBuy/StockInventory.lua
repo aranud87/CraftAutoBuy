@@ -187,6 +187,10 @@ local function bagIDs()
     return result
 end
 
+function Inventory.GetBagIDs()
+    return bagIDs()
+end
+
 function Inventory.ReadBags()
     local failed = {known = false, counts = {}, capacity = unknown()}
     local ids = bagIDs()
@@ -236,7 +240,7 @@ local function professionsAndIngredients(options)
     for _, profession in ipairs(professions) do
         if not secret(profession) and type(profession) == "table" and integer(profession.key, 1) then
             result[#result + 1] = profession
-            if options.professionKey == nil or options.professionKey == profession.key then
+            if options.content ~= "all" and (options.professionKey == nil or options.professionKey == profession.key) then
                 local readOK, recipes = call(ns.Catalogue and ns.Catalogue.GetRecipes, profession.key)
                 if readOK and not secret(recipes) and type(recipes) == "table" then
                     for _, recipe in pairs(recipes) do
@@ -280,7 +284,6 @@ function Inventory.Build(snapshot, search, options, bankCount, unverified, bankO
         missing = {}, capacity = {bags = reading.capacity, bank = unknown()}, extensions = {bank = {known = false}}}
     local missingOK, missing = call(ns.Catalogue and ns.Catalogue.MissingProfessions)
     if missingOK and not secret(missing) and type(missing) == "table" then view.missing = missing end
-    local query = ns.Locale.SearchText(type(search) == "string" and not secret(search) and search or "")
     for id in pairs(ids) do
         local bag, bank = bagCount(id, reading), bankCount(id)
         if bank == nil then view.bankKnown = false end
@@ -289,12 +292,10 @@ function Inventory.Build(snapshot, search, options, bankCount, unverified, bankO
         -- list. Old bank evidence supplies an identity, never its current count.
         if (bag and bag > 0) or (bank and bank > 0) or (bank == nil and evidence > 0) then
             local name, icon = itemMetadata(id)
-            if query == "" or ns.Locale.SearchText(name):find(query, 1, true) or tostring(id):find(query, 1, true) then
-                if bag and bag > 0 then view.bags[#view.bags + 1] = {itemID = id, name = name, icon = icon, count = bag} end
-                if bank and bank > 0 then view.bank[#view.bank + 1] = {itemID = id, name = name, icon = icon, count = bank} end
-                view.inventory[#view.inventory + 1] = {itemID = id, name = name, icon = icon,
-                    bagCount = bag, bankCount = bank, total = bag ~= nil and bank ~= nil and bag + bank or nil}
-            end
+            if bag and bag > 0 then view.bags[#view.bags + 1] = {itemID = id, name = name, icon = icon, count = bag} end
+            if bank and bank > 0 then view.bank[#view.bank + 1] = {itemID = id, name = name, icon = icon, count = bank} end
+            view.inventory[#view.inventory + 1] = {itemID = id, name = name, icon = icon,
+                bagCount = bag, bankCount = bank, total = bag ~= nil and bank ~= nil and bag + bank or nil}
         end
     end
     local function before(a, b)
@@ -309,5 +310,25 @@ function Inventory.Build(snapshot, search, options, bankCount, unverified, bankO
     end
     view.capacity.bank.memory, view.capacity.bank.unverified = not bankOpen, unverified == true
     view.bankBags = Inventory.BankBags(view.capacity.bank)
-    return view
+    view.bankPartial = snapshot.known and not unverified and not view.bankKnown
+    return Inventory.Filter(view, search)
+end
+
+-- Search an already sorted, verified reading. Leave source rows intact for
+-- clearing the search, and keep their unknown quantities as nil.
+function Inventory.Filter(view, search)
+    local query = ns.Locale.SearchText(type(search) == "string" and not secret(search) and search or "")
+    if query == "" then return view end
+    local result = {}
+    for key, value in pairs(view) do result[key] = value end
+    for _, key in ipairs({"bags", "bank", "inventory"}) do
+        local rows = {}
+        for _, row in ipairs(view[key]) do
+            if ns.Locale.SearchText(row.name):find(query, 1, true) or tostring(row.itemID):find(query, 1, true) then
+                rows[#rows+1] = row
+            end
+        end
+        result[key] = rows
+    end
+    return result
 end

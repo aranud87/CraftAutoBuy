@@ -3,6 +3,7 @@ local Stock = {SCHEMA = 1}
 ns.Stock = Stock
 
 local frame, bankOpen, loadedDB, snapshot = nil, false, nil, nil
+local cachedView, cachedContent, cachedProfession
 local pendingRefresh, publishQueued
 local publishPending = false
 -- A personal-bank notification arrived and no complete read has followed it.
@@ -50,6 +51,7 @@ local function ensureLoaded()
     local character = guid()
     if loadedDB == CraftAutoBuyDB and snapshot == CraftAutoBuyDB.stock
         and (not character or snapshot.character == character) then return end
+    cachedView = nil
     local saved = CraftAutoBuyDB.stock
     local valid = type(saved) == "table" and saved.schema == Stock.SCHEMA
         and type(saved.counts) == "table" and (not character or not saved.character or saved.character == character)
@@ -370,6 +372,25 @@ end
 
 function Stock.IsBankOpen() return bankOpen end
 
+-- Live personal storage only. A remembered bank is never a transfer source.
+-- The third result identifies optional bank containers proven unequipped.
+function Stock.GetOpenBankContainers()
+    if not bankOpen then return nil end
+    local ids, mode = bankContainers()
+    if not ids then return nil end
+    local indices = Enum and Enum.BagIndex
+    local first, last = indices and indices.CharacterBankTab_1, indices and indices.CharacterBankTab_9
+    if mode=="modern" and (not integer(first,1) or not integer(last,first)) then return nil end
+    local result, sizes = {}, {}
+    for index, bag in ipairs(ids) do
+        if mode=="modern" and (bag<first or bag>last) then return nil end
+        local ok, size = call(C_Container and C_Container.GetContainerNumSlots, bag)
+        if not ok or not integer(size) or size > 1000 then return nil end
+        result[index], sizes[bag] = bag, size
+    end
+    return result, mode, emptyBagSlots(sizes)
+end
+
 function Stock.IsBankUnverified()
     ensureLoaded()
     return snapshot.unverified or changePending or (bankOpen and firstReadPending)
@@ -445,6 +466,7 @@ end
 -- read at once, so a close in the same frame cannot lose it; the expensive
 -- catalogue rebuild and page refresh run once on the next frame.
 local function schedulePublish()
+    cachedView = nil
     -- At logout the saved state is final; no page will be shown again.
     if loggingOut then publishPending = false; return end
     publishPending = true
@@ -459,6 +481,7 @@ local function schedulePublish()
 end
 
 function Stock.Refresh()
+    cachedView = nil
     pendingRefresh = nil -- An explicit refresh also satisfies a queued event.
     ensureLoaded()
     local updated = false
@@ -658,10 +681,16 @@ function Stock.Rows(search)
     return bags, bank, bankKnown, missing
 end
 
-function Stock.View(search, options)
+function Stock.View(search, options, searchOnly)
     ensureLoaded()
-    return ns.StockInventory.Build(snapshot, search, options, Stock.BankCount,
-        Stock.IsBankUnverified(), bankOpen)
+    options = type(options) == "table" and not secret(options) and options or {}
+    local content = options.content
+    local profession = options.professionKey
+    if not searchOnly or not cachedView or cachedContent ~= content or cachedProfession ~= profession then
+        cachedView = ns.StockInventory.Build(snapshot, "", options, Stock.BankCount, Stock.IsBankUnverified(), bankOpen)
+        cachedContent, cachedProfession = content, profession
+    end
+    return ns.StockInventory.Filter(cachedView, search)
 end
 
 local function installEvents()
@@ -669,6 +698,7 @@ local function installEvents()
     frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", function(_, event, name)
         if event == "ADDON_LOADED" and name ~= addonName then return end
+        cachedView = nil
         if event == "PLAYER_LOGOUT" then
             -- SavedVariables can be written before the deferred scan or a bank
             -- close event. Finalize the same way without scheduling more work.

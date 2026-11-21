@@ -13,11 +13,13 @@ end
 -- here would make inaccessible bank ingredients look ready for a real craft.
 function Bank.Snapshot(recipes)
     if type(ns.API.InventoryWithBank) ~= "function" then
-        return ns.API.Inventory(recipes), {}
+        local inventory, unknown = ns.API.Inventory(recipes)
+        return inventory, {}, unknown
     end
-    local combined, bankCounts = ns.API.InventoryWithBank(recipes)
+    local combined, bankCounts, unknown = ns.API.InventoryWithBank(recipes)
     if type(combined) ~= "table" or type(bankCounts) ~= "table" then
-        return ns.API.Inventory(recipes), {}
+        local inventory, unknown = ns.API.Inventory(recipes)
+        return inventory, {}, unknown
     end
     local bags, bank = {}, {}
     for itemID, value in pairs(combined) do
@@ -26,7 +28,7 @@ function Bank.Snapshot(recipes)
         bags[itemID] = total - stored
         if stored > 0 then bank[itemID] = stored end
     end
-    return bags, bank
+    return bags, bank, unknown
 end
 
 function Bank.Message(plan)
@@ -103,8 +105,14 @@ end
 -- a modification of the bank-aware projection displayed beside ingredients.
 function Bank.Alternative(recipes, plan)
     if not plan then return nil, nil, false, L.PLAN_UNAVAILABLE end
-    local alternative = ns.Planner.Plan(recipes, ns.API.Inventory(recipes), ns.vendorItems or {},
-        plan.recipeID, plan.crafts)
+    local recipe = recipes and recipes[plan.recipeID]
+    local key = recipe and recipe.professionKey or ns.selectedProfessionKey or ns.professionKey
+    local limits = key and ns.API.RecipeLimits and ns.API.RecipeLimits(key)
+    local inventory, unknown = ns.API.Inventory(recipes)
+    local alternative = ns.Planner.Plan(recipes, inventory, ns.vendorItems or {},
+        plan.recipeID, plan.crafts, nil, limits)
+    if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(alternative, recipes, unknown) end
+    if alternative.inventoryUnknown then return alternative, nil, false, L.INVENTORY_UNAVAILABLE end
     if not alternative.craftable then
         return alternative, nil, false, Bank.Message(plan) or L.PLAN_UNAVAILABLE
     end
@@ -189,9 +197,9 @@ function Bank.RequestConfirmation(message, quote, onAccept, onCancel, complement
         text = L.BANK_BUY_CHOICE_PROMPT
             .. "\n\n|cff59b3ff" .. (message or "") .. "|r"
             .. "\n\n|cffffd100" .. L.BANK_BUY_WITHOUT .. "|r\n\n|cffbfbfbf" .. L.BANK_BUY_WITHOUT_HELP .. "|r"
-            .. "\n" .. purchaseContents(quote) .. "\n" .. ns.UI.CostSummary(quote)
+            .. "\n" .. purchaseContents(quote) .. "\n" .. ns.UI.CostSummary(quote, nil, nil, true)
             .. "\n\n|cffffd100" .. L.BANK_BUY_COMPLEMENT .. "|r\n\n|cffbfbfbf" .. L.BANK_BUY_COMPLEMENT_HELP .. "|r"
-            .. "\n" .. purchaseContents(complement.quote) .. "\n" .. ns.UI.CostSummary(complement.quote)
+            .. "\n" .. purchaseContents(complement.quote) .. "\n" .. ns.UI.CostSummary(complement.quote, nil, nil, true)
     else
         text = L.BANK_OVERRIDE_TITLE .. "\n\n"
             .. L.BANK_OVERRIDE_PROMPT:format(message or "", ns.UI.CostSummary(quote))

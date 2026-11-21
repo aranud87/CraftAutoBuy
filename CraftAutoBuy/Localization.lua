@@ -97,6 +97,8 @@ local SEARCH_FOLD = {
     ["Õ"] = "o", ["õ"] = "o", ["Ö"] = "o", ["ö"] = "o", ["Ø"] = "o", ["ø"] = "o", ["Œ"] = "oe", ["œ"] = "oe",
     ["Ù"] = "u", ["ù"] = "u", ["Ú"] = "u", ["ú"] = "u", ["Û"] = "u", ["û"] = "u", ["Ü"] = "u", ["ü"] = "u",
     ["Ý"] = "y", ["ý"] = "y", ["Ÿ"] = "y", ["ÿ"] = "y", ["ß"] = "ss", ["ẞ"] = "ss",
+    -- Game names carry the typographic apostrophe; a typed query the straight one.
+    ["’"] = "'", ["‘"] = "'",
 }
 local lowerCyrillic = {}
 for character in ("абвгдежзийклмнопрстуфхцчшщъыьэюяё"):gmatch(UTF8_CHARACTER) do

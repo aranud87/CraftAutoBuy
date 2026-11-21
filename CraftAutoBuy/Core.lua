@@ -15,6 +15,11 @@ local frame = CreateFrame("Frame")
 ns.eventFrame = frame
 local rescanAt, lastSelectionCheck = nil, 0
 local scanAttempts = 0
+-- Partial reads retry on their own count, re-armed only by profession events,
+-- a complete read and the clicks that open or verify a profession: choosing
+-- another recipe asks for one more read, not eight.
+local partialAttempts = 0
+local sameProfession
 local professionClosed = false
 local openOnMerchantVisit = false
 local bankOverride, bankPreparationApproval
@@ -94,8 +99,13 @@ function ns.ItemName(itemID)
     return name or L.ITEM_FALLBACK:format(tostring(itemID))
 end
 
+local partialScan
 function ns.ActiveRecipes()
     if ns.job then return ns.job.recipes end
+    if partialScan and partialScan.id == ns.selectedID and ns.selectedProfessionKey
+        and (partialScan.key == ns.selectedProfessionKey or partialScan.selection == ns.selectedProfessionKey) then
+        return partialScan.recipes
+    end
     if ns.Catalogue and ns.selectedProfessionKey then
         return ns.Catalogue.GetRecipes(ns.selectedProfessionKey) or {}
     end
@@ -116,12 +126,10 @@ local function catalogueIncludesBank()
 end
 
 local function planningStock(recipes)
-    if not catalogueIncludesBank() or bankOverride or (ns.job and ns.job.ignoreBank)
-        or (ns.pendingStart and ns.pendingStart.ignoreBank) then
-        return ns.API.Inventory(recipes), {}
-    end
-    if ns.Bank then return ns.Bank.Snapshot(recipes) end
-    return ns.API.Inventory(recipes), {}
+    if ns.Bank and catalogueIncludesBank() and not bankOverride and not (ns.job and ns.job.ignoreBank)
+        and not (ns.pendingStart and ns.pendingStart.ignoreBank) then return ns.Bank.Snapshot(recipes) end
+    local inventory, unknown = ns.API.Inventory(recipes)
+    return inventory, {}, unknown
 end
 -- CAB's component projection uses the same source decision as its Max and
 -- action plan; a separate physical snapshot may still describe stored stock.
@@ -250,14 +258,19 @@ function ns.Refresh()
         ns.quantity = 1
         quantityRecipeID, quantityProfessionKey = ns.selectedID, ns.selectedProfessionKey
     end
+    -- Banking follows the displayed CAB request. Cancel the previous recipe
+    -- before another transfer can run after any selection/quantity change.
+    if ns.BankTransferUI and ns.BankTransferUI.OnContextChanged then ns.BankTransferUI.OnContextChanged() end
     if not ns.pendingStart and ns.UI and ns.UI.DeactivateIfHidden then ns.UI.DeactivateIfHidden() end
     local recipes = activeRecipes()
     local recipeID = ns.job and ns.job.recipeID or ns.selectedID
     local quantity = ns.job and ns.job.remaining or ns.quantity
     if recipeID and recipes[recipeID] then
-        local inventory, bank = planningStock(recipes)
-        ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank)
-        ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank)
+        local inventory, bank, unknown = planningStock(recipes)
+        local key = ns.job and ns.job.professionKey or ns.selectedProfessionKey or ns.professionKey
+        local limits = ns.API.RecipeLimits and ns.API.RecipeLimits(key)
+        ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank, limits)
+        ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank, limits)
         local job = ns.job
         if job and job.ignoreBank and not job.bankApproval and not bankOverride
             and not job.running and not job.pending and not job.awaitingPurchase
@@ -267,10 +280,11 @@ function ns.Refresh()
             -- button after the bags change. Replan once without spending or
             -- prompting; a later explicit click may request a new approval.
             clearBankApproval()
-            inventory, bank = planningStock(recipes)
-            ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank)
-            ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank)
+            inventory, bank, unknown = planningStock(recipes)
+            ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank, limits)
+            ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank, limits)
         end
+        if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(ns.plan, recipes, unknown) end
         ns.quote = ns.PurchaseQuote(ns.plan.purchases)
     else
         ns.plan, ns.maxCrafts, ns.quote = nil, 0, nil
@@ -292,6 +306,12 @@ local function selectRecipe(recipeID, key)
     if recipeID == ns.selectedID and key == ns.selectedProfessionKey then return end
     if ns.CancelBankConfirmation then ns.CancelBankConfirmation() end
     ns.selectedID, ns.selectedProfessionKey = recipeID, key
+    -- The last read of the open profession was incomplete and aimed at the
+    -- previous recipe: read it again for the one now shown on the CAB page.
+    if ns.catalogueActive and recipeID and (partialScan or ns.scanError) and ns.API.IsOwnProfession()
+        and sameProfession(key, ns.API.GetProfessionKey()) then
+        scanAttempts, rescanAt = 0, now() + 0.2
+    end
     local recipes = activeRecipes()
     if not ns.job and recipeID and recipes[recipeID] then
         ns.quantity = 1
@@ -332,7 +352,7 @@ function ns.SelectCatalogRecipe(recipeID, key)
     return true
 end
 
-local function sameProfession(left, right)
+function sameProfession(left, right)
     if not left or not right then return false end
     if left == right then return true end
     if not ns.API.GetProfessionParentKey then return false end
@@ -340,7 +360,71 @@ local function sameProfession(left, right)
     return parent ~= nil and parent == ns.API.GetProfessionParentKey(right)
 end
 
-function ns.Scan(preserveSelection)
+-- A partial scan omits the recipes that are still loading. For display and
+-- planning only, keep their saved records so a loading producer does not make
+-- its product look uncraftable. Every Create or Buy click rescans with the
+-- plan's steps required (ns.Scan) and refuses a plan that needs one of them
+-- (ns.Start): purchases and crafts always use live records. A bank withdrawal
+-- follows the page (ns.TransferRecipes), as it followed the saved catalogue
+-- before.
+-- keepAll: the background read of the displayed recipe keeps every saved
+-- record, so the page shows the saved catalogue completed by the live records
+-- and its maximum does not drop while one of two producers loads.
+local function withSavedRecords(recipes, unreadable, key, keepAll)
+    if type(unreadable) ~= "table" or not next(unreadable) or not ns.Catalogue or not key then return recipes end
+    local saved = ns.Catalogue.GetRecipes(key) or {}
+    -- Everywhere else (clicks, native page), a live producer of the same item
+    -- wins: a saved record must not divert the plan to a recipe that the
+    -- click would then refuse.
+    -- Only a producer the planner can use counts: an unsupported live recipe
+    -- makes nothing, so it must not hide the saved record of the usable one.
+    local usable = ns.Planner.IsUsableRecipe
+    local liveOutputs = {}
+    for _, recipe in pairs(recipes) do
+        if usable(recipe) then liveOutputs[recipe.outputItemID] = true end
+    end
+    local copy
+    for id in pairs(unreadable) do
+        local record = saved[id]
+        if recipes[id] == nil and usable(record) and (keepAll or not liveOutputs[record.outputItemID]) then
+            if not copy then
+                copy = {}
+                for known, recipe in pairs(recipes) do copy[known] = recipe end
+            end
+            copy[id] = record
+        end
+    end
+    return copy or recipes
+end
+
+-- A catalogue known only by the background discovery is saved under the parent
+-- profession key, and so is its selection. Its page keeps that whole catalogue
+-- (it may hold producers the open specialization does not list), completed by
+-- the records just read.
+local function overSavedCatalogue(recipes, key)
+    local saved = ns.Catalogue and ns.Catalogue.GetRecipes(key)
+    if not saved or not next(saved) then return recipes end
+    local copy = {}
+    for id, record in pairs(saved) do copy[id] = record end
+    for id, recipe in pairs(recipes) do copy[id] = recipe end
+    return copy
+end
+
+-- A bank withdrawal follows the displayed request: it plans from the page's
+-- own recipe map (project, partial live scan or saved catalogue), so the page
+-- and the preview agree; a running transfer keeps the map of its click. Any
+-- other request, or a recipe the page's map does not hold, keeps the saved
+-- catalogue (nil).
+function ns.TransferRecipes(key, recipeID)
+    local job = ns.job
+    local shownID = job and job.recipeID or ns.selectedID
+    local shownKey = job and job.professionKey or ns.selectedProfessionKey or ns.professionKey
+    if not shownID or shownID ~= recipeID or shownKey ~= key then return nil end
+    local shown = activeRecipes()
+    return shown and shown[recipeID] and shown or nil
+end
+
+function ns.Scan(preserveSelection, target)
     -- A rejected linked/new profession must not reuse an unprepared old recipe.
     -- A normal close keeps the previous selection for the visit to a merchant.
     local key = ns.API.GetProfessionKey()
@@ -349,17 +433,67 @@ function ns.Scan(preserveSelection)
         and key and (not own or (ns.professionKey and key ~= ns.professionKey)) then
         ns.selectedID = nil
     end
-    local recipes, err = ns.API.ScanRecipes()
+    target = target or (ns.pendingStart and ns.pendingStart.recipeID)
+    if not target and own and not ns.catalogueActive then target = ns.API.SelectedRecipeID() end
+    -- Background rescans from the catalogue keep the active project's recipe
+    -- as their target instead of demanding every unrelated recipe.
+    if not target and own and ns.catalogueActive and ns.job and sameProfession(ns.job.professionKey, key) then
+        target = ns.job.recipeID
+    end
+    -- Likewise for the recipe displayed on the CAB page: an unrelated recipe
+    -- still loading must not hide the live records of the open profession.
+    -- Its planned steps come from the saved catalogue: they are not required
+    -- here (a click still requires them), or one of them still loading would
+    -- keep every live record out.
+    local displayed = false
+    if not target and own and ns.catalogueActive and not ns.job and ns.selectedID
+        and sameProfession(ns.selectedProfessionKey, key) then
+        target, displayed = ns.selectedID, true
+    end
+    local required
+    if target then
+        required = {[target] = true}
+        if not displayed and ns.plan and ns.plan.recipeID == target then
+            for _, step in ipairs(ns.plan.steps or {}) do required[step.recipeID] = true end
+        end
+    end
+    local recipes, err, complete, unreadable = ns.API.ScanRecipes(required)
     if recipes then
-        ns.recipes = recipes
         ns.professionKey = ns.API.GetProfessionKey()
-        if ns.Catalogue then ns.Catalogue.Record(ns.professionKey, recipes) end
+        ns.recipes = recipes
+        if complete == false then
+            -- The selection may carry the parent key while the open window is
+            -- one of its specializations: attach this read to that selection,
+            -- once the displayed recipe was read in it, or the page would
+            -- ignore the records just read. The selection key is not changed.
+            -- The exact-parent test below is what keeps a sibling
+            -- specialization on its own saved catalogue.
+            local selection
+            local shown = displayed and recipes[target]
+            if shown and shown.supported ~= false and ns.selectedProfessionKey ~= ns.professionKey
+                and ns.API.GetProfessionParentKey
+                and ns.API.GetProfessionParentKey(ns.professionKey) == ns.selectedProfessionKey then
+                selection = ns.selectedProfessionKey
+            end
+            partialScan = {id = target, key = ns.professionKey, selection = selection,
+                recipes = selection and overSavedCatalogue(recipes, selection)
+                    or withSavedRecords(recipes, unreadable, ns.professionKey, displayed)}
+            partialAttempts = partialAttempts + 1
+            if partialAttempts < 8 then rescanAt = now() + 0.6 end
+        else
+            partialScan = nil
+            scanAttempts, partialAttempts = 0, 0
+            if ns.Catalogue then ns.Catalogue.Record(ns.professionKey, recipes) end
+        end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
         -- A known catalogue may use the base profession while the freshly
         -- opened source identifies its child skill line. Adopt only a verified
         -- recipe of that same profession, preserving the user's chosen lot.
+        -- A partial background read records nothing under the child key: the
+        -- list would lose the selection. Only a complete read or a click adopts.
         local selected = ns.selectedID and recipes[ns.selectedID]
-        if ns.catalogueActive and not ns.job and not ns.pendingStart and not ns.bankConfirmation
+        if (complete ~= false or preserveSelection) and ns.catalogueActive and not ns.job
+            and not ns.pendingStart and not ns.bankConfirmation
             and own and ns.API.IsOwnProfession() and selected and selected.supported ~= false
             and ns.selectedProfessionKey ~= ns.professionKey
             and sameProfession(ns.professionKey, ns.selectedProfessionKey) then
@@ -368,16 +502,20 @@ function ns.Scan(preserveSelection)
         end
         if ns.Merchant.IsOpen() and learnVendors then learnVendors() end
         ns.scanError = nil
-        scanAttempts = 0
         if not ns.catalogueActive and not ns.pendingStart and not preserveSelection then
             selectRecipe(ns.API.SelectedRecipeID())
         end
     else
         ns.scanError = err
-        ns.status = err or L.RECIPES_LOADING_STATUS
+        -- A background rescan must not hide a project's status. Every click
+        -- rescans and refuses with the exact reason through refuseClick.
+        if not ns.job or ns.pendingStart then ns.status = err or L.RECIPES_LOADING_STATUS end
+        if partialScan and sameProfession(partialScan.key, key) then partialScan = nil end
         scanAttempts = scanAttempts + 1
         if scanAttempts < 8 and ns.API.IsOwnProfession() then rescanAt = now() + 0.6 end
     end
+    -- The bank preview plans from these records: a scan replaces its source.
+    ns.recipeRevision = (ns.recipeRevision or 0) + 1
     ns.Refresh()
     return recipes, err
 end
@@ -399,7 +537,9 @@ function ns.SetQuantity(value)
     ns.Refresh()
 end
 
-local function prepareJob()
+-- liveRecipes (optional): the live map returned by the click's own scan. A
+-- project never keeps the saved records used only to display a partial scan.
+local function prepareJob(liveRecipes)
     if ns.job then return true end
     ns.Refresh()
     if not ns.plan or not ns.plan.craftable then
@@ -410,7 +550,7 @@ local function prepareJob()
     local includeBank = catalogueIncludesBank()
     ns.job = {
         recipeID = ns.selectedID, remaining = ns.quantity, total = ns.quantity,
-        recipes = activeRecipes(), professionKey = ns.selectedProfessionKey or ns.professionKey, running = false,
+        recipes = liveRecipes or activeRecipes(), professionKey = ns.selectedProfessionKey or ns.professionKey, running = false,
         ignoreBank = bankOverride ~= nil, bankApproval = bankOverride or bankPreparationApproval,
         catalogueIncludeBank = includeBank,
     }
@@ -500,8 +640,9 @@ end
 local function purchaseGuard(job)
     return function(remainingBasket, remainingQuote)
         if ns.job ~= job or not job.awaitingPurchase then return false end
-        local inventory, bank = planningStock(job.recipes)
-        local plan = ns.Planner.Plan(job.recipes, inventory, ns.vendorItems, job.recipeID, job.remaining, bank)
+        local inventory, bank, unknown = planningStock(job.recipes)
+        local plan = ns.Planner.Plan(job.recipes, inventory, ns.vendorItems, job.recipeID, job.remaining, bank,
+            ns.API.RecipeLimits and ns.API.RecipeLimits(job.professionKey))
         if not plan.craftable then return false, L.PLAN_UNAVAILABLE end
         -- The merchant queue retains its original item targets. A newly gained
         -- intermediate can remove purchases from the project replan while that
@@ -510,19 +651,19 @@ local function purchaseGuard(job)
         if ns.BankPurchaseWarning(job.recipes, purchasePlan, remainingQuote) then
             return false, L.BANK_OVERRIDE_CHANGED
         end
-        if job.bankPurchaseOnly or job.partialPurchaseOnly then
-            -- The queue's targets are fixed at the click. Stop if newly known
-            -- bank supplies or another receipt remove any of that deficit.
-            for itemID, needed in pairs(remainingBasket or plan.purchases or {}) do
-                if needed > (plan.purchases[itemID] or 0) then return false, L.BANK_OVERRIDE_CHANGED end
-            end
-            return true
+        if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(plan, job.recipes, unknown) end
+        if plan.inventoryUnknown then return false, L.INVENTORY_UNAVAILABLE end
+        -- Receiving an intermediate can remove an entire purchase without
+        -- changing the bag count of the vendor item that was queued.
+        for itemID, needed in pairs(remainingBasket or {}) do
+            if needed > (plan.purchases[itemID] or 0) then return false, L.BANK_OVERRIDE_CHANGED end
         end
+        if job.bankPurchaseOnly or job.partialPurchaseOnly then return true end
         return not (ns.Bank and ns.Bank.Message(plan)), L.BANK_OVERRIDE_CHANGED
     end
 end
 
-local function buyForCraft()
+local function buyForCraft(displayedQuote)
     if combat() then
         ns.status = L.PURCHASES_PAUSED_COMBAT
         ns.Refresh()
@@ -534,13 +675,14 @@ local function buyForCraft()
     if ns.job.pending then return false end
     ns.Refresh()
     if ns.plan and ns.plan.craftable then
+        if ns.plan.inventoryUnknown then ns.status = L.INVENTORY_UNAVAILABLE; return false end
         if bankMessage() and not (ns.job.bankPurchaseOnly and bankPurchasePlan()) then
             ns.status = bankMessage(); ns.Refresh(); return false
         end
         if ns.BankPurchaseWarning(ns.job.recipes, ns.plan, ns.quote) then
             clearBankApproval(); ns.status = L.BANK_OVERRIDE_CHANGED; ns.Refresh(); return false
         end
-        local ok, reason = ns.Merchant.Start(ns.quote.basket or ns.plan.purchases, ns.job.bankApproval, purchaseGuard(ns.job))
+        local ok, reason = ns.Merchant.Start(ns.quote.basket or ns.plan.purchases, ns.job.bankApproval, purchaseGuard(ns.job), displayedQuote)
         if ok then commitAllQuantity() end
         if not ok then
             ns.status = reason or L.PURCHASES_CANNOT_START
@@ -561,7 +703,7 @@ function ns.PausePurchaseContinuation()
         -- retired the purchase phase. Use fresh bags, not the cached plan, to
         -- keep the accepted source choice in that small interruption window.
         local bagsPlan = not purchaseOnly and ns.Planner.Plan(job.recipes, ns.API.Inventory(job.recipes),
-            ns.vendorItems, job.recipeID, job.remaining)
+            ns.vendorItems, job.recipeID, job.remaining, nil, ns.API.RecipeLimits and ns.API.RecipeLimits(job.professionKey))
         local complete = bagsPlan and bagsPlan.craftable and not next(bagsPlan.purchases)
         -- Supplies from another source can complete the bags while one order is
         -- still unacknowledged: never announce a receipt that was not observed.
@@ -606,6 +748,13 @@ local function refuseClick(message)
     if shown ~= message then ns.Print(message) end
 end
 
+-- Display only: an unreadable profession refused a click and left its reason
+-- as the project's status. The resting page replaces that reason by the resume
+-- instruction once the project is readable again (UI restingJobStatus).
+local function noteScanRefusal(recipes)
+    ns.scanRefusal = not recipes and ns.job and ns.status or nil
+end
+
 -- True when the visible CAB status line already carries the message (the
 -- native and Stock pages have none: UI.StatusText is nil there).
 local function statusShows(message)
@@ -633,12 +782,19 @@ end
 -- Missing tools or stations allow a separate purchase-only action. Check every
 -- dependency first: a cooldown or unavailable recipe must still prevent buying.
 function ns.CraftReadiness(recipeID, plan)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        return false, L.BANK_TRANSFER_BUSY
+    end
     if not recipeID then return false, L.SELECT_RECIPE end
-    local seen, requirement = {}, nil
+    if plan and plan.inventoryUnknown then return false, L.INVENTORY_UNAVAILABLE end
+    local seen, required, requirement = {}, {}, nil
+    for _, step in ipairs(plan and plan.steps or {}) do
+        required[step.recipeID] = (required[step.recipeID] or 0) + (step.crafts or 1)
+    end
     local function check(id)
         if seen[id] then return true end
         seen[id] = true
-        local ready, reason, kind = ns.API.RecipeReady(id)
+        local ready, reason, kind = ns.API.RecipeReady(id, required[id] or (id == recipeID and plan and plan.crafts) or 1)
         if ready then return true end
         if kind ~= "requirements" then
             return false, reason or L.RECIPE_TEMPORARILY_UNAVAILABLE, kind
@@ -762,8 +918,10 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
             pause(L.BANK_OVERRIDE_CHANGED); return
         end
         if ns.API.IsOwnProfession() and ns.API.GetProfessionKey() == key then
-            local fresh, err = ns.Scan(true)
-            if not fresh or not fresh[id] then pause(err or L.CATALOGUE_RECIPE_CHANGED); return end
+            local fresh, err = ns.Scan(true, id)
+            if not fresh or not fresh[id] then
+                pause(err or L.CATALOGUE_RECIPE_CHANGED); noteScanRefusal(fresh); return
+            end
             if ns.job then ns.job.recipes = fresh end
         end
         ns.Refresh()
@@ -799,7 +957,7 @@ local function requestBankConfirmation(purchaseOnly, actionIntent)
     return true
 end
 
-local function castBatch()
+local function castBatch(clickContext)
     local job = ns.job
     if not job or job.pending then return end
     if combat() then pause(L.CRAFT_PAUSED_COMBAT) return end
@@ -828,10 +986,16 @@ local function castBatch()
     local step = ns.plan.steps[1]
     if not step then pause(L.NO_CRAFT_STEP) return end
     local recipe = job.recipes[step.recipeID]
-    local ready, reason = ns.API.RecipeReady(step.recipeID)
-    if not ready then pause(reason or L.RECIPE_TEMPORARILY_UNAVAILABLE) return end
-    local baseline = ns.API.CountItem(recipe.outputItemID)
     local batchCount = recipe.canCreateMultiple == false and 1 or step.crafts
+    if clickContext and (clickContext.native and ns.API.SelectedRecipeID() ~= job.recipeID
+        or clickContext.stepID and (step.recipeID ~= clickContext.stepID or batchCount ~= clickContext.batchCount)) then
+        refuseClick(L.ACTION_CHANGED)
+        return
+    end
+    local ready, reason = ns.API.RecipeReady(step.recipeID, batchCount)
+    if not ready then pause(reason or L.RECIPE_TEMPORARILY_UNAVAILABLE) return end
+    local baseline = (ns.API.ReadBagCount or ns.API.CountItem)(recipe.outputItemID)
+    if baseline == nil then pause(L.INVENTORY_UNAVAILABLE); return end
     -- A real click submits one native batch of one recipe. Events can confirm
     -- its progress, but never authorize another recipe or another batch.
     job.pending = {
@@ -856,9 +1020,20 @@ local function castBatch()
     ns.Refresh()
 end
 
-function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
+function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent, clickContext)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        ns.status = L.BANK_TRANSFER_BUSY
+        return false
+    end
     purchaseOnlyIntent = purchaseOnlyIntent == true
-    if actionIntent == "buy" then allowCraft = false end
+    local displayedQuote = clickContext and clickContext.quote
+    if actionIntent == "buy" then
+        allowCraft = false
+        -- Legacy callers can pass the button's intent without a context. Bind
+        -- them to the last quote before Refresh replaces it. Bank-dialog
+        -- callbacks carry their own signed-off choice and ceiling.
+        if not clickContext and not bankOverride and not bankPreparationApproval then displayedQuote = ns.quote end
+    end
     if ns.pendingStart or ns.bankConfirmation then return end
     if ns.Merchant.IsBusy() or (ns.job and ns.job.awaitingPurchase) then
         ns.status = L.WAIT_PURCHASES_RESUME
@@ -875,6 +1050,10 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
     local id = ns.job and ns.job.recipeID or ns.selectedID
     local key = ns.job and ns.job.professionKey or ns.selectedProfessionKey or ns.professionKey
     if not id or not key then pause(L.SELECT_RECIPE); return end
+    if clickContext and (clickContext.recipeID ~= id or not sameProfession(clickContext.professionKey, key)
+        or clickContext.quantity ~= (ns.job and ns.job.remaining or ns.quantity)) then
+        refuseClick(L.ACTION_CHANGED); return
+    end
     ns.Refresh()
     local prebuy = bankPurchasePlan() ~= nil
     local partialPurchase = ns.quote and ns.quote.partial == true
@@ -917,18 +1096,24 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
             ns.pendingStart = nil
             refuseClick(reason or L.CATALOGUE_SWITCH_FAILED)
         else
-            scanAttempts = 0
+            scanAttempts, partialAttempts = 0, 0
             rescanAt = now() + 0.2
         end
         return
     end
     -- Cached recipes are for browsing only. Re-read the live profession before
     -- any purchase, then plan from current bags, even without a BAG_UPDATE event.
-    local recipes, err = ns.Scan(true)
-    if not recipes or not recipes[id] or recipes[id].supported == false then
-        refuseClick(err or L.CATALOGUE_RECIPE_CHANGED); return
+    local recipes, err = ns.Scan(true, id)
+    if not recipes or not recipes[id] or recipes[id].supported == false
+        or (clickContext and clickContext.native and recipes[id].hasOptionalSlots) then
+        refuseClick(err or L.CATALOGUE_RECIPE_CHANGED); noteScanRefusal(recipes); return
     end
     if ns.job then ns.job.recipes = recipes; ns.Refresh() end
+    -- A partial scan returns only live records. The displayed plan may still
+    -- rely on a saved record of a recipe that is loading: refuse the click.
+    for _, step in ipairs(ns.plan and ns.plan.steps or {}) do
+        if not recipes[step.recipeID] then refuseClick(L.LOADING_REAGENTS); return end
+    end
     prebuy = bankPurchasePlan() ~= nil
     partialPurchase = ns.quote and ns.quote.partial == true
     if prebuy or partialPurchase then purchaseOnlyIntent, allowCraft = true, false end
@@ -939,7 +1124,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
         pause(L.BANK_OVERRIDE_CHANGED); return
     end
     local existingProject = ns.job ~= nil and not ns.job.purchaseOnly
-    if not ns.job and not prepareJob() then return end
+    if not ns.job and not prepareJob(recipes) then return end
     if purchaseOnlyIntent then
         ns.job.purchaseOnly = true
         ns.job.bankPurchaseOnly = prebuy or nil
@@ -974,7 +1159,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
             return
         end
         ns.job.awaitingPurchase = true
-        if not buyForCraft() then
+        if not buyForCraft(displayedQuote) then
             ns.job.awaitingPurchase = nil
             -- A refused purchase start is a pause like any other refusal;
             -- buyForCraft already printed a changed quote.
@@ -994,7 +1179,7 @@ function ns.Start(purchaseOnlyIntent, allowCraft, actionIntent)
         clearSpendingApproval()
         commitAllQuantity() -- The confirmed job is ready for its next click.
         pause(L.BANK_OVERRIDE_READY_CLICK)
-    else castBatch() end
+    else castBatch(clickContext) end
 end
 
 -- Create All (CAB page or native page) borrows the maximum only while its
@@ -1052,23 +1237,23 @@ end
 
 -- Explicit clicks in the native profession page use exactly the same live
 -- planning, purchase and cast continuation as clicks in the catalogue.
-function ns.StartNative(recipeID, quantity, purchaseOnlyIntent, actionIntent)
+function ns.StartNative(recipeID, quantity, purchaseOnlyIntent, actionIntent, clickContext)
     if ns.catalogueActive or combat() or not ns.API.IsOwnProfession()
         or ns.API.GetProfessionKey() ~= ns.professionKey
         or ns.API.SelectedRecipeID() ~= recipeID then return false end
     if ns.pendingStart or ns.bankConfirmation or ns.Merchant.IsBusy() then return false end
     if ns.job then
         if ns.job.recipeID ~= recipeID or ns.job.professionKey ~= ns.professionKey then return false end
-        ns.Start(purchaseOnlyIntent, nil, actionIntent)
+        ns.Start(purchaseOnlyIntent, nil, actionIntent, clickContext)
         return true
     end
     local recipe = ns.recipes[recipeID]
-    if not recipe or recipe.supported == false then return false end
+    if not recipe or recipe.supported == false or recipe.hasOptionalSlots then return false end
     quantity = tonumber(quantity)
     if not quantity or quantity ~= quantity or quantity == math.huge or quantity == -math.huge then return false end
     ns.selectedID, ns.selectedProfessionKey = recipeID, ns.professionKey
     ns.SetQuantity(quantity)
-    ns.Start(purchaseOnlyIntent, nil, actionIntent)
+    ns.Start(purchaseOnlyIntent, nil, actionIntent, clickContext)
     return true
 end
 
@@ -1081,7 +1266,7 @@ function ns.ProfessionOpenClicked(recipeID, key)
     local recipe = activeRecipes()[recipeID]
     if recipeID ~= ns.selectedID or not sameProfession(key, selectedKey)
         or not recipe or recipe.supported == false then return false end
-    scanAttempts, rescanAt = 0, now() + 0.2
+    scanAttempts, partialAttempts, rescanAt = 0, 0, now() + 0.2
     ns.status = L.CATALOG_VERIFY_HELP
     ns.Refresh()
     return true
@@ -1095,7 +1280,7 @@ function ns.VerifySelectedRecipe()
     local id, key = ns.selectedID, ns.selectedProfessionKey or ns.professionKey
     if not id or not key then pause(L.SELECT_RECIPE); return false end
     if ns.API.IsOwnProfession() and sameProfession(ns.API.GetProfessionKey(), key) then
-        local recipes, reason = ns.Scan(true)
+        local recipes, reason = ns.Scan(true, id)
         if not recipes or not recipes[id] or recipes[id].supported == false then
             refuseClick(reason or L.CATALOGUE_RECIPE_CHANGED); return false
         end
@@ -1133,20 +1318,26 @@ local function finishProfessionSwitch()
     ns.Refresh()
 end
 
+-- Seconds without any progress after which a submitted batch is held to have
+-- ended with a confirmation missing.
+local CONFIRMATION_TIMEOUT = 45
+
 local function finishPending()
     local job = ns.job
     local pending = job and job.pending
     if not pending then return end
-    local count = ns.API.CountItem(pending.itemID)
+    local count = (ns.API.ReadBagCount or ns.API.CountItem)(pending.itemID)
     -- Count receipts cumulatively: depositing an already received output in the
     -- bank must not erase its confirmation or prevent the rest of a batch ending.
-    pending.received = pending.received + math.max(0, count - pending.lastCount)
-    pending.lastCount = count
+    if count ~= nil then
+        pending.received = pending.received + math.max(0, count - pending.lastCount)
+        pending.lastCount = count
+    end
     local received = math.floor(pending.received / pending.unitOutput)
     local confirmed = math.min(pending.requested, pending.successes, received)
     if confirmed > pending.credited then
         local added = confirmed - pending.credited
-        pending.credited, pending.lastProgress = confirmed, now()
+        pending.credited, pending.lastProgress, pending.notifiedTimeout = confirmed, now(), nil
         if pending.recipeID == job.recipeID then job.remaining = math.max(0, job.remaining - added) end
         ns.Refresh()
     end
@@ -1164,7 +1355,8 @@ local function finishPending()
                 and L.CRAFT_INTERRUPTED or L.CRAFT_NEXT_CLICK
             ns.Refresh()
         end
-    elseif now() - pending.lastProgress > 45 then
+    elseif not pending.notifiedTimeout and now() - pending.lastProgress > CONFIRMATION_TIMEOUT then
+        pending.notifiedTimeout = true
         -- Keep the pending record: an ambiguous operation must not be retried.
         job.running = false
         ns.status = L.CRAFT_CONFIRMATION_MISSING
@@ -1172,8 +1364,28 @@ local function finishPending()
     end
 end
 
+-- For the bank deposit guard. True while the submitted batch may still craft
+-- or deliver. The pending record alone does not say so: it is kept on purpose
+-- when a confirmation is missing, so that nothing is retried, long after the
+-- batch has ended. The batch has ended once the client reported its stop: at
+-- once for a failed or interrupted cast, after the settling delay for a stopped
+-- craft. It has also ended when nothing has progressed for the confirmation
+-- delay; while the project is still flagged as running, finishPending clears
+-- that flag at the same delay. A cast bar that is absent between two items of
+-- a live batch is neither.
+function ns.CraftBatchActive()
+    local job = ns.job
+    local pending = job and job.pending
+    if not pending then return false end
+    if job.running then return true end
+    if pending.stopped then return pending.settleAt ~= nil and now() < pending.settleAt end
+    return now() - pending.lastProgress <= CONFIRMATION_TIMEOUT
+end
+
 local function castEvent(event, unit, castGUID, spellID)
     if unit ~= "player" then return end
+    -- Any successful cast: a recipe with a cooldown of its own starts it now.
+    if event == "UNIT_SPELLCAST_SUCCEEDED" and ns.API.NoteRecipeCast then ns.API.NoteRecipeCast(cleanNumber(spellID)) end
     local job = ns.job
     local pending = job and job.pending
     if not pending then return end
@@ -1214,12 +1426,15 @@ function ns.OnEvent(event, ...)
             -- label is created. Settings resolves the preference once per login.
             if ns.Settings then ns.Settings.Install()
             else ns.Locale.SetLocale(ns.Locale.GetClientLocale()) end
+            if ns.Merchant.RestoreOrder then ns.Merchant.RestoreOrder() end
             ns.status = L.OPEN_PROFESSION_SELECT_RECIPE
             initialized = true
             for id in pairs(defaultVendors) do ns.vendorItems[id] = true end
             for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do ns.vendorItems[id] = enabled end
             if ns.Catalogue then ns.Catalogue.Load() end
             if ns.Stock then ns.Stock.Init() end
+            if ns.BankTransferAPI then ns.BankTransferAPI.Init() end
+            if ns.BankTransferUI then ns.BankTransferUI.Init() end
             if ns.Bootstrap then ns.Bootstrap.Init() end
             if ns.BootstrapUI then ns.BootstrapUI.Init() end
         elseif not initialized then return end
@@ -1235,7 +1450,7 @@ function ns.OnEvent(event, ...)
         if ns.Catalogue then ns.Catalogue.Load() end
         if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata() end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
-        if ns.API.IsOwnProfession() then scanAttempts = 0; rescanAt = now() + 0.2 end
+        if ns.API.IsOwnProfession() then scanAttempts, partialAttempts = 0, 0; rescanAt = now() + 0.2 end
         if ns.UI and ns.UI.Install then ns.UI.Install() end
         if ns.StockUI then ns.StockUI.Install() end
         ns.Refresh()
@@ -1252,7 +1467,7 @@ function ns.OnEvent(event, ...)
             and not ns.job and not closedSource and not ns.catalogueActive and not ns.pendingStart then
             ns.selectedID = nil
         end
-        scanAttempts = 0
+        scanAttempts, partialAttempts = 0, 0
         rescanAt = now() + 0.2
         if ns.NativeUI then ns.NativeUI.Install() end
         if ns.NativeCraft then ns.NativeCraft.Install() end
@@ -1261,12 +1476,19 @@ function ns.OnEvent(event, ...)
     elseif event == "TRADE_SKILL_CLOSE" then
         ns.CancelBankConfirmation()
         professionClosed = true
+        local dropped = partialScan ~= nil
+        partialScan = nil -- A partial live map never outlives the open window.
+        ns.recipeRevision = (ns.recipeRevision or 0) + 1
         if ns.NativeCraft then ns.NativeCraft.Refresh() end
         ns.PausePurchaseContinuation()
         if ns.job then
             ns.Merchant.Stop()
             ns.job.running = false
             ns.status = L.PROJECT_PAUSED_REOPEN
+            ns.Refresh()
+        elseif dropped then
+            -- The page was planned from the map just dropped: show the saved
+            -- catalogue now, as the next withdrawal plans from it.
             ns.Refresh()
         end
     elseif event == "MERCHANT_SHOW" then
@@ -1339,6 +1561,7 @@ function ns.OnEvent(event, ...)
 end
 
 frame:SetScript("OnEvent", function(_, event, ...) ns.OnEvent(event, ...) end)
+local nextCatalogueChargeCheck = 0
 frame:SetScript("OnUpdate", function()
     local time = now()
     if rescanAt and time >= rescanAt then rescanAt = nil; ns.Scan() end
@@ -1346,6 +1569,10 @@ frame:SetScript("OnUpdate", function()
     if ns.BootstrapUI then ns.BootstrapUI.Update(time) end
     if time - lastSelectionCheck < 0.2 then return end
     lastSelectionCheck = time
+    if ns.catalogueActive and time >= nextCatalogueChargeCheck then
+        nextCatalogueChargeCheck = time + 1
+        if ns.Catalogue and ns.Catalogue.RecipeLimitsChanged and ns.Catalogue.RecipeLimitsChanged() then ns.Refresh() end
+    end
     ns.Merchant.Tick(time)
     if not ns.catalogueActive and not ns.pendingStart and not ns.job
         and ns.API.IsOwnProfession() and ns.API.GetProfessionKey() == ns.professionKey then
@@ -1419,7 +1646,10 @@ SLASH_CRAFTAUTOBUY2 = "/craftautobuy"
 SlashCmdList.CRAFTAUTOBUY = function(message)
     local command, arg = (message or ""):match("^(%S*)%s*(.-)$")
     command = command:lower()
-    if command == "stop" then ns.Cancel()
+    if command == "stop" then
+        if ns.BankTransfer and ns.BankTransfer.IsBusy() then ns.BankTransfer.Cancel("BANK_TRANSFER_CANCELLED")
+        else ns.Cancel() end
+    elseif command == "reconcile" then ns.Merchant.RequestReconciliation()
     elseif command == "scan" then ns.Scan()
     elseif command == "config" or command == "options" then
         if ns.Settings then ns.Settings.Open() end
@@ -1459,7 +1689,8 @@ SlashCmdList.CRAFTAUTOBUY = function(message)
                 ns.Print(L.DEBUG_RECIPE:format(tostring(discovery.recipeID), progress, discovery.lastReason))
             end
         end
-        if ns.scanError then ns.Print(ns.scanError) end
+        -- A partial read succeeds without an error: keep its reason visible.
+        if ns.scanError then ns.Print(ns.scanError) elseif partialScan then ns.Print(L.LOADING_REAGENTS) end
     elseif command == "vendor" and tonumber(arg) then
         local id = math.floor(tonumber(arg))
         if id > 0 then
