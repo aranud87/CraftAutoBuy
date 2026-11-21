@@ -402,8 +402,9 @@ local function rebuildRows(includeBank)
             end
         end
     end
+    local nameBefore = ns.Locale.NameComparator()
     table.sort(result, function(a, b)
-        if a.professionName ~= b.professionName then return a.professionName < b.professionName end
+        if a.professionName ~= b.professionName then return nameBefore(a.professionName, b.professionName) end
         local ap, bp = a.categoryPath, b.categoryPath
         for index = 1, math.max(#ap, #bp) do
             local ac, bc = ap[index], bp[index]
@@ -418,7 +419,7 @@ local function rebuildRows(includeBank)
                 return ac.id < bc.id
             end
         end
-        if a.name ~= b.name then return a.name < b.name end
+        if a.name ~= b.name then return nameBefore(a.name, b.name) end
         if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
         return a.professionKey < b.professionKey
     end)
@@ -430,8 +431,7 @@ local function filteredRows(search, options, favorites)
     local includeBank = not options or options.includeBank ~= false
     local cacheKey = includeBank and "bank" or "bags"
     if not rows[cacheKey] then rebuildRows(includeBank) end
-    -- Lua's %s depends on the system locale and can strip bytes from UTF-8.
-    local needle = type(search) == "string" and searchText(search:match("^[ \t\r\n\v\f]*(.-)[ \t\r\n\v\f]*$")) or ""
+    local needle = searchText(ns.Locale.TrimSearch(search))
     local result = {}
     for _, row in ipairs(rows[cacheKey]) do
         local show = favorites and row.favorite or not favorites and row.count > 0

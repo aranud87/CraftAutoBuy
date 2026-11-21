@@ -107,6 +107,10 @@ local fallbackView = {content = "components", inventory = false, extensionsExpan
 local lastData
 local LIST_TOP, LIST_HEIGHT, COMPACT_LIST_HEIGHT = 94, 315, 171
 
+local function searchQuery()
+    return ns.Locale.TrimSearch(widgets.search:GetText())
+end
+
 local function view()
     return ns.StockView and ns.StockView.Get() or fallbackView
 end
@@ -269,7 +273,7 @@ local function rememberScroll(column, offset)
     end
     if type(offset) ~= "number" or (issecretvalue and issecretvalue(offset)) or offset ~= offset
         or offset < 0 or offset == math.huge then return end
-    if widgets.search:GetText() ~= "" then searchScroll[column.key] = offset
+    if searchQuery() ~= "" then searchScroll[column.key] = offset
     elseif ns.StockView then ns.StockView.SetScroll(column.key, offset)
     else fallbackView.scroll[column.key] = offset end
 end
@@ -527,7 +531,7 @@ local function renderColumn(column, entries, emptyText, height)
     column.frame:SetHeight(height + 24); column.scroll:SetHeight(height)
     column.content:SetHeight(math.max(height, #entries * 40))
     column.empty:SetText(emptyText); column.empty:SetShown(#entries == 0)
-    local desired = widgets.search:GetText() ~= "" and searchScroll[column.key] or view().scroll[column.key] or 0
+    local desired = searchQuery() ~= "" and searchScroll[column.key] or view().scroll[column.key] or 0
     restoringScroll = true
     column.scroll:SetVerticalScroll(math.min(desired, math.max(0, #entries * 40 - height)))
     restoringScroll = false
@@ -611,7 +615,7 @@ end
 local function renderNow(searchOnly)
     if book:IsShown() and not panel:IsShown() then displayPage() end
     setBookArt()
-    local state, search = view(), widgets.search:GetText()
+    local state, search = view(), searchQuery()
     local data = dataFor(search, state, searchOnly)
     if data.professionsComplete and state.professionKey then
         local found = false

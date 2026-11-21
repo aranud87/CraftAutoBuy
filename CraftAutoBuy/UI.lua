@@ -45,7 +45,7 @@ end
 
 -- Same whitespace class as Catalogue.filteredRows: blanks are not a filter.
 local function searchActive()
-    return widgets.search ~= nil and widgets.search:GetText():find("[^ \t\r\n\v\f]") ~= nil
+    return widgets.search ~= nil and ns.Locale.TrimSearch(widgets.search:GetText()) ~= ""
 end
 
 local function collapsedSections()
@@ -313,22 +313,21 @@ local function restingJobStatus(job, needsBuy)
         if needsBuy then return L.PURCHASE_CRAFT_PAUSED end
         return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PURCHASE_READY_CLICK
     end
-    -- A stop that asked to confirm a changed quote, or that found purchases
-    -- incomplete, is obsolete once nothing remains to buy (the bank supplies
-    -- were withdrawn, for example).
-    if (current == L.BANK_OVERRIDE_CHANGED or current == L.PURCHASE_CRAFT_INCOMPLETE) and not needsBuy then
+    -- Keep a changed quote visible as long as the player would spend money.
+    if current == L.BANK_OVERRIDE_CHANGED and not needsBuy then
         return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PROJECT_RESUME_CLICK
     end
     local combatPause = current == L.PROJECT_PAUSED_COMBAT or current == L.CRAFT_PAUSED_COMBAT
         or current == L.PURCHASES_PAUSED_COMBAT
+    local purchasePause = current == L.PURCHASE_CRAFT_PAUSED or current == L.PURCHASE_CRAFT_INCOMPLETE
     -- A click refused while the open profession was unreadable: a scan error
     -- that lasts is shown above; otherwise that cause has ended like the others.
     local scanRefused = ns.scanRefusal ~= nil and current == ns.scanRefusal
-    if not combatPause and not scanRefused and current ~= L.PROJECT_PAUSED_REOPEN then return current end
+    if not combatPause and not purchasePause and not scanRefused and current ~= L.PROJECT_PAUSED_REOPEN then return current end
     if inCombat then return combatPause and current or L.PROJECT_PAUSED_COMBAT end
     if not professionOpen then return L.PROJECT_PAUSED_REOPEN end
-    if not needsBuy and unconfirmed then return L.PURCHASE_UNCONFIRMED_READY_CLICK end
-    return L.PROJECT_RESUME_CLICK
+    if needsBuy then return L.PURCHASE_CRAFT_PAUSED end
+    return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PROJECT_RESUME_CLICK
 end
 
 local function actionTooltip(button, defaultHelp)
@@ -931,12 +930,13 @@ local function renderList()
         -- never add another Cuisine heading or nested sections to this view.
         node.entries[#node.entries + 1] = entry
     end
+    local nameBefore = ns.Locale.NameComparator()
     local function collect(node)
         groupKeys[node.key] = true
         for _, entry in ipairs(node.entries) do visible[entry.professionKey .. ":" .. entry.recipeID] = true end
         table.sort(node.entries, function(a, b)
-            if node.favorite and a.professionName ~= b.professionName then return a.professionName < b.professionName end
-            if a.name ~= b.name then return a.name < b.name end
+            if node.favorite and a.professionName ~= b.professionName then return nameBefore(a.professionName, b.professionName) end
+            if a.name ~= b.name then return nameBefore(a.name, b.name) end
             if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
             return a.professionKey < b.professionKey
         end)

@@ -652,7 +652,7 @@ end
 
 function Stock.Rows(search)
     ensureLoaded()
-    local query = normalized(type(search) == "string" and search or "")
+    local query = normalized(ns.Locale.TrimSearch(search))
     local bags, bank, bankKnown = {}, {}, snapshot.known and not Stock.IsBankUnverified()
     for id in pairs(ingredientIDs()) do
         local nameOK, name = call(C_Item and C_Item.GetItemNameByID, id)

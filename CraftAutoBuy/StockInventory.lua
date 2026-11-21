@@ -317,7 +317,7 @@ end
 -- Search an already sorted, verified reading. Leave source rows intact for
 -- clearing the search, and keep their unknown quantities as nil.
 function Inventory.Filter(view, search)
-    local query = ns.Locale.SearchText(type(search) == "string" and not secret(search) and search or "")
+    local query = ns.Locale.SearchText(ns.Locale.TrimSearch(search))
     if query == "" then return view end
     local result = {}
     for key, value in pairs(view) do result[key] = value end

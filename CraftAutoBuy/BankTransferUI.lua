@@ -5,6 +5,7 @@ ns.BankTransferUI = UI
 
 local deposit, observer, listenerBound, rendering, updating, updateAgain, contextChanging
 local forcedClosed, wasOpen, combatEvent, castingEvent = false, false, false, false
+local depositThisVisit = false
 local previewDirty, previewKey, previewText, previewReason, previewEmpty = true, nil, nil, nil, true
 local previewPartial, previewTargets, previewRecipes
 local refreshDependents
@@ -288,6 +289,7 @@ function UI.Refresh()
     wasOpen=open
     if not open then
         previewDirty=true
+        depositThisVisit=false
         if deposit then deposit:Hide() end
         if previouslyOpen then stop("BANK_TRANSFER_BANK_CLOSED") end
         rendering=false
@@ -305,7 +307,7 @@ function UI.Refresh()
     local lines={}
     append(lines,L.BANK_TRANSFER_COMPONENT_SCOPE)
     if reason then append(lines,message(reason))
-    elseif running or (state.mode=="deposit" and state.messageKey~="BANK_TRANSFER_BANK_CLOSED") then
+    elseif running or (depositThisVisit and state.mode=="deposit" and state.messageKey~="BANK_TRANSFER_BANK_CLOSED") then
         append(lines,progress(state))
     else append(lines,message("BANK_TRANSFER_READY")) end
     deposit.help=table.concat(lines,"\n\n")
@@ -334,6 +336,7 @@ end
 local function transferChanged(state)
     previewDirty=true
     state=type(state)=="table" and state or engineState()
+    if state.phase=="running" and not awaitingFeedback then depositThisVisit=state.mode=="deposit" end
     if state.phase=="running" or state.phase=="awaiting" or state.phase=="cancelling" then awaitingFeedback=true
     elseif awaitingFeedback then
         awaitingFeedback=false

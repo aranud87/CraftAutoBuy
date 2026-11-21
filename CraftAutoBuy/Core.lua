@@ -82,6 +82,10 @@ local function cleanNumber(value)
     return type(value) == "number" and value or nil
 end
 
+local function validVendorItemID(id)
+    return type(id) == "number" and id >= 1 and id <= 2147483647 and id == math.floor(id)
+end
+
 local function now() return GetTime() end
 local function combat() return InCombatLockdown and InCombatLockdown() end
 
@@ -1430,7 +1434,10 @@ function ns.OnEvent(event, ...)
             ns.status = L.OPEN_PROFESSION_SELECT_RECIPE
             initialized = true
             for id in pairs(defaultVendors) do ns.vendorItems[id] = true end
-            for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do ns.vendorItems[id] = enabled end
+            for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do
+                if validVendorItemID(id) then ns.vendorItems[id] = enabled
+                else CraftAutoBuyDB.vendorItems[id] = nil end
+            end
             if ns.Catalogue then ns.Catalogue.Load() end
             if ns.Stock then ns.Stock.Init() end
             if ns.BankTransferAPI then ns.BankTransferAPI.Init() end
@@ -1692,8 +1699,8 @@ SlashCmdList.CRAFTAUTOBUY = function(message)
         -- A partial read succeeds without an error: keep its reason visible.
         if ns.scanError then ns.Print(ns.scanError) elseif partialScan then ns.Print(L.LOADING_REAGENTS) end
     elseif command == "vendor" and tonumber(arg) then
-        local id = math.floor(tonumber(arg))
-        if id > 0 then
+        local id = tonumber(arg)
+        if validVendorItemID(id) then
             ns.vendorItems[id] = not ns.vendorItems[id] or nil
             CraftAutoBuyDB.vendorItems[id] = ns.vendorItems[id] or false
             ns.Print((ns.vendorItems[id] and L.VENDOR_ITEM_ENABLED or L.VENDOR_ITEM_DISABLED):format(ns.ItemName(id)))

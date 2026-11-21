@@ -110,8 +110,28 @@ for character in ("АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭ�
     SEARCH_FOLD[character] = lowerCyrillic[index]
 end
 
+function Locale.TrimSearch(text)
+    if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return "" end
+    -- Lua's %s depends on the system locale and can strip bytes from UTF-8.
+    return text:match("^[ \t\r\n\v\f]*(.-)[ \t\r\n\v\f]*$")
+end
+
 function Locale.SearchText(text)
     if type(text) ~= "string" then return "" end
     local folded = text:gsub(UTF8_CHARACTER, SEARCH_FOLD)
     return (folded:gsub("[A-Z]", function(character) return string.char(character:byte() + 32) end))
+end
+
+-- Fold each name once per sort. Keep the original spelling as a tie-breaker.
+function Locale.NameComparator()
+    local keys = {}
+    local function key(name)
+        if not keys[name] then keys[name] = Locale.SearchText(name) end
+        return keys[name]
+    end
+    return function(left, right)
+        local a, b = key(left), key(right)
+        if a ~= b then return a < b end
+        return left < right
+    end
 end
