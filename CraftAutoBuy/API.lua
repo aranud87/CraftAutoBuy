@@ -410,6 +410,10 @@ local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
             }
         elseif slot.required == nil and slot.reagentType == nil then
             return nil, L.REAGENT_TYPE_UNAVAILABLE
+        else
+            -- CAB plans the basic recipe. Native crafting must retain the
+            -- player's optional allocations for this form.
+            recipe.hasOptionalSlots = true
         end
     end
     for itemID, quantity in pairs(byItem) do
@@ -430,38 +434,50 @@ function API.GetRecipe(recipeID)
     local key = API.GetProfessionKey()
     if C_TradeSkillUI.IsRecipeInSkillLine then
         local ok, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, key)
-        if not ok or not belongs then return nil, L.RECIPE_OTHER_PROFESSION end
+        if not ok or type(belongs) ~= "boolean" or (issecretvalue and issecretvalue(belongs)) then return nil, L.LOADING_PROFESSION end
+        if not belongs then return nil, L.RECIPE_OTHER_PROFESSION end
     end
     local ok, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
-    if not ok or type(info) ~= "table" then return nil, L.LOADING_RECIPE end
+    if not ok or type(info) ~= "table" or (issecretvalue and issecretvalue(info))
+        or type(info.learned) ~= "boolean" or (issecretvalue and issecretvalue(info.learned)) then return nil, L.LOADING_RECIPE end
     return readRecipe(recipeID, info, key)
 end
 
-function API.ScanRecipes()
+-- Background discovery still requires every recipe. A fresh action scan can
+-- proceed with its selected recipe and planned steps while unrelated records
+-- load. Partial scans must not replace the saved profession catalogue.
+function API.ScanRecipes(required)
     local own, reason = API.IsOwnProfession()
     if not own then return nil, reason end
     local key = API.GetProfessionKey()
     local ok, ids = call(C_TradeSkillUI.GetAllRecipeIDs)
     local count = ok and arraySize(ids)
     if not count or count == 0 then return nil, L.RECIPES_LOADING end
-    local recipes = {}
+    local recipes, complete, unreadable = {}, true, {}
     for _, recipeID in ipairs(ids) do
         local infoOK, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
-        if not infoOK or type(info) ~= "table" then return nil, L.RECIPES_LOADING end
-        local belongs = true
-        if C_TradeSkillUI.IsRecipeInSkillLine then
-            local belongsOK
-            belongsOK, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, key)
-            if not belongsOK then return nil, L.LOADING_PROFESSION end
+        local err
+        if not infoOK or type(info) ~= "table" or (issecretvalue and issecretvalue(info))
+            or type(info.learned) ~= "boolean" or (issecretvalue and issecretvalue(info.learned)) then
+            err = L.RECIPES_LOADING
+        elseif info.learned then
+            local belongsOK, belongs = true, true
+            if C_TradeSkillUI.IsRecipeInSkillLine then
+                belongsOK, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, recipeID, key)
+            end
+            if not belongsOK or type(belongs) ~= "boolean" or (issecretvalue and issecretvalue(belongs)) then
+                err = L.LOADING_PROFESSION
+            elseif belongs then
+                recipes[recipeID], err = readRecipe(recipeID, info, key)
+            end
         end
-        if info.learned and belongs then
-            local recipe, errorMessage = readRecipe(recipeID, info, key)
-            if not recipe then return nil, errorMessage end
-            recipes[recipeID] = recipe
+        if err then
+            if not required or required[recipeID] then return nil, err end
+            complete, unreadable[recipeID] = false, true
         end
     end
-    if key ~= API.GetProfessionKey() then return nil, L.PROFESSION_CHANGED end
-    return recipes
+    if key ~= API.GetProfessionKey() or not API.IsOwnProfession() then return nil, L.PROFESSION_CHANGED end
+    return recipes, nil, complete, unreadable
 end
 
 -- A passive catalogue read never changes the active profession, selects a
@@ -505,13 +521,15 @@ local function backgroundSpellIDs(key)
     -- false at cold login. Enumerate the pinned client-data index instead.
     local index = ns.RecipeIndex
     local ok, _, build, _, interface = call(GetBuildInfo)
-    if type(index) ~= "table" or index.schema ~= 1 or not ok
-        or (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
-        or tonumber(build) ~= index.build or interface ~= index.interface
-        or type(index.professions) ~= "table" then return nil, nil, L.CATALOG_VERIFY_HELP end
+    if not ok or (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
+        or not tonumber(build) or not ordinaryNumber(interface) then return nil, nil, L.RECIPES_LOADING end
+    if type(index) ~= "table" or index.schema ~= 1 or type(index.professions) ~= "table"
+        or tonumber(build) ~= index.build or interface ~= index.interface then
+        return nil, nil, L.CATALOG_VERIFY_HELP, true
+    end
     local spells = index.professions[key]
     local total = arraySize(spells)
-    if total == nil then return nil, nil, L.CATALOG_VERIFY_HELP end
+    if total == nil then return nil, nil, L.CATALOG_VERIFY_HELP, true end
     local ids, seen = {}, {}
     for index = 1, total do
         local id = spells[index]
@@ -530,8 +548,8 @@ function API.BeginBackgroundScan(key)
         or not Enum or not Enum.SpellBookSpellBank or Enum.SpellBookSpellBank.Player == nil then
         return nil, L.PROFESSION_API_UNAVAILABLE
     end
-    local ids, idSet, failure = backgroundSpellIDs(parent)
-    if not ids then return nil, failure end
+    local ids, idSet, failure, manual = backgroundSpellIDs(parent)
+    if not ids then return nil, failure, manual end
     return {professionKey = key, parentProfessionKey = parent, ids = ids,
         idSet = idSet, cursor = 1, progress = 0, total = #ids, recipes = {}, known = {},
         phase = "read", verifyCursor = 1}
@@ -693,9 +711,14 @@ local function itemCount(itemID, includeBank)
     return math.floor(count)
 end
 
+-- Purchase authorization and acknowledgments must distinguish an unreadable
+-- inventory from a verified empty stack. Legacy display callers expect zero.
+function API.ReadBagCount(itemID)
+    return itemCount(itemID, false)
+end
+
 function API.CountItem(itemID)
-    -- Execution always requires components in the bags.
-    return itemCount(itemID, false) or 0
+    return API.ReadBagCount(itemID) or 0
 end
 
 local function bankCount(itemID, bags)
@@ -732,24 +755,27 @@ function API.BankCount(itemID)
 end
 
 function API.Inventory(recipes)
-    local inventory = {}
+    local inventory, unknown = {}, {}
     local function add(itemID)
         if positiveInteger(itemID) and inventory[itemID] == nil then
-            inventory[itemID] = API.CountItem(itemID)
+            local bags = API.ReadBagCount(itemID)
+            inventory[itemID] = bags or 0
+            if bags == nil then unknown[itemID] = true end
         end
     end
     for _, recipe in pairs(recipes or {}) do
         add(recipe.outputItemID)
         for _, reagent in ipairs(recipe.reagents or {}) do add(reagent.itemID) end
     end
-    return inventory
+    return inventory, unknown
 end
 
 function API.InventoryWithBank(recipes)
-    local inventory, bank = {}, {}
+    local inventory, bank, unknown = {}, {}, {}
     local function add(itemID)
         if positiveInteger(itemID) and inventory[itemID] == nil then
-            local bags = itemCount(itemID, false)
+            local bags = API.ReadBagCount(itemID)
+            if bags == nil then unknown[itemID] = true end
             bank[itemID] = bankCount(itemID, bags)
             inventory[itemID] = (bags or 0) + bank[itemID]
         end
@@ -759,23 +785,160 @@ function API.InventoryWithBank(recipes)
         for _, reagent in ipairs(recipe.reagents or {}) do add(reagent.itemID) end
     end
     -- Bag counts are always live; only the personal bank may use its saved scan.
-    return inventory, bank
+    return inventory, bank, unknown
 end
 
-function API.RecipeReady(recipeID)
+-- A later successful read cannot certify an earlier zero. Only unreadable
+-- reagents in the selected material chain invalidate its purchase plan.
+function API.MarkUnknownPurchaseCounts(plan, recipes, unknown)
+    if not unknown or not next(unknown) or not plan or not next(plan.purchases or {}) then return end
+    local intermediateOutputs = {}
+    for _, step in ipairs(plan.steps or {}) do
+        local recipe = recipes[step.recipeID]
+        for _, reagent in ipairs(recipe and recipe.reagents or {}) do
+            if unknown[reagent.itemID] then plan.inventoryUnknown = true; return end
+        end
+        if recipe and step.recipeID ~= plan.recipeID then
+            intermediateOutputs[recipe.outputItemID] = step.recipeID
+        end
+    end
+    if not next(intermediateOutputs) then return end
+    -- An unreadable ingredient can make the first producer appear unusable
+    -- and divert the plan to a second producer that requires a purchase.
+    -- Examine alternate branches only for intermediates actually being made.
+    local producers, queue, seen = {}, {}, {}
+    for id, recipe in pairs(recipes) do
+        if recipe.supported ~= false and recipe.learned ~= false and recipe.outputItemID then
+            local output = recipe.outputItemID
+            producers[output] = producers[output] or {}
+            producers[output][#producers[output] + 1] = id
+            if intermediateOutputs[output] and id ~= intermediateOutputs[output] then queue[#queue + 1] = id end
+        end
+    end
+    while #queue > 0 do
+        local id = table.remove(queue)
+        if not seen[id] then
+            seen[id] = true
+            for _, reagent in ipairs(recipes[id].reagents or {}) do
+                if unknown[reagent.itemID] then plan.inventoryUnknown = true; return end
+                if not (ns.vendorItems and ns.vendorItems[reagent.itemID]) then
+                    for _, producer in ipairs(producers[reagent.itemID] or {}) do
+                        if not seen[producer] then queue[#queue + 1] = producer end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- A cooldown of the recipe's own, read from the spell itself, in seconds. The
+-- client's answer for a ready recipe carries neither a duration nor charges
+-- (Transmute: Iron to Gold answers nil, false, 0, 0), so it sets no limit, yet
+-- the first craft starts the cooldown again. GetSpellBaseCooldown answers in
+-- milliseconds, 0 for an ordinary recipe; spell data does not change during a
+-- session, so each readable answer is kept. An unreadable one limits nothing,
+-- as before, and is asked again later.
+local baseCooldowns = {}
+local function baseCooldown(id)
+    if baseCooldowns[id] then return baseCooldowns[id] end
+    if type(GetSpellBaseCooldown) ~= "function" or not positiveInteger(id) then return 0 end
+    local ok, value = call(GetSpellBaseCooldown, id)
+    if not ok or not ordinaryNumber(value) or value < 0 then return 0 end
+    baseCooldowns[id] = value / 1000
+    return baseCooldowns[id]
+end
+
+local function now()
+    local ok, value = call(GetTime)
+    if ok and ordinaryNumber(value) then return value end
+end
+
+-- When a recipe's cooldown ends, by GetTime(): as last read in its open
+-- profession, or started by a successful cast. A profession that is not open
+-- is never asked, so without this memory its recipe on cooldown was listed at
+-- its full count while another profession was open. Kept for the session only.
+local cooldownEnds, castAt = {}, {}
+
+-- For a profession that is not open: none while a remembered cooldown runs,
+-- one craft for a recipe with a cooldown of its own, otherwise no limit.
+local function rememberedLimit(id)
+    local ends = cooldownEnds[id]
+    if ends then
+        local time = now()
+        if not time or time < ends then return 0 end
+        cooldownEnds[id] = nil
+    end
+    if baseCooldown(id) > 0 then return 1 end
+end
+
+-- A successful cast of a recipe with a cooldown of its own starts that
+-- cooldown, whoever launched it (CAB or the native window).
+function API.NoteRecipeCast(id)
+    local seconds = positiveInteger(id) and baseCooldown(id) or 0
+    local time = seconds > 0 and now()
+    if not time then return end
+    castAt[id] = time
+    if (cooldownEnds[id] or 0) < time + seconds then cooldownEnds[id] = time + seconds end
+end
+
+local function recipeLimit(id)
+    if not C_TradeSkillUI or not C_TradeSkillUI.GetRecipeCooldown then return nil end
+    local ok, cooldown, _, charges, maximum = call(C_TradeSkillUI.GetRecipeCooldown, id)
+    if not ok or (issecretvalue and (issecretvalue(cooldown) or issecretvalue(charges) or issecretvalue(maximum)))
+        or (maximum ~= nil and not nonnegativeInteger(maximum))
+        or (cooldown ~= nil and not ordinaryNumber(cooldown)) then
+        return 0, L.COOLDOWN_UNAVAILABLE
+    end
+    if maximum and maximum > 0 then
+        if not nonnegativeInteger(charges) or charges > maximum then return 0, L.COOLDOWN_UNAVAILABLE end
+        return charges, charges == 0 and L.RECIPE_ON_COOLDOWN or L.CRAFT_CHARGES_INSUFFICIENT
+    end
+    if ordinaryNumber(cooldown) and cooldown > 0 then
+        if positiveInteger(charges) then return charges, L.CRAFT_CHARGES_INSUFFICIENT end
+        local time = now()
+        if time then cooldownEnds[id] = time + cooldown end
+        return 0, L.RECIPE_ON_COOLDOWN
+    end
+    -- Ready. A cooldown of the recipe's own allows one craft before it starts
+    -- again, although the answer carries no limit (F5). A ready answer in the
+    -- two seconds after a noted cast may come before the client starts the
+    -- cooldown: what the cast noted is kept.
+    local time, cast = now(), castAt[id]
+    if not (cast and time and time - cast < 2) then cooldownEnds[id] = nil end
+    if baseCooldown(id) > 0 then return 1, L.CRAFT_CHARGES_INSUFFICIENT end
+end
+
+-- Snapshot on demand for one plan/maximum. Charges can change without a bag
+-- event and belong to the active profession, never to saved recipe records.
+-- A profession that is not open is not asked: its recipes are limited by what
+-- the spells and this session's readings tell (rememberedLimit). Without the
+-- spell cooldown API nothing is known of them, and there is no limit, as before.
+function API.RecipeLimits(key)
+    if not key then return nil end
+    local live = C_TradeSkillUI and C_TradeSkillUI.GetRecipeCooldown and API.IsOwnProfession()
+    if live then
+        local active = API.GetProfessionKey()
+        live = active and (key == active or API.GetProfessionParentKey(key) == API.GetProfessionParentKey(active))
+    end
+    if not live and type(GetSpellBaseCooldown) ~= "function" then return nil end
+    return setmetatable({}, {__index = function(limits, id)
+        local value
+        if live then value = recipeLimit(id) else value = rememberedLimit(id) end
+        if value == nil then value = math.huge end
+        rawset(limits, id, value)
+        return value
+    end})
+end
+
+function API.RecipeReady(recipeID, executions)
     local recipe, reason = API.GetRecipe(recipeID)
     if not recipe then return false, reason end
     if not recipe.supported then return false, recipe.reason end
     local infoOK, info = call(C_TradeSkillUI.GetRecipeInfo, recipeID)
     if not infoOK or not info or not info.learned then return false, L.RECIPE_NOT_LEARNED end
     if info.disabled then return false, info.disabledReason or L.RECIPE_UNAVAILABLE end
-    if C_TradeSkillUI.GetRecipeCooldown then
-        local ok, cooldown, _, charges = call(C_TradeSkillUI.GetRecipeCooldown, recipeID)
-        if not ok then return false, L.COOLDOWN_UNAVAILABLE end
-        if ordinaryNumber(cooldown) and cooldown > 0 and not (ordinaryNumber(charges) and charges > 0) then
-            return false, L.RECIPE_ON_COOLDOWN
-        end
-    end
+    local limit, blocked = recipeLimit(recipeID)
+    if limit and (executions or 1) > limit then return false, blocked end
     if C_TradeSkillUI.GetRecipeRequirements then
         local ok, requirements = call(C_TradeSkillUI.GetRecipeRequirements, recipeID)
         if not ok or arraySize(requirements) == nil then return false, L.CRAFT_REQUIREMENTS_UNAVAILABLE end
@@ -806,23 +969,20 @@ function API.RecipeReady(recipeID)
 end
 
 function API.Craft(recipeID, crafts)
+    if ns.BankTransfer and ns.BankTransfer.IsBusy and ns.BankTransfer.IsBusy() then
+        return false, L.BANK_TRANSFER_BUSY
+    end
     if not positiveInteger(crafts) then return false, L.INVALID_QUANTITY end
     if InCombatLockdown and InCombatLockdown() then return false, L.CRAFT_SUSPENDED_COMBAT end
-    local ready, reason = API.RecipeReady(recipeID)
+    local ready, reason = API.RecipeReady(recipeID, crafts)
     if not ready then return false, reason end
     local recipe, readError = API.GetRecipe(recipeID)
     if not recipe then return false, readError end
     if crafts > 1 and not recipe.canCreateMultiple then return false, L.RECIPE_SINGLE_CRAFT_ONLY end
-    if C_TradeSkillUI.GetRecipeCooldown then
-        local ok, _, _, charges, maxCharges = call(C_TradeSkillUI.GetRecipeCooldown, recipeID)
-        if ok and ordinaryNumber(maxCharges) and maxCharges > 0 and ordinaryNumber(charges) and crafts > charges then
-            return false, L.CRAFT_CHARGES_INSUFFICIENT
-        end
-    end
     for _, reagent in ipairs(recipe.reagents) do
-        if API.CountItem(reagent.itemID) < reagent.quantity * crafts then
-            return false, L.REAGENTS_MISSING_BAGS
-        end
+        local held = (API.ReadBagCount or API.CountItem)(reagent.itemID)
+        if held == nil then return false, L.INVENTORY_UNAVAILABLE end
+        if held < reagent.quantity * crafts then return false, L.REAGENTS_MISSING_BAGS end
     end
     observeCraftRejections()
     local previous, dispatch = craftDispatch, {}

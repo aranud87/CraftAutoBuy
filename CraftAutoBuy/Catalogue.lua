@@ -7,6 +7,7 @@ ns.Catalogue = Catalogue
 -- Counts are rebuilt from the current bags only when invalidated. Each recipe
 -- uses its own profession's producers; cross-profession chains are not assumed.
 local records, loadedDB, rows = {}, nil, {}
+local displayedLimits = {}
 local EMPTY = {}
 local MAX_INTEGER = 2147483647
 local searchText = ns.Locale.SearchText
@@ -108,6 +109,22 @@ end
 
 function Catalogue.Invalidate()
     rows = {}
+    displayedLimits = {}
+end
+
+-- Charged recipes can recover while the player keeps the catalogue open.
+-- Only query recipes with a live limit in the last catalogue calculation.
+function Catalogue.RecipeLimitsChanged()
+    for key, counts in pairs(displayedLimits) do
+        local live = ns.API.RecipeLimits(key)
+        for id, count in pairs(counts) do
+            if not live or live[id] ~= count then
+                Catalogue.Invalidate()
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local function parentKey(key, entry)
@@ -360,15 +377,22 @@ local function rebuildRows(includeBank)
         local parent = parentKey(key, entry)
         if not complete or knownNames[key] or knownNames[parent] then
             local prepared = ns.Planner.Prepare(entry.recipes)
+            local limits = ns.API.RecipeLimits and ns.API.RecipeLimits(key)
             for id, recipe in pairs(entry.recipes) do
-                local count, plan = ns.Planner.MaxCrafts(prepared, inventory, ns.vendorItems or {}, id, 1000, bank)
+                local count, plan = ns.Planner.MaxCrafts(prepared, inventory, ns.vendorItems or {}, id, 1000, bank, limits)
+                if limits and nonnegativeInteger(limits[id]) then
+                    displayedLimits[key] = displayedLimits[key] or {}
+                    displayedLimits[key][id] = limits[id]
+                end
                 if count > 0 or recipe.favorite == true then
-                    local bankMessage = ns.Bank and ns.Bank.Message(plan)
+                    -- A zero-count favourite keeps the failed one-craft plan:
+                    -- its partial withdrawals cannot make the recipe craftable.
+                    local bankMessage = count > 0 and ns.Bank and ns.Bank.Message(plan) or nil
                     -- The planner prefers owned bank supplies, but the colour
                     -- answers whether bags plus merchant supplies can make the
                     -- entire displayed quantity without withdrawing anything.
                     local needsBank = bankMessage ~= nil and not ns.Planner.Plan(prepared,
-                        inventory, ns.vendorItems or {}, id, count).craftable
+                        inventory, ns.vendorItems or {}, id, count, nil, limits).craftable
                     result[#result + 1] = {recipeID = id, professionKey = key, name = recipe.name,
                         groupProfessionKey = parent,
                         professionName = knownNames[key] or knownNames[parent] or entry.name, count = count, recipe = recipe,

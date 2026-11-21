@@ -32,6 +32,7 @@ local function snapshot()
         if ns.Bank then inventory, bank = ns.Bank.Snapshot(ns.recipes)
         else inventory = ns.API.Inventory(ns.recipes) end
         context = {recipes = ns.recipes, key = ns.professionKey,
+            limits = ns.API.RecipeLimits and ns.API.RecipeLimits(ns.professionKey),
             inventory = inventory, bank = bank, counts = {}, bankMessages = {}, needsBank = {}, projections = {}}
     end
     return context
@@ -102,13 +103,13 @@ end
 -- always uses the full planner, which reserves shared materials exactly once.
 -- Vendor potential is real stock plus the selected plan's total purchases,
 -- including intermediate recipes. The denominator remains a per-craft need.
-function NativeUI.Project(recipeID, recipes, inventory, vendors, crafts, purchaseQuantities, bank)
+function NativeUI.Project(recipeID, recipes, inventory, vendors, crafts, purchaseQuantities, bank, limits)
     local recipe = recipes[recipeID]
     if not recipe or recipe.supported == false then return nil end
-    local maximum, maximumPlan = ns.Planner.MaxCrafts(recipes, inventory, vendors, recipeID, LIMIT, bank)
+    local maximum, maximumPlan = ns.Planner.MaxCrafts(recipes, inventory, vendors, recipeID, LIMIT, bank, limits)
     crafts = crafts == nil and math.max(maximum, 1) or crafts
     local plan = crafts == math.max(maximum, 1) and maximumPlan
-        or ns.Planner.Plan(recipes, inventory, vendors, recipeID, crafts, bank)
+        or ns.Planner.Plan(recipes, inventory, vendors, recipeID, crafts, bank, limits)
     if not purchaseQuantities and ns.Merchant and ns.Merchant.Quote then
         purchaseQuantities = ns.Merchant.Quote(plan.purchases).purchaseQuantities
     end
@@ -117,6 +118,7 @@ function NativeUI.Project(recipeID, recipes, inventory, vendors, crafts, purchas
     for id, value in pairs(recipes) do withProbe[id] = value end
     local probeID = 2147483647
     while withProbe[probeID] do probeID = probeID - 1 end
+    local probeLimits = limits and setmetatable({[probeID] = math.huge}, {__index = limits})
     local probeOutput = 2147483647
     local usedItems = {}
     for _, value in pairs(recipes) do
@@ -134,7 +136,7 @@ function NativeUI.Project(recipeID, recipes, inventory, vendors, crafts, purchas
         else
             withProbe[probeID] = {id = probeID, outputItemID = probeOutput, outputCount = 1,
                 supported = true, reagents = {{itemID = reagent.itemID, quantity = 1}}}
-            potential = math.max(owned + inBank, (ns.Planner.MaxCrafts(withProbe, inventory, vendors, probeID, LIMIT, bank)))
+            potential = math.max(owned + inBank, (ns.Planner.MaxCrafts(withProbe, inventory, vendors, probeID, LIMIT, bank, probeLimits)))
         end
         local vendorSource
         if vendors[reagent.itemID] then
@@ -152,17 +154,17 @@ end
 local function recipeCount(id)
     local current = snapshot()
     local recipe = current and current.recipes[id]
-    if not recipe or recipe.supported == false then return nil end
+    if not recipe or recipe.supported == false or recipe.hasOptionalSlots then return nil end
     if current.counts[id] == nil then
         local inventory, bank = recipeStock(current, id)
-        local count, plan = ns.Planner.MaxCrafts(current.recipes, inventory, ns.vendorItems, id, LIMIT, bank)
+        local count, plan = ns.Planner.MaxCrafts(current.recipes, inventory, ns.vendorItems, id, LIMIT, bank, current.limits)
         current.counts[id] = count
         if plan and next(plan.bankWithdrawals or {}) then
             current.bankMessages[id] = ns.Bank and ns.Bank.Message(plan) or L.BANK_NOTICE
             -- The preferred plan can withdraw vials or an intermediate even
             -- though bags + PNJ can make the same displayed quantity. Blue
             -- describes a necessary withdrawal, not that preference.
-            local bagsPlan = ns.Planner.Plan(current.recipes, inventory, ns.vendorItems, id, count)
+            local bagsPlan = ns.Planner.Plan(current.recipes, inventory, ns.vendorItems, id, count, nil, current.limits)
             current.needsBank[id] = not bagsPlan.craftable
         end
     end
@@ -171,7 +173,7 @@ end
 
 local function projection(id)
     local current = snapshot()
-    if not current then return nil end
+    if not current or not current.recipes[id] or current.recipes[id].hasOptionalSlots then return nil end
     if current.projections[id] == nil then
         local crafts, quote
         if ns.job and ns.job.recipeID == id and ns.job.professionKey == current.key then
@@ -184,7 +186,7 @@ local function projection(id)
         end
         local inventory, bank = recipeStock(current, id)
         current.projections[id] = NativeUI.Project(id, current.recipes, inventory, ns.vendorItems, crafts,
-            quote and quote.purchaseQuantities, bank) or false
+            quote and quote.purchaseQuantities, bank, current.limits) or false
     end
     return current.projections[id] or nil
 end

@@ -22,7 +22,7 @@ local phaseBudget, phaseGuard
 -- supplies from another source sent none and must not announce a purchase.
 local phaseOrders = 0
 local purchaseUnconfirmed = false
-local unconfirmedOrder
+local unconfirmedOrder, reconciliationContext
 
 local function clock()
     return GetTime and GetTime() or 0
@@ -35,9 +35,11 @@ local function notify(message, printMessage)
 end
 
 local function itemCount(itemID)
+    if ns.API and ns.API.ReadBagCount then return ns.API.ReadBagCount(itemID) end
     if ns.API and ns.API.CountItem then return ns.API.CountItem(itemID) end
     if C_Item and C_Item.GetItemCount then
-        return C_Item.GetItemCount(itemID, false, false, false, false)
+        local ok, count = pcall(C_Item.GetItemCount, itemID, false, false, false, false)
+        if ok then return count end
     end
     return nil
 end
@@ -67,11 +69,32 @@ local function finiteNumber(value)
         and value == value and value > -math.huge and value < math.huge
 end
 
+local function rememberOrder(order)
+    if type(CraftAutoBuyDB) ~= "table" then return end
+    CraftAutoBuyDB.unconfirmedPurchase = order and {itemID=order.itemID, expected=order.expected,
+        quantity=order.quantity, cost=order.cost} or nil
+end
+
+function Merchant.RestoreOrder()
+    if pending or unconfirmedOrder or type(CraftAutoBuyDB) ~= "table" then return end
+    local saved = CraftAutoBuyDB.unconfirmedPurchase
+    if type(saved) ~= "table" then return end
+    for _, field in ipairs({"itemID", "expected", "quantity", "cost"}) do
+        local n = saved[field]
+        if not finiteNumber(n) or n < 1 or n ~= math.floor(n) then rememberOrder(nil); return end
+    end
+    if saved.expected < saved.quantity then rememberOrder(nil); return end
+    unconfirmedOrder = {itemID=saved.itemID, expected=saved.expected, quantity=saved.quantity, cost=saved.cost}
+    purchaseUnconfirmed = true
+    status = L.PURCHASE_STILL_UNCONFIRMED
+end
+
 local function reconcileUnconfirmedOrder()
     if not unconfirmedOrder then return end
     local count = itemCount(unconfirmedOrder.itemID)
     if finiteNumber(count) and count >= unconfirmedOrder.expected then
         unconfirmedOrder = nil
+        rememberOrder(nil)
     end
     -- Elapsed time and reopening are not proof that the server rejected an
     -- order. Only observed supplies reconcile it; the current visit stays
@@ -137,11 +160,18 @@ local function catalog()
         local itemID, info = itemIDAt(index), itemInfo(index)
         if itemID and pricedInfo(info) then
             local previous = result[itemID]
+            local offer = {index = index, info = info}
+            local offers
+            if previous then
+                offers = previous.offers or {{index = previous.index, info = previous.info}}
+                offers[#offers + 1] = offer
+            end
             local usable, previousUsable = validInfo(info), previous and validInfo(previous.info)
             if not previous or (usable and not previousUsable)
                 or (usable == previousUsable and info.price / info.stackCount < previous.info.price / previous.info.stackCount) then
-                result[itemID] = { index = index, info = info }
+                result[itemID] = {index = index, info = info}
             end
+            result[itemID].offers = offers
         end
     end
     return result
@@ -155,17 +185,20 @@ function Merchant.GetReagentSourceStock(itemID)
     if opened and GetMerchantNumItems then
         local count = GetMerchantNumItems()
         local complete = finiteNumber(count) and count > 0 and count == math.floor(count)
+        local stock
         for index = 1, complete and count or 0 do
             local offeredID = itemIDAt(index)
             if not finiteNumber(offeredID) or offeredID < 1 or offeredID ~= math.floor(offeredID) then complete = false end
             if offeredID == itemID then
                 local info = itemInfo(index)
                 if info and finiteNumber(info.numAvailable) and info.numAvailable >= 0 then
-                    return math.floor(info.numAvailable)
+                    stock = (stock or 0) + math.floor(info.numAvailable)
+                else
+                    return "here"
                 end
-                return "here"
             end
         end
+        if stock ~= nil then return stock end
         if complete then return false end
     end
     return true
@@ -228,9 +261,183 @@ local function rememberPrices(available)
     end
 end
 
+-- Compare complete baskets in copper, including pack rounding and limited
+-- stock. For a single offer (the ordinary case) no search is needed.
+local function priceOffers(entry, needed)
+    local offers = entry.offers
+    if not offers then return end
+    local rows = {}
+    for _, offer in ipairs(offers) do
+        local info = offer.info
+        if validInfo(info) then
+            local packs = math.ceil(needed / info.stackCount)
+            if info.numAvailable ~= -1 then packs = math.min(packs, math.floor(info.numAvailable / info.stackCount)) end
+            if packs > 0 then rows[#rows + 1] = {offer = offer, packs = packs, size = info.stackCount, price = info.price} end
+        end
+    end
+    table.sort(rows, function(a,b)
+        local left, right = a.price*b.size, b.price*a.size
+        if left ~= right then return left < right end
+        return a.offer.index < b.offer.index
+    end)
+    local capacity = {[#rows + 1] = 0}
+    for index = #rows, 1, -1 do
+        local row = rows[index]
+        capacity[index] = capacity[index + 1] + row.packs*row.size
+    end
+    if (capacity[1] or 0) < needed then return end
+    local best, attempts = nil, 0
+    local function search(index, remaining, cost, first, firstQuantity)
+        if remaining <= 0 then
+            local total = needed - remaining
+            if not best or cost < best.cost or (cost == best.cost and total < best.quantity) then
+                best = {cost = cost, quantity = total, offer = first, firstQuantity = firstQuantity}
+            end
+            return
+        end
+        local row = rows[index]
+        if not row or capacity[index] < remaining then return end
+        local maximum = math.min(row.packs, math.ceil(remaining / row.size))
+        local minimum = math.max(0, math.ceil((remaining - capacity[index + 1]) / row.size))
+        if index == #rows then minimum = maximum end
+        for packs = maximum, minimum, -1 do
+            local amount = packs*row.size
+            local left, spent = remaining - amount, cost + packs*row.price
+            local following = rows[index + 1]
+            -- All later unit prices are at least the next one's. Once this
+            -- bound loses, replacing more of this cheaper row cannot improve it.
+            if left > 0 and following and best then
+                local floorCost = spent + math.ceil(left*following.price / following.size)
+                if floorCost > best.cost or (floorCost == best.cost and best.quantity == needed) then break end
+            end
+            search(index + 1, left, spent, first or (packs > 0 and row.offer),
+                first and firstQuantity or amount)
+            attempts = attempts + 1
+            -- Pathological synthetic inventories must not stall a UI frame.
+            -- The initial greedy route is always feasible; keep the best
+            -- complete quote found under this work bound.
+            if best and attempts >= 4096 then return end
+        end
+    end
+    -- Always consider each single-row alternative before combining offers.
+    for _, row in ipairs(rows) do
+        local packs = math.ceil(needed / row.size)
+        if packs <= row.packs then search(#rows + 1, needed - packs*row.size, packs*row.price, row.offer, packs*row.size) end
+    end
+    search(1, needed, 0, nil, 0)
+    return best
+end
+
+local function familyMatches(item, bag)
+    if bag == 0 then return true end
+    if item == nil then return false end
+    while item > 0 and bag > 0 do
+        if item % 2 == 1 and bag % 2 == 1 then return true end
+        item, bag = math.floor(item / 2), math.floor(bag / 2)
+    end
+    return false
+end
+
+local layout, layoutAt
+local function readBagLayout(fresh)
+    local time = clock()
+    if layoutAt == time and not fresh then return layout end
+    layout, layoutAt = nil, time
+    local ids
+    if ns.StockInventory and ns.StockInventory.GetBagIDs then
+        ids = ns.StockInventory.GetBagIDs()
+        if not ids then return end
+    else
+        ids = {}
+        for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do ids[#ids + 1] = bag end
+    end
+    local result = {free = {}, stacks = {}}
+    for _, bag in ipairs(ids) do
+        local slots, family = C_Container.GetContainerNumFreeSlots(bag)
+        local size = C_Container.GetContainerNumSlots(bag)
+        if not finiteNumber(size) or size < 0 or size > 1000 then return end
+        if finiteNumber(slots) and slots > 0 then
+            if not finiteNumber(family) or family < 0 then return end
+            result.free[family] = (result.free[family] or 0) + slots
+        elseif size > 0 and (not finiteNumber(slots) or slots < 0) then return end
+        for slot = 1,size do
+            local info = C_Container.GetContainerItemInfo(bag,slot)
+            if info and not info.isLocked then
+                if not finiteNumber(info.itemID) or not finiteNumber(info.stackCount) then return end
+                local stacks = result.stacks[info.itemID] or {count=0, units=0}
+                stacks.count, stacks.units = stacks.count + 1, stacks.units + info.stackCount
+                result.stacks[info.itemID] = stacks
+            end
+        end
+    end
+    layout = result
+    return layout
+end
+
+local function basketFits(quantities, fresh)
+    if not next(quantities) then return true end
+    -- Clients without a container API still rely on the game's space check.
+    -- A supported but incomplete read must not authorize the first payment.
+    if not (C_Container and C_Container.GetContainerNumFreeSlots and C_Container.GetContainerNumSlots
+        and C_Container.GetContainerItemInfo and C_Item and C_Item.GetItemInfo) then return true end
+    local bags = readBagLayout(fresh)
+    if not bags then return false, true end
+    local needs, total, unknownFamily = {}, 0, false
+    for id, quantity in pairs(quantities) do
+        local max = select(8,C_Item.GetItemInfo(id))
+        if not finiteNumber(max) or max < 1 then return false, true end
+        local stacks = bags.stacks[id]
+        local room = stacks and math.max(0,stacks.count*max - stacks.units) or 0
+        local slots = math.max(0,math.ceil((quantity - room)/max))
+        if slots > 0 then
+            local family = C_Item.GetItemFamily and C_Item.GetItemFamily(id)
+            if not finiteNumber(family) then family = nil; unknownFamily = true end
+            needs[#needs + 1] = {family=family, slots=slots}
+            total = total + slots
+        end
+    end
+    if total <= (bags.free[0] or 0) then return true end
+    local pools, available = {}, 0
+    for family, count in pairs(bags.free) do
+        pools[#pools + 1] = {family=family, free=count, assigned={}}
+        available = available + count
+    end
+    if total > available then return false end
+    -- Match every required stack to a compatible free slot. Reassigning
+    -- existing matches handles overlapping specialty bag families.
+    local function place(index, visited)
+        for _, pool in ipairs(pools) do
+            if not visited[pool] and familyMatches(needs[index].family,pool.family) then
+                visited[pool] = true
+                local fits = pool.free > 0
+                if fits then
+                    pool.free = pool.free - 1
+                else
+                    for other, count in pairs(pool.assigned) do
+                        if count > 0 and place(other,visited) then
+                            pool.assigned[other] = count - 1
+                            fits = true
+                            break
+                        end
+                    end
+                end
+                if fits then
+                    pool.assigned[index] = (pool.assigned[index] or 0) + 1
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    for i, item in ipairs(needs) do
+        for slot = 1, item.slots do if not place(i,{}) then return false, unknownFamily end end
+    end
+    return true
+end
+
 -- A price away from a vendor is only the last observed estimate. The caller
 -- must label it as such. Purchases always require the complete LIVE quote.
-local function quoteBasket(purchases, available)
+local function quoteBasket(purchases, available, fresh)
     local money = GetMoney and GetMoney()
     local moneyKnown = finiteNumber(money) and money >= 0
     local result = {
@@ -238,7 +445,7 @@ local function quoteBasket(purchases, available)
         money = moneyKnown and math.floor(money) or 0,
         affordable = false, shortfall = 0, canBuy = false,
         missingPrices = {}, unavailable = {}, insufficientStock = {},
-        purchaseQuantities = {}, surplus = {}, hasSurplus = false,
+        purchaseQuantities = {}, offers = {}, surplus = {}, hasSurplus = false,
         unconfirmed = purchaseUnconfirmed and type(purchases) == "table" and next(purchases) ~= nil or false,
     }
     if type(purchases) ~= "table" then
@@ -263,14 +470,16 @@ local function quoteBasket(purchases, available)
                 result.complete = false
             else
                 local bundles = math.ceil(quantity / price.stackCount)
-                local purchased = bundles * price.stackCount
+                local split = entry and entry.offers and priceOffers(entry, quantity)
+                local purchased = split and split.quantity or bundles * price.stackCount
+                if split then result.offers[itemID] = split end
                 result.purchaseQuantities[itemID] = purchased
-                result.totalCost = result.totalCost + price.price * bundles
+                result.totalCost = result.totalCost + (split and split.cost or price.price * bundles)
                 if purchased > quantity then
                     result.surplus[itemID] = purchased - quantity
                     result.hasSurplus = true
                 end
-                if entry and finiteNumber(entry.info.numAvailable) and entry.info.numAvailable >= 0
+                if not split and entry and finiteNumber(entry.info.numAvailable) and entry.info.numAvailable >= 0
                     and entry.info.numAvailable < purchased then result.insufficientStock[itemID] = true end
             end
         end
@@ -282,11 +491,22 @@ local function quoteBasket(purchases, available)
     result.shortfall = math.max(0, result.totalCost - result.money)
     result.canBuy = opened and not result.unconfirmed and not result.invalid and result.complete and result.live and result.affordable
         and not next(result.unavailable) and not next(result.insufficientStock)
+    if result.canBuy then
+        for id in pairs(result.purchaseQuantities) do
+            local count = itemCount(id)
+            if not finiteNumber(count) or count < 0 then result.inventoryUnknown, result.canBuy = true, false; break end
+        end
+        if result.canBuy then
+            local read, fits, unknown = pcall(basketFits, result.purchaseQuantities, fresh)
+            if not read or unknown then result.inventoryUnknown, result.canBuy = true, false
+            elseif not fits then result.insufficientSpace, result.canBuy = true, false end
+        end
+    end
     return result
 end
 
-function Merchant.Quote(purchases)
-    return quoteBasket(purchases)
+function Merchant.Quote(purchases, fresh)
+    return quoteBasket(purchases, nil, fresh)
 end
 
 -- A recipe can need supplies from several sellers. Return only this seller's
@@ -305,6 +525,7 @@ function Merchant.AvailablePurchases(purchases)
         end
     end
     if not opened or not next(basket) then return nil, fullQuote, deferred end
+    if not next(deferred) then return basket, fullQuote, deferred end
     -- Do not shrink a requested quantity to a vendor's limited stock. The live
     -- quote retains the usual stock, money, bundle and unconfirmed-order vetoes.
     return basket, quoteBasket(basket, available), deferred
@@ -327,6 +548,8 @@ function Merchant.QuoteReason(quote)
     if not quote.complete then return L.PURCHASE_PRICES_UNKNOWN end
     if next(quote.insufficientStock) then return L.MERCHANT_STOCK_INSUFFICIENT end
     if not quote.affordable then return L.PURCHASE_MONEY_INSUFFICIENT end
+    if quote.inventoryUnknown then return L.INVENTORY_UNAVAILABLE end
+    if quote.insufficientSpace then return L.PURCHASE_BAG_SPACE_INSUFFICIENT end
 end
 
 -- Only discover unlimited, ordinary, inexpensive items. The caller must
@@ -336,39 +559,15 @@ function Merchant.Scan()
     local available = catalog()
     if opened then rememberPrices(available) end
     for itemID, entry in pairs(available) do
-        local info = entry.info
-        if validInfo(info) and info.numAvailable == -1 and info.price / info.stackCount <= Merchant.AUTO_LEARN_MAX_UNIT_PRICE then
-            vendors[itemID] = true
-        end
-    end
-    return vendors
-end
-
--- Returns nil when item data are not cached. In that case the game checks
--- capacity, and an unacknowledged purchase stops the queue without retrying.
-local function bagCapacity(itemID)
-    if not (C_Container and C_Container.GetContainerNumFreeSlots
-        and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo
-        and C_Item and C_Item.GetItemInfo) then return nil end
-    local stackSize = select(8, C_Item.GetItemInfo(itemID))
-    if not stackSize or stackSize < 1 then return nil end
-    local family = C_Item.GetItemFamily and C_Item.GetItemFamily(itemID)
-    local capacity = 0
-    for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
-        local slots, bagFamily = C_Container.GetContainerNumFreeSlots(bag)
-        if slots and bagFamily then
-            local compatible = bagFamily == 0
-                or (family and bit and bit.band and bit.band(family, bagFamily) ~= 0)
-            if compatible then capacity = capacity + slots * stackSize end
-        end
-        for slot = 1, C_Container.GetContainerNumSlots(bag) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID == itemID and not info.isLocked then
-                capacity = capacity + math.max(0, stackSize - info.stackCount)
+        for _, offer in ipairs(entry.offers or {entry}) do
+            local info = offer.info
+            if validInfo(info) and info.numAvailable == -1 and info.price / info.stackCount <= Merchant.AUTO_LEARN_MAX_UNIT_PRICE then
+                vendors[itemID] = true
+                break
             end
         end
     end
-    return capacity
+    return vendors
 end
 
 local function halt(message)
@@ -386,9 +585,77 @@ function Merchant.HasUnconfirmedOrder() return unconfirmedOrder ~= nil end
 function Merchant.PhaseOrdered() return phaseOrders > 0 end
 function Merchant.GetStatus() return status end
 
+-- A user who checked a missing delivery can unlock a fresh quote. The
+-- confirmation releases only this specific order and never starts a purchase.
+function Merchant.RequestReconciliation()
+    reconcileUnconfirmedOrder()
+    local order = unconfirmedOrder
+    -- Every outcome answers the command: a current lock first, then an order
+    -- in flight, a delivery awaiting the merchant reopening, or nothing to do.
+    local function nothingToReconcile()
+        if ns.Print then ns.Print(unconfirmedOrder and L.PURCHASE_STILL_UNCONFIRMED or (pending and L.VERIFY_LAST_PURCHASE)
+            or (purchaseUnconfirmed and L.PURCHASE_NOT_CONFIRMED) or L.NO_UNCONFIRMED_PURCHASE) end
+    end
+    if not order then
+        nothingToReconcile()
+        return false
+    end
+    if not StaticPopupDialogs or not StaticPopup_Show then
+        if ns.Print then ns.Print(L.RECONCILE_UNAVAILABLE) end
+        return false
+    end
+    local popup = "CRAFTAUTOBUY_RECONCILE_PURCHASE"
+    local function close(_, context)
+        if context == reconciliationContext then reconciliationContext = nil end
+    end
+    if reconciliationContext and StaticPopup_Hide then StaticPopup_Hide(popup, reconciliationContext) end
+    local request = {order=order}
+    reconciliationContext = request
+    StaticPopupDialogs[popup] = StaticPopupDialogs[popup] or {
+        text="%s", button1=ACCEPT or YES, button2=L.CANCEL, timeout=0, hideOnEscape=true, whileDead=true,
+        OnCancel=close, OnHide=close,
+        OnAccept=function(_, context)
+            if not context or context ~= reconciliationContext then return end
+            reconciliationContext = nil
+            local expected = context.order
+            -- Same delivery check as Merchant.Tick, before anything is lifted: a
+            -- delivery already in the bags reconciles the order, whether or not
+            -- its bag event was processed before this click.
+            local locked = unconfirmedOrder
+            reconcileUnconfirmedOrder()
+            -- Keep purchaseUnconfirmed when the order was reconciled meanwhile:
+            -- reopening the merchant remains the guard for that case.
+            if expected ~= unconfirmedOrder then
+                nothingToReconcile()
+                if locked ~= unconfirmedOrder and ns.Refresh then ns.Refresh() end
+                return
+            end
+            if active or pending then
+                if ns.Print then ns.Print(L.PURCHASES_ALREADY_HANDLED) end
+                return
+            end
+            local count = itemCount(expected.itemID)
+            if not finiteNumber(count) or count < 0 or not GetMoney or not finiteNumber(GetMoney()) then
+                notify(L.INVENTORY_UNAVAILABLE,true)
+                return
+            end
+            unconfirmedOrder, purchaseUnconfirmed = nil, false
+            rememberOrder(nil)
+            notify(L.PURCHASE_RECONCILED,true)
+        end}
+    local name = ns.ItemName and ns.ItemName(order.itemID) or L.ITEM_FALLBACK:format(tostring(order.itemID))
+    local cost = L.MONEY_AMOUNT:format(math.floor(order.cost/10000),math.floor(order.cost/100)%100,order.cost%100)
+    local message = L.PURCHASE_RECONCILE_PROMPT:format(order.quantity,name,cost)
+    if StaticPopup_Show(popup,message,nil,request) then return true end
+    close(nil,request)
+    if ns.Print then ns.Print(L.RECONCILE_UNAVAILABLE) end
+    return false
+end
+
 function Merchant.Open()
     if opened then return end -- duplicate MERCHANT_SHOW must not reset purchases
     opened, active = true, false
+    Merchant.RestoreOrder()
     reconcileUnconfirmedOrder()
     purchaseUnconfirmed = unconfirmedOrder ~= nil
     queue, cursor, nextBuyAt = {}, 1, clock()
@@ -412,11 +679,13 @@ end
 -- Only explicit creation actions start a fresh deficit. Passive events never
 -- call Start, and a deliberate retry cannot replace an unacknowledged order.
 -- guard (optional) is called before each new order; false stops the queue.
-function Merchant.Start(purchases, approval, guard)
+function Merchant.Start(purchases, approval, guard, displayedQuote)
     if not opened then return false, L.MERCHANT_IS_CLOSED end
     if pending or active then return false, L.PURCHASES_ALREADY_HANDLED end
     if guard ~= nil and type(guard) ~= "function" then return false, L.INVALID_SHOPPING_LIST end
-    local quote = Merchant.Quote(purchases)
+    local quote = Merchant.Quote(purchases, true)
+    local displayed = displayedQuote and copyApproval(displayedQuote)
+    if displayedQuote and (not displayed or not withinApproval(displayed, quote)) then return false, L.ACTION_CHANGED end
     local approved = approval ~= nil and copyApproval(approval) or nil
     if (approval ~= nil and not approved) or not withinApproval(approved, quote) then
         return false, L.BANK_OVERRIDE_CHANGED
@@ -455,8 +724,9 @@ function Merchant.Tick(now)
     reconcileUnconfirmedOrder()
     if pending then
         local count = itemCount(pending.itemID)
-        if type(count) == "number" and count >= pending.expected then
+        if finiteNumber(count) and count >= pending.expected then
             pending = nil
+            rememberOrder(nil)
             nextBuyAt = now + BUY_INTERVAL
             if not active then
                 notify(opened and L.LAST_PURCHASE_CONFIRMED_REOPEN or L.LAST_PURCHASE_CONFIRMED)
@@ -486,7 +756,7 @@ function Merchant.Tick(now)
     -- One fresh catalog snapshot prices the whole basket and the transaction
     -- below consistently, including any changed merchant bundle sizes.
     local available = catalog()
-    local quote = quoteBasket(remainingBasket, available)
+    local quote = quoteBasket(remainingBasket, available, true)
     if not withinApproval(approvalBudget, quote) or not withinApproval(phaseBudget, quote) then
         halt(L.BANK_OVERRIDE_CHANGED); return
     end
@@ -494,15 +764,16 @@ function Merchant.Tick(now)
     while queue[cursor] do
         local request = queue[cursor]
         local count = itemCount(request.itemID)
-        if type(count) ~= "number" then halt(L.INVENTORY_UNAVAILABLE); return end
+        if not finiteNumber(count) then halt(L.INVENTORY_UNAVAILABLE); return end
         local remaining = request.requiredTarget - count
         if remaining <= 0 then
             cursor = cursor + 1
         else
-            local entry = available[request.itemID]
+            local split = quote.offers[request.itemID]
+            local entry = split and split.offer or available[request.itemID]
             if not entry or not validInfo(entry.info) then halt(L.MERCHANT_REAGENT_SOLD_OUT); return end
             local info, index = entry.info, entry.index
-            local rounded = quote.purchaseQuantities[request.itemID]
+            local rounded = split and split.firstQuantity or quote.purchaseQuantities[request.itemID]
             if not rounded or rounded <= 0 then halt(L.INVALID_SHOPPING_LIST); return end
             local maxStack = GetMerchantItemMaxStack and GetMerchantItemMaxStack(index) or info.stackCount
             if not finiteNumber(maxStack) or maxStack < 1 then maxStack = info.stackCount end
@@ -514,13 +785,9 @@ function Merchant.Tick(now)
             -- Match the native merchant UI: only an explicit false is a veto.
             -- An absent answer is not evidence of insufficient funds; the live
             -- basket and this transaction's copper price are checked separately.
-            if not GetMoney or GetMoney() < price or (CanAffordMerchantItem and CanAffordMerchantItem(index) == false) then
+            local cash = GetMoney and GetMoney()
+            if not finiteNumber(cash) or cash < price or (CanAffordMerchantItem and CanAffordMerchantItem(index) == false) then
                 halt(L.PURCHASE_MONEY_INSUFFICIENT)
-                return
-            end
-            local capacity = bagCapacity(request.itemID)
-            if capacity and capacity < quantity then
-                halt(L.PURCHASE_BAG_SPACE_INSUFFICIENT)
                 return
             end
             if not BuyMerchantItem then halt(L.PURCHASE_API_UNAVAILABLE); return end
@@ -537,7 +804,14 @@ function Merchant.Tick(now)
                     halt(guardOK and reason or L.BANK_OVERRIDE_CHANGED); return
                 end
             end
-            pending = { itemID = request.itemID, expected = count + quantity, deadline = now + ACK_TIMEOUT }
+            -- A synchronous inventory hook may run during the project guard.
+            -- A changed count requires a fresh plan; an unreadable count can
+            -- never become the delivery baseline.
+            local before = itemCount(request.itemID)
+            if not finiteNumber(before) or before < 0 then halt(L.INVENTORY_UNAVAILABLE); return end
+            if before ~= count then return end
+            pending = {itemID=request.itemID, expected=count + quantity, quantity=quantity, cost=price, deadline=now + ACK_TIMEOUT}
+            rememberOrder(pending)
             -- Reserve submitted purchases immediately; an ambiguous client
             -- failure keeps the ACK pending and must never free a budget.
             reserve(approvalBudget, request.itemID, quantity, price)

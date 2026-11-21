@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version stable : 1.2.3 — choix d'achat avec ou sans stock bancaire.**
+**Version stable 1.3.0 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -9,10 +9,26 @@ Les quantités réellement achetées, y compris les lots du vendeur, sont indiqu
 pour chaque choix. **Annuler** et **Échap** ne déclenchent aucun achat.
 Après un complément, les composants bancaires restent à récupérer avant de fabriquer.
 
+Le clic sur **Acheter** conserve les quantités et le montant présentés. Si
+le vendeur augmente le prix avant le clic, vérifie le nouveau devis et clique
+à nouveau. La garantie porte sur le montant total et sur le nombre d’unités
+par article : CAB ne dépense jamais plus que le total affiché, mais ne fixe
+pas le prix de chaque unité si une offre du vendeur change pendant la visite.
+L’infobulle du prix détaille aussi les fournitures nécessaires aux recettes
+intermédiaires. Dans la fenêtre du métier, un changement de recette ou de
+quantité entre l’affichage et le clic demande une nouvelle validation.
+
+Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. Après un `/reload` ou une reconnexion, rouvre le métier concerné avant de te fier à **Max** ou au devis d’achat.
+
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
-La 1.2.1 remplace le libellé ambigu « Tout créer » par **Créer × N**, avec le
-nombre de fabrications sélectionné. Elle conserve **Stock v2** et l'onglet CAB v2.
+Le champ de quantité définit l’objectif final du projet. Le bouton
+**Créer × N** indique la taille du lot qui partira au prochain clic.
+Pour un intermédiaire, l’infobulle indique la recette et le nombre de
+fabrications du prochain lot.
+Pour une recette avec un emplacement facultatif, la fenêtre native conserve
+les commandes du jeu et les composants que tu y as choisis. Depuis l’onglet
+CAB, le projet utilise les composants obligatoires du schéma de base.
 GitHub héberge le code source, les signalements et les notes de version ; les
 téléchargements de l'addon prêt à installer sont proposés sur CurseForge.
 
@@ -53,7 +69,8 @@ avec niveaux de qualité et celles sans objet produit ne sont pas inclus.
 Ces favoris restent visibles même sans composants ou sans gain de compétence ; leur quantité et leur couleur
 suivent la prise en compte de la banque. Une recette non réalisable apparaît
 en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
-La recherche s'applique aussi aux favoris.
+La recherche s'applique aussi aux favoris. Elle ignore la casse et les accents,
+et traite l'apostrophe droite et l'apostrophe typographique de la même façon.
 
 La liste utilise un seul niveau de sections : **Favoris**, puis un en-tête
 par métier, par exemple **Alchimie** ou **Cuisine**. Les recettes apparaissent
@@ -75,6 +92,54 @@ directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
 restent pris en compte dans les deux positions de ce filtre. Même avec Banque
 décoché, racheter des fournitures déjà connues en banque demande de confirmer
 le devis pour le projet en cours.
+
+## Transferts dans la banque personnelle
+
+Le bouton **Déposer les composants**, à gauche de la recherche de la banque
+personnelle native, dépose les composants des sacs ordinaires dans l'ordre du
+sac à dos puis des sacs équipés, avant les sacs spécialisés.
+
+Le bouton **Récupérer les composants en banque**, en bas de la fiche recette
+de l'onglet CAB, retire les composants disponibles en banque qui manquent pour
+la recette et la quantité déjà sélectionnées. Son infobulle détaille les
+composants à récupérer, avec les intermédiaires connus calculés par CAB.
+Banque fermée, il indique **Banque non ouverte** en grisé. Il reste désactivé
+si aucun composant correspondant n'est à retirer.
+
+Le dépôt suit uniquement le marqueur natif **Composant d'artisanat**, sans se
+limiter aux métiers connus. Un poisson cru marqué par le jeu peut donc être
+déposé même s'il est comestible. Un objet non marqué, comme le jus de melon,
+reste dans les sacs même si une recette l'utilise. Si le marqueur ne peut pas
+encore être vérifié, l'objet reste également sur place.
+La récupération explicite depuis une fiche CAB peut toujours retirer un
+ingrédient demandé par cette recette, même sans ce marqueur natif.
+Les piles dont la nature reste inconnue sont laissées sur place et signalées.
+La récupération reste limitée à la recette apprise affichée dans CAB ; elle
+ne nécessite pas de catalogue de recettes non apprises.
+
+Les déplacements se font un par un, avec vérification des quantités avant
+le suivant. **Arrêter**, fermer la banque, entrer en combat ou commencer une
+incantation interrompt l'opération. Les objets déjà transférés restent à leur
+destination. Aucun achat ni aucune fabrication ne démarre après un retrait.
+La commande `/cab stop` interrompt également le transfert. Si la banque ne
+contient qu’une partie des ingrédients du lot, la fiche permet de retirer la
+partie disponible. Si, après ce retrait, il manque encore des composants
+qu’aucun marchand connu ne vend, l’infobulle le signale et le message de fin
+le rappelle au lieu d’annoncer un transfert terminé. Le retrait ne dépasse
+jamais la liste que le bouton affichait au moment du clic : si elle s’est
+allongée entre-temps, le premier clic ne déplace rien, le bouton montre la
+nouvelle liste et attend un second clic. À la fin d’un retrait, CAB indique ce
+que la fiche demande encore en banque ; rien de plus ne part sans nouveau clic.
+Le bouton actif devient **Arrêter** pendant le transfert. Changer la recette
+ou la quantité annule la récupération en cours ; un nouveau clic est nécessaire.
+Une opération non confirmée demande une vérification de l'inventaire avant
+un nouveau clic. Les boutons de fabrication CAB et natifs sont bloqués pendant
+le transfert.
+
+Les commandes sont intégrées aux fenêtres existantes. Un addon qui remplace
+la banque peut masquer le bouton de dépôt natif. Les banques de compte et de
+guilde sont exclues. Les interactions avec les addons qui remplacent la banque
+ou les sacs peuvent dépendre de leur propre interface.
 
 ## Installation
 
@@ -133,20 +198,27 @@ la fabrication.
 
 1. Sélectionne une recette dans le métier habituel ou dans l'onglet CAB.
 2. Choisis la **quantité** souhaitée. **Max** remplit seulement cette quantité
-   avec le maximum calculé : il n'achète rien et ne fabrique rien.
-3. Si CAB doit charger le métier, clique **Charger le métier**. Cela charge ses
-   données avec son sort du grimoire, sans achat ni fabrication. Si le chargement
-   est indisponible, clique sur l'onglet du métier à droite, puis reviens dans CAB.
-   Cette étape est normale après `/reload` ou après avoir ouvert un autre métier,
-   même si le catalogue est mémorisé. Le bouton disparaît lorsque le métier de
-   la recette est chargé ; aucun sort de métier n'est lancé automatiquement.
+   avec le maximum calculé : il n'achète rien et ne fabrique rien. Le calcul
+   s’arrête à **1 000 fabrications de la recette choisie**. Dans l’onglet CAB,
+   ce plafond vaut aussi pour la quantité saisie à la main.
+3. Le clic sur une recette de CAB active son métier avec son sort du grimoire,
+   y compris dans les favoris. Passer à une autre recette du même métier ne le
+   rouvre pas. Consulter CAB, restaurer une sélection ou changer un filtre
+   n'active aucun métier. Si les données restent indisponibles, le bouton
+   **Charger le métier** reste proposé ; tu peux aussi ouvrir l'onglet du métier
+   à droite, puis revenir dans CAB. Cette activation ne déclenche aucun achat
+   ni aucune fabrication et reste bloquée en combat ou pendant une opération.
 4. Si des fournitures PNJ manquent, le bouton affiche **Acheter** ou
    **Acheter ici**. Avec l'achat automatique activé, ouvre un marchand qui les
    vend et clique dessus. Le devis porte sur les fournitures de ce vendeur pour
    la quantité choisie.
-5. Une fois tous les ingrédients en sacs, le bouton affiche **Créer × N**, où N est le nombre
-   de fabrications sélectionné. Clique dessus pour
-   fabriquer le lot choisi.
+5. Une fois les ingrédients en sacs, clique sur **Créer × N**. Pour une recette
+   limitée à une fabrication par clic, le bouton affiche **Créer × 1** et le
+   projet conserve le reste à réaliser. Les charges lisibles du métier actif
+   sont prises en compte dans le maximum calculé. Pour des recettes qui se
+   convertissent en boucle, comme les transmutations d'essences, ce maximum
+   vient d'une recherche bornée : il peut rester sous le maximum réel, jamais
+   au-dessus.
 
 **L'achat et la fabrication demandent deux clics distincts.** La réception des
 composants ne lance jamais une fabrication. Ouvrir le marchand, consulter une
@@ -245,6 +317,11 @@ reconnexion. Les banques de guilde, de compte et des autres personnages ne sont
 pas incluses. Avant toute première lecture, l'addon demande d'ouvrir la banque.
 Une lecture incomplète conserve les informations précédentes avec une indication
 de vérification nécessaire ; rouvre la banque pour actualiser le relevé.
+Si « Lecture de la banque en cours… » revient à chaque visite, regarde si tu
+as retiré un sac de banque qui contenait des composants. Si son emplacement
+est resté vide et que la quantité d’un de ces composants en banque a baissé,
+CAB peut attendre de pouvoir relire cet emplacement avant d’autoriser les
+transferts. À la banque, équipe un sac, même vide, dans ce même emplacement.
 
 Avec le filtre **Banque** activé, quand la quantité choisie nécessite des
 composants en banque, tu peux aller les récupérer. Si les sacs et les achats
@@ -285,7 +362,12 @@ suivantes. Un changement peut suspendre le reste du panier ; les achats déjà
 effectués sont conservés. La quantité demandée n'est jamais réduite silencieusement.
 
 Si un achat n'est pas confirmé, l'addon évite d'envoyer une commande en double.
-Vérifie tes sacs et ton argent, puis suis le message affiché avant de reprendre.
+Vérifie tes sacs et ton argent. Si la commande reste en attente, utilise
+`/cab reconcile` pour identifier l’article, sa quantité et le prix de l’ordre.
+Une livraison tardive reste possible. Si les composants sont arrivés
+entre-temps, CAB l’indique et demande de rouvrir le marchand avant tout nouvel
+achat. Sinon, après vérification, tu peux confirmer la levée du blocage. Un
+nouvel achat exige ensuite un nouveau clic.
 
 ## Feu, forge et outils
 
@@ -335,6 +417,15 @@ et métiers restent ceux du client WoW, indépendamment de la langue de CAB.
 L'interface CAB est prévue pour le clavier et la souris. En mode d'interface
 manette, les onglets CAB et Stock sont masqués et les commandes natives du jeu
 sont restituées.
+
+## Commandes de discussion
+
+| Commande | Effet |
+|---|---|
+| `/cab config` | Ouvre les réglages, comme `/cab` ou `/cab options`. |
+| `/cab scan` | Relit les recettes du métier que tu as ouvert. |
+| `/cab debug` | Affiche dans la discussion les versions de l’addon et du jeu, le métier, la recette sélectionnée et les compteurs du catalogue. |
+| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ton personnage. Remplace `<ID>` par le numéro entier positif de l’objet. CAB indique le nouveau classement dans la discussion. |
 
 ## Licence
 

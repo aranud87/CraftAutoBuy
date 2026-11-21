@@ -103,6 +103,9 @@ function Bootstrap.StatusText()
     if waiting then
         local names = {}
         for _, entry in ipairs(missing) do names[#names + 1] = text(entry.name) or ns.API.ProfessionName(entry.key) end
+        if lastReason == L.CATALOG_VERIFY_HELP then
+            return L.CATALOG_OPEN_PROFESSIONS .. " " .. table.concat(names, ", ")
+        end
         return L.INITIALIZATION_WAITING:format(#names > 0 and table.concat(names, ", ") or L.LOADING_PROFESSION)
     end
     return L.INITIALIZING_RECIPES:format(done, total)
@@ -126,10 +129,13 @@ local function refresh()
     if ns.Refresh then ns.Refresh() end
 end
 
-local function waitForData(time, reason, key)
+local function waitForData(time, reason, key, manual)
     local changed = not waiting or lastReason ~= reason
     key = key or (current and current.professionKey)
-    if key then professionRetry[key] = time + RETRY else retryAt = time + RETRY end
+    if key then
+        -- An unavailable index for this build/profession needs a native scan.
+        professionRetry[key] = manual and math.huge or time + RETRY
+    else retryAt = time + RETRY end
     current, waiting, lastReason = nil, true, reason
     if changed then refresh() end
 end
@@ -158,11 +164,20 @@ function Bootstrap.Tick(time)
         for _, entry in ipairs(missing) do
             if time >= (professionRetry[entry.key] or 0) then candidate = entry; break end
         end
-        if not candidate then return end
+        if not candidate then
+            local earliest = math.huge
+            for _, entry in ipairs(missing) do earliest = math.min(earliest, professionRetry[entry.key]) end
+            nextStepAt = earliest
+            if earliest == math.huge and not waiting then
+                waiting, lastReason = true, L.CATALOG_VERIFY_HELP
+                refresh()
+            end
+            return
+        end
         lastKey, lastRecipe, lastProgress, lastTotal = candidate.key, nil, 0, 0
-        local ok, scan, reason = pcall(ns.API.BeginBackgroundScan, candidate.key)
+        local ok, scan, reason, manual = pcall(ns.API.BeginBackgroundScan, candidate.key)
         if not ok or type(scan) ~= "table" then
-            waitForData(time, ok and reason or L.RECIPES_LOADING, candidate.key); return
+            waitForData(time, ok and reason or L.RECIPES_LOADING, candidate.key, manual == true); return
         end
         current, waiting, lastReason = scan, false, nil
         refresh()

@@ -394,7 +394,7 @@ function StockUI.Install()
         if SearchBoxTemplate_OnTextChanged then SearchBoxTemplate_OnTextChanged(self) end
         if installed then
             searchScroll = {bags = 0, bank = 0, inventory = 0}
-            StockUI.Render()
+            StockUI.Render(true)
         end
     end)
     widgets.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -533,8 +533,8 @@ local function renderColumn(column, entries, emptyText, height)
     restoringScroll = false
 end
 
-local function dataFor(search, state)
-    if ns.Stock and ns.Stock.View then return ns.Stock.View(search, state) end
+local function dataFor(search, state, searchOnly)
+    if ns.Stock and ns.Stock.View then return ns.Stock.View(search, state, searchOnly) end
     local bags, bank, known, missing = {}, {}, false, {}
     if ns.Stock and ns.Stock.Rows then bags, bank, known, missing = ns.Stock.Rows(search) end
     return {bags = bags, bank = bank, bankKnown = known, bagsKnown = true,
@@ -608,11 +608,11 @@ local function renderExtensions(data, state)
     else widgets.bankExtension:SetText(L.STOCK_BANK_EXTENSION_UNKNOWN); widgets.bankCost:SetText("") end
 end
 
-local function renderNow()
+local function renderNow(searchOnly)
     if book:IsShown() and not panel:IsShown() then displayPage() end
     setBookArt()
     local state, search = view(), widgets.search:GetText()
-    local data = dataFor(search, state)
+    local data = dataFor(search, state, searchOnly)
     if data.professionsComplete and state.professionKey then
         local found = false
         for _, profession in ipairs(data.professions or {}) do if profession.key == state.professionKey then found = true; break end end
@@ -645,20 +645,22 @@ local function renderNow()
     local bankEmpty = not data.bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)
         or (search ~= "" and L.STOCK_NO_RESULTS or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BANK or L.STOCK_EMPTY_BANK))
     local height = state.extensionsExpanded and COMPACT_LIST_HEIGHT or LIST_HEIGHT
-    renderColumn(widgets.bags, data.bags or {}, bagEmpty, height)
-    renderColumn(widgets.bank, data.bankKnown and data.bank or {}, bankEmpty, height)
+    if not state.inventory then
+        renderColumn(widgets.bags, data.bags or {}, bagEmpty, height)
+        renderColumn(widgets.bank, (data.bankKnown or data.bankPartial) and data.bank or {}, bankEmpty, height)
+    end
     local inventoryEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or empty
         or not data.bankKnown and bankEmpty
         or (search ~= "" and L.STOCK_NO_RESULTS or (state.content == "all"
             and (L.STOCK_EMPTY_ALL_BAGS .. " " .. L.STOCK_EMPTY_ALL_BANK)
             or (L.STOCK_EMPTY_BAGS .. " " .. L.STOCK_EMPTY_BANK)))
-    renderColumn(widgets.inventory, data.inventory or {}, inventoryEmpty, height)
+    if state.inventory then renderColumn(widgets.inventory, data.inventory or {}, inventoryEmpty, height) end
     renderCapacity(widgets.bagCapacity, data.capacity and data.capacity.bags)
     renderCapacity(widgets.bankCapacity, data.capacity and data.capacity.bank)
     local footerY = LIST_TOP + 24 + height + 6
     widgets.source:ClearAllPoints(); widgets.source:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -footerY)
     widgets.scope:ClearAllPoints(); widgets.scope:SetPoint("TOPLEFT", panel, "TOPLEFT", 326, -footerY)
-    widgets.source:SetText((bankOpen and L.STOCK_BANK_CURRENT or L.STOCK_BANK_MEMORY) .. (data.bankUnverified and " (?)" or ""))
+    widgets.source:SetText((bankOpen and L.STOCK_BANK_CURRENT or L.STOCK_BANK_MEMORY) .. ((data.bankPartial or data.bankUnverified) and " (?)" or ""))
     widgets.scope:SetText(state.content == "all" and L.STOCK_ALL_OBJECTS or L.STOCK_COMPONENTS_KNOWN)
     widgets.capacityToggle:ClearAllPoints(); widgets.capacityToggle:SetPoint("TOPLEFT", panel, "TOPLEFT", 9, -(footerY + 22))
     widgets.capacityToggle:SetText((state.extensionsExpanded and "- " or "+ ") .. L.STOCK_CAPACITY_EXTENSIONS)
@@ -670,11 +672,11 @@ local function renderNow()
         and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or ""))
 end
 
-function StockUI.Render()
+function StockUI.Render(searchOnly)
     if rendering or not StockUI.IsActive() or not StockUI.Install() then return end
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then ns.Sidebar.RequestNativeRestore(); return end
     rendering = true
-    local ok, reason = pcall(renderNow)
+    local ok, reason = pcall(renderNow, searchOnly == true)
     rendering = false
     if not ok then error(reason, 0) end
 end
