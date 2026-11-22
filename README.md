@@ -3,7 +3,7 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Stable version **1.3.0**.
+Version **1.3.1**.
 
 Deposit crafting reagents at your personal bank or withdraw the materials for
 a selected recipe from its CAB tab. Clicking a recipe can open its profession.
@@ -15,7 +15,7 @@ intermediate recipes, the tooltip names the recipe and the number of crafts in t
 In the CAB tab, **Max** fills in the planned quantity, up to **1,000 crafts**
 of the selected recipe. The same cap applies when you type the quantity.
 
-For a transmute with a cooldown, such as Iron to Gold, CAB offers at most one craft when it is ready. While its known cooldown is running, it counts as zero even when you view another profession. This also applies to intermediate crafts. Recipes with charges use the charge count reported by the open profession. After a `/reload` or a new login, reopen the relevant profession before relying on **Max** or the purchase quote.
+For a transmute with a cooldown, such as Iron to Gold, CAB offers at most one craft when it is ready. In the CAB tab, a line under the profession name shows the cooldown that follows a craft, with the duration given by the game. While its known cooldown is running, it counts as zero even when you view another profession. This also applies to intermediate crafts. Recipes with charges use the charge count reported by the open profession. CAB remembers these cooldowns for the character, including after a `/reload` or a new login. A cooldown CAB did not note (started without it, shared with another recipe, or lost when the game closed abruptly) is only known once its profession is open: open it before relying on **Max** or the purchase quote.
 
 ## Download and updates
 
@@ -43,7 +43,7 @@ for CAB to read the slot again.
 | `/cab config` | Opens the settings, just like `/cab`. |
 | `/cab scan` | Rereads the recipes in your open profession window. |
 | `/cab debug` | Prints the addon and game versions, selected recipe and catalogue counts. |
-| `/cab vendor <itemID>` | Toggles whether CAB treats that item as a vendor supply for this character. Enter the item's positive numeric ID. |
+| `/cab vendor <itemID>` | Toggles whether CAB treats that item as a vendor supply for this character. Enter the item's positive whole-number ID; any other number changes nothing. |
 
 [Documentation (French)](CraftAutoBuy/README.md) ·
 [Release notes](https://github.com/aranud87/CraftAutoBuy/releases) ·
@@ -54,7 +54,7 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version stable **1.3.0**.
+dans **World of Warcraft: Forever**. Version **1.3.1**.
 
 Déposez les composants à la banque personnelle ou retirez les ingrédients
 d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son
@@ -66,7 +66,7 @@ Pour un intermédiaire, l’infobulle indique la recette et le nombre de fabrica
 Dans l’onglet CAB, **Max** remplit la quantité prévue, jusqu’à **1 000 fabrications**
 de la recette choisie. Ce plafond vaut aussi pour la quantité saisie à la main.
 
-Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. Après un `/reload` ou une reconnexion, rouvre le métier concerné avant de te fier à **Max** ou au devis d’achat.
+Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Sous le nom du métier, sa fiche indique la recharge qui suit une fabrication, avec la durée que donne le jeu. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si vous consultez un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. CAB retient ces recharges pour ce personnage, y compris après un `/reload` ou une reconnexion. Une recharge qu’il n’a pas notée (lancée sans lui, partagée avec une autre recette, ou perdue lors d’un arrêt brutal du jeu) n’est connue qu’une fois son métier ouvert : ouvrez-le avant de vous fier à **Max** ou au devis d’achat.
 
 - **Catalogue CAB :** recettes fabricables de vos métiers, favoris, recherche
   et filtres Banque/Progression.
@@ -88,7 +88,7 @@ emplacement. Un sac vide suffit pour que CAB puisse relire cet emplacement.
 | `/cab config` | Ouvre les réglages, comme `/cab`. |
 | `/cab scan` | Relit les recettes de votre métier ouvert. |
 | `/cab debug` | Affiche les versions de l’addon et du jeu, la recette sélectionnée et les compteurs du catalogue. |
-| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ce personnage. Remplacez `<ID>` par le numéro entier positif de l’objet. |
+| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ce personnage. Remplacez `<ID>` par le numéro entier positif de l’objet ; un autre nombre ne change rien. |
 
 GitHub reste consacré au code source, aux signalements et aux changelogs.
 Pour installer l'addon ou le mettre à jour, utilisez CurseForge.

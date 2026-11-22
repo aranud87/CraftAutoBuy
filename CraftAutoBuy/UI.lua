@@ -13,6 +13,10 @@ local restoringScroll, selectionRestored, groupKeys, searchScroll = false, false
 local searchCollapsed = {}
 local ICON = "Interface\\AddOns\\CraftAutoBuy\\Icon.tga"
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+-- The recipe sheet from its top: the cooldown line under the profession name,
+-- then the reagents' title and list, which that line moves down when a
+-- translation wraps (renderCooldown).
+local COOLDOWN_TOP, REAGENT_TITLE_TOP, REAGENT_LIST_TOP = 85, 102, 124
 
 local function view()
     return ns.CatalogueView and ns.CatalogueView.Get() or fallbackView
@@ -45,7 +49,7 @@ end
 
 -- Same whitespace class as Catalogue.filteredRows: blanks are not a filter.
 local function searchActive()
-    return widgets.search ~= nil and widgets.search:GetText():find("[^ \t\r\n\v\f]") ~= nil
+    return widgets.search ~= nil and ns.Locale.TrimSearch(widgets.search:GetText()) ~= ""
 end
 
 local function collapsedSections()
@@ -313,22 +317,21 @@ local function restingJobStatus(job, needsBuy)
         if needsBuy then return L.PURCHASE_CRAFT_PAUSED end
         return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PURCHASE_READY_CLICK
     end
-    -- A stop that asked to confirm a changed quote, or that found purchases
-    -- incomplete, is obsolete once nothing remains to buy (the bank supplies
-    -- were withdrawn, for example).
-    if (current == L.BANK_OVERRIDE_CHANGED or current == L.PURCHASE_CRAFT_INCOMPLETE) and not needsBuy then
+    -- Keep a changed quote visible as long as the player would spend money.
+    if current == L.BANK_OVERRIDE_CHANGED and not needsBuy then
         return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PROJECT_RESUME_CLICK
     end
     local combatPause = current == L.PROJECT_PAUSED_COMBAT or current == L.CRAFT_PAUSED_COMBAT
         or current == L.PURCHASES_PAUSED_COMBAT
+    local purchasePause = current == L.PURCHASE_CRAFT_PAUSED or current == L.PURCHASE_CRAFT_INCOMPLETE
     -- A click refused while the open profession was unreadable: a scan error
     -- that lasts is shown above; otherwise that cause has ended like the others.
     local scanRefused = ns.scanRefusal ~= nil and current == ns.scanRefusal
-    if not combatPause and not scanRefused and current ~= L.PROJECT_PAUSED_REOPEN then return current end
+    if not combatPause and not purchasePause and not scanRefused and current ~= L.PROJECT_PAUSED_REOPEN then return current end
     if inCombat then return combatPause and current or L.PROJECT_PAUSED_COMBAT end
     if not professionOpen then return L.PROJECT_PAUSED_REOPEN end
-    if not needsBuy and unconfirmed then return L.PURCHASE_UNCONFIRMED_READY_CLICK end
-    return L.PROJECT_RESUME_CLICK
+    if needsBuy then return L.PURCHASE_CRAFT_PAUSED end
+    return unconfirmed and L.PURCHASE_UNCONFIRMED_READY_CLICK or L.PROJECT_RESUME_CLICK
 end
 
 local function actionTooltip(button, defaultHelp)
@@ -631,9 +634,12 @@ function UI.Install()
     widgets.output:SetScript("OnClick", function() end)
     widgets.recipeName = label(detail, "GameFontHighlight", 80, -18, 246, 46)
     widgets.profession = label(detail, "GameFontDisable", 80, -67, 246, 18)
-    widgets.reagentTitle = label(detail, "GameFontNormal", 20, -102, 298, 18, L.CATALOG_COMPONENTS)
+    widgets.cooldown = label(detail, "GameFontHighlightSmall", 80, -COOLDOWN_TOP, 246, 12)
+    widgets.cooldown:SetWordWrap(true)
+    widgets.cooldown:Hide()
+    widgets.reagentTitle = label(detail, "GameFontNormal", 20, -REAGENT_TITLE_TOP, 298, 18, L.CATALOG_COMPONENTS)
     widgets.reagentScroll = CreateFrame("ScrollFrame", nil, detail, "UIPanelScrollFrameTemplate")
-    widgets.reagentScroll:SetPoint("TOPLEFT", detail, "TOPLEFT", 20, -124)
+    widgets.reagentScroll:SetPoint("TOPLEFT", detail, "TOPLEFT", 20, -REAGENT_LIST_TOP)
     widgets.reagentScroll:SetSize(296, 238)
     widgets.reagentContent = CreateFrame("Frame", nil, widgets.reagentScroll)
     widgets.reagentContent:SetSize(296, 238)
@@ -682,6 +688,7 @@ function UI.Install()
     widgets.bankTransfer:SetScript("OnLeave", tooltipHide)
     widgets.bankTransfer:Hide()
     detail.OutputButton, detail.RecipeName, detail.ProfessionName = widgets.output, widgets.recipeName, widgets.profession
+    detail.CooldownText = widgets.cooldown
     detail.ReagentsLabel, detail.CostText, detail.StatusText = widgets.reagentTitle, widgets.cost, widgets.status
     detail.BankWithdrawButton = widgets.bankTransfer
 
@@ -931,12 +938,13 @@ local function renderList()
         -- never add another Cuisine heading or nested sections to this view.
         node.entries[#node.entries + 1] = entry
     end
+    local nameBefore = ns.Locale.NameComparator()
     local function collect(node)
         groupKeys[node.key] = true
         for _, entry in ipairs(node.entries) do visible[entry.professionKey .. ":" .. entry.recipeID] = true end
         table.sort(node.entries, function(a, b)
-            if node.favorite and a.professionName ~= b.professionName then return a.professionName < b.professionName end
-            if a.name ~= b.name then return a.name < b.name end
+            if node.favorite and a.professionName ~= b.professionName then return nameBefore(a.professionName, b.professionName) end
+            if a.name ~= b.name then return nameBefore(a.name, b.name) end
             if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
             return a.professionKey < b.professionKey
         end)
@@ -1006,8 +1014,12 @@ local function renderList()
     return visible
 end
 
-local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
-    maximumHeight = maximumHeight or 238
+local function renderReagents(recipe, recipes, id, crafts, maximumHeight, shift)
+    maximumHeight, shift = maximumHeight or 238, shift or 0
+    widgets.reagentTitle:ClearAllPoints()
+    widgets.reagentTitle:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -(REAGENT_TITLE_TOP + shift))
+    widgets.reagentScroll:ClearAllPoints()
+    widgets.reagentScroll:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -(REAGENT_LIST_TOP + shift))
     local count, y = 0, 0
     if recipe then
         local inventory, bank
@@ -1070,7 +1082,7 @@ local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
     if widgets.reagentScroll.ScrollBar then widgets.reagentScroll.ScrollBar:SetShown(y > maximumHeight) end
     widgets.reagentTitle:SetShown(recipe ~= nil)
     widgets.reagentScroll:SetShown(recipe ~= nil)
-    local costY = 124 + math.min(y, maximumHeight) + 10
+    local costY = REAGENT_LIST_TOP + shift + math.min(y, maximumHeight) + 10
     widgets.cost:ClearAllPoints()
     widgets.cost:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -costY)
     widgets.costHit:ClearAllPoints()
@@ -1088,6 +1100,33 @@ local function detailBackground(key)
         end
     end
     widgets.detail.Background:SetAtlas(atlas)
+end
+
+-- A recipe with a cooldown of its own allows one craft before that cooldown
+-- starts again, whatever its reagents allow (F5). The line under the profession
+-- says so before any click, with the duration the spell gives, in the game's
+-- own words for a duration. Any other recipe, even one whose Max is 1 for want
+-- of reagents, keeps the usual sheet; so does a duration the game cannot
+-- write. Returns how far a wrapped line moves the reagents down.
+local function renderCooldown(recipe, id)
+    local text
+    if recipe and ns.API.RecipeBaseCooldown and type(SecondsToTime) == "function" then
+        local seconds, singleUse = ns.API.RecipeBaseCooldown(id)
+        if seconds > 0 then
+            local ok, duration = pcall(SecondsToTime, seconds)
+            if ok and type(duration) == "string" and duration ~= "" then
+                local label = singleUse and L.CATALOG_COOLDOWN_SINGLE_USE or L.CATALOG_COOLDOWN
+                text = label:format(duration)
+            end
+        end
+    end
+    widgets.cooldown:SetText(text or "")
+    widgets.cooldown:SetShown(text ~= nil)
+    if not text then return 0 end
+    widgets.cooldown:SetHeight(0)
+    local height = math.max(12, math.ceil(widgets.cooldown:GetStringHeight()))
+    widgets.cooldown:SetHeight(height)
+    return math.max(0, COOLDOWN_TOP + height + 4 - REAGENT_TITLE_TOP)
 end
 
 local function renderBankTransfer(recipe, id, key, quantity)
@@ -1230,7 +1269,8 @@ function UI.Render()
     widgets.cancel:SetShown(canCancel)
     widgets.cancel:SetEnabled(canCancel)
     local transferState=renderBankTransfer(recipe,id,key,crafts)
-    renderReagents(recipe, recipes, id, crafts, transferState and 206 or 238)
+    local cooldownShift = renderCooldown(recipe, id)
+    renderReagents(recipe, recipes, id, crafts, (transferState and 206 or 238) - cooldownShift, cooldownShift)
     -- The cost next to the reagents describes the displayed bank-aware plan.
     -- The action tooltip prices its separate alternative before confirmation.
     local quote = recipe and ns.quote

@@ -593,7 +593,14 @@ local function backgroundRecipe(job, id)
             end
             local parent = positiveInteger(profession.parentProfessionID) and profession.parentProfessionID or profession.professionID
             if parent > 0 and parent ~= job.parentProfessionKey then
-                return nil, L.RECIPE_OTHER_PROFESSION
+                -- The index can list one spell under several professions. When
+                -- it also lists this one under the profession the client names,
+                -- the third result lets the scan skip this candidate alone.
+                local named, shared = ns.RecipeIndex.professions[parent], false
+                for _, candidate in ipairs(type(named) == "table" and named or {}) do
+                    if candidate == id then shared = true; break end
+                end
+                return nil, L.RECIPE_OTHER_PROFESSION, shared
             end
         end
     end
@@ -682,8 +689,10 @@ function API.StepBackgroundScan(job, limit)
         if job.phase == "read" then
             job.known[id] = known
             if known then
-                local recipe, failure = backgroundRecipe(job, id)
-                if not recipe then return failBackgroundScan(job, failure) end
+                local recipe, failure, shared = backgroundRecipe(job, id)
+                -- A shared candidate the client attributes to its other profession
+                -- is never recorded here, and does not fail this profession's read.
+                if not recipe and not shared then return failBackgroundScan(job, failure) end
                 job.recipes[id] = recipe
             end
             job.cursor = cursor + 1
@@ -839,6 +848,9 @@ end
 -- session, so each readable answer is kept. An unreadable one limits nothing,
 -- as before, and is asked again later.
 local baseCooldowns = {}
+-- Display-only. A zero current and maximum charge count is the live answer
+-- for Iron to Gold. Keep that observation when viewing another profession.
+local observedNoCharges = {}
 local function baseCooldown(id)
     if baseCooldowns[id] then return baseCooldowns[id] end
     if type(GetSpellBaseCooldown) ~= "function" or not positiveInteger(id) then return 0 end
@@ -846,6 +858,11 @@ local function baseCooldown(id)
     if not ok or not ordinaryNumber(value) or value < 0 then return 0 end
     baseCooldowns[id] = value / 1000
     return baseCooldowns[id]
+end
+
+-- The same duration for the recipe sheet, which shows it before any click.
+function API.RecipeBaseCooldown(id)
+    return baseCooldown(id), observedNoCharges[id] == true
 end
 
 local function now()
@@ -856,17 +873,80 @@ end
 -- When a recipe's cooldown ends, by GetTime(): as last read in its open
 -- profession, or started by a successful cast. A profession that is not open
 -- is never asked, so without this memory its recipe on cooldown was listed at
--- its full count while another profession was open. Kept for the session only.
+-- its full count while another profession was open.
 local cooldownEnds, castAt = {}, {}
+
+-- The same ends are saved for the character, so that a /reload or a new login
+-- keeps them: this memory starts again with each /reload, and GetTime() counts
+-- from the computer's start, so the saved ends use the server's clock, or the
+-- local one when it cannot be read. Without a readable clock nothing is saved,
+-- and the memory lasts for the session only, as before.
+local function readClock(clock)
+    if type(clock) ~= "function" then return end
+    local ok, value = call(clock)
+    if ok and ordinaryNumber(value) and value > 0 then return value end
+end
+
+local function serverTime() return readClock(GetServerTime) or readClock(time) end
+
+-- The saved table, once its entries still running are back in the session's
+-- memory. An entry that is over, whose key is not a positive whole number or
+-- whose value is not a number, is dropped. Without a readable clock the table
+-- is left as it is and read again at the next use. unsavedEnds: an end of this
+-- session could not be saved because no clock answered.
+local restoredFrom, unsavedEnds
+local function savedEnds()
+    if type(CraftAutoBuyDB) ~= "table" then return nil end
+    local saved = CraftAutoBuyDB.recipeCooldowns
+    if type(saved) ~= "table" then
+        saved = {}
+        CraftAutoBuyDB.recipeCooldowns = saved
+    end
+    if saved ~= restoredFrom or unsavedEnds then
+        local server, moment = serverTime(), now()
+        if server and moment then
+            if saved ~= restoredFrom then
+                restoredFrom = saved
+                for id, ends in pairs(saved) do
+                    local left = positiveInteger(id) and ordinaryNumber(ends) and ends - server
+                    if not (left and left > 0) then saved[id] = nil
+                    elseif not cooldownEnds[id] then cooldownEnds[id] = moment + left end
+                end
+            end
+            -- An end read or noted in this session while no clock answered is
+            -- fresher than the saved one: it wins, and is saved now, whether the
+            -- outage began before or after the saved table was first read.
+            unsavedEnds = nil
+            for id, ends in pairs(cooldownEnds) do saved[id] = server + (ends - moment) end
+        end
+    end
+    return saved
+end
+
+local function rememberedEnd(id)
+    savedEnds()
+    return cooldownEnds[id]
+end
+
+local function setCooldownEnd(id, ends)
+    local saved = savedEnds()
+    cooldownEnds[id] = ends
+    if not saved then return end
+    if not ends then saved[id] = nil; return end
+    -- Without a readable clock the end cannot be converted: the last one saved
+    -- for this recipe stays, rather than leaving the next session with none.
+    local server, moment = serverTime(), now()
+    if server and moment then saved[id] = server + (ends - moment) else unsavedEnds = true end
+end
 
 -- For a profession that is not open: none while a remembered cooldown runs,
 -- one craft for a recipe with a cooldown of its own, otherwise no limit.
 local function rememberedLimit(id)
-    local ends = cooldownEnds[id]
+    local ends = rememberedEnd(id)
     if ends then
         local time = now()
         if not time or time < ends then return 0 end
-        cooldownEnds[id] = nil
+        setCooldownEnd(id, nil)
     end
     if baseCooldown(id) > 0 then return 1 end
 end
@@ -878,7 +958,7 @@ function API.NoteRecipeCast(id)
     local time = seconds > 0 and now()
     if not time then return end
     castAt[id] = time
-    if (cooldownEnds[id] or 0) < time + seconds then cooldownEnds[id] = time + seconds end
+    if (cooldownEnds[id] or 0) < time + seconds then setCooldownEnd(id, time + seconds) end
 end
 
 local function recipeLimit(id)
@@ -887,16 +967,26 @@ local function recipeLimit(id)
     if not ok or (issecretvalue and (issecretvalue(cooldown) or issecretvalue(charges) or issecretvalue(maximum)))
         or (maximum ~= nil and not nonnegativeInteger(maximum))
         or (cooldown ~= nil and not ordinaryNumber(cooldown)) then
+        observedNoCharges[id] = nil
         return 0, L.COOLDOWN_UNAVAILABLE
     end
+    observedNoCharges[id] = (charges == 0 and maximum == 0) or nil
     if maximum and maximum > 0 then
         if not nonnegativeInteger(charges) or charges > maximum then return 0, L.COOLDOWN_UNAVAILABLE end
+        -- Charges left: the end a cast noted must not count the recipe as empty
+        -- in the lists of another profession. None left: the cooldown read is
+        -- when the recipe can be crafted again.
+        if charges > 0 then setCooldownEnd(id, nil)
+        elseif ordinaryNumber(cooldown) and cooldown > 0 then
+            local time = now()
+            if time then setCooldownEnd(id, time + cooldown) end
+        end
         return charges, charges == 0 and L.RECIPE_ON_COOLDOWN or L.CRAFT_CHARGES_INSUFFICIENT
     end
     if ordinaryNumber(cooldown) and cooldown > 0 then
         if positiveInteger(charges) then return charges, L.CRAFT_CHARGES_INSUFFICIENT end
         local time = now()
-        if time then cooldownEnds[id] = time + cooldown end
+        if time then setCooldownEnd(id, time + cooldown) end
         return 0, L.RECIPE_ON_COOLDOWN
     end
     -- Ready. A cooldown of the recipe's own allows one craft before it starts
@@ -904,7 +994,7 @@ local function recipeLimit(id)
     -- two seconds after a noted cast may come before the client starts the
     -- cooldown: what the cast noted is kept.
     local time, cast = now(), castAt[id]
-    if not (cast and time and time - cast < 2) then cooldownEnds[id] = nil end
+    if not (cast and time and time - cast < 2) then setCooldownEnd(id, nil) end
     if baseCooldown(id) > 0 then return 1, L.CRAFT_CHARGES_INSUFFICIENT end
 end
 

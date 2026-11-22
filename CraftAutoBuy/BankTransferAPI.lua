@@ -359,7 +359,7 @@ function Adapter.Init()
     ns.BankTransfer.Configure(Adapter)
     frame=CreateFrame("Frame")
     frame:SetScript("OnEvent",function(_,event,unit)
-        if event:find("UNIT_SPELLCAST",1,true) and unit~="player" then return end
+        if event:find("UNIT_SPELLCAST",1,true) and (secret(unit) or unit~="player") then return end
         if event=="PLAYER_LOGOUT" or event=="BANKFRAME_CLOSED" then
             ns.BankTransfer.Cancel("BANK_TRANSFER_BANK_CLOSED")
         elseif event=="PLAYER_REGEN_DISABLED" then

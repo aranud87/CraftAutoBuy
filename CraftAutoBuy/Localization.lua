@@ -99,6 +99,10 @@ local SEARCH_FOLD = {
     ["Ý"] = "y", ["ý"] = "y", ["Ÿ"] = "y", ["ÿ"] = "y", ["ß"] = "ss", ["ẞ"] = "ss",
     -- Game names carry the typographic apostrophe; a typed query the straight one.
     ["’"] = "'", ["‘"] = "'",
+    -- French game names carry a no-break space before a colon and an en dash
+    -- between words; a keyboard types the ordinary space and the hyphen.
+    -- In order: U+00A0, U+202F (narrow no-break space), U+2013, U+2014 (em dash).
+    ["\194\160"] = " ", ["\226\128\175"] = " ", ["\226\128\147"] = "-", ["\226\128\148"] = "-",
 }
 local lowerCyrillic = {}
 for character in ("абвгдежзийклмнопрстуфхцчшщъыьэюяё"):gmatch(UTF8_CHARACTER) do
@@ -110,8 +114,31 @@ for character in ("АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭ�
     SEARCH_FOLD[character] = lowerCyrillic[index]
 end
 
+function Locale.TrimSearch(text)
+    if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return "" end
+    -- Lua's %s depends on the system locale and can strip bytes from UTF-8.
+    return text:match("^[ \t\r\n\v\f]*(.-)[ \t\r\n\v\f]*$")
+end
+
 function Locale.SearchText(text)
     if type(text) ~= "string" then return "" end
     local folded = text:gsub(UTF8_CHARACTER, SEARCH_FOLD)
+    -- A run of spaces counts as one: a real name holds two in a row, and a
+    -- player types one. The ASCII space is never a byte of a UTF-8 character.
+    if folded:find("  ", 1, true) then folded = folded:gsub("  +", " ") end
     return (folded:gsub("[A-Z]", function(character) return string.char(character:byte() + 32) end))
+end
+
+-- Fold each name once per sort. Keep the original spelling as a tie-breaker.
+function Locale.NameComparator()
+    local keys = {}
+    local function key(name)
+        if not keys[name] then keys[name] = Locale.SearchText(name) end
+        return keys[name]
+    end
+    return function(left, right)
+        local a, b = key(left), key(right)
+        if a ~= b then return a < b end
+        return left < right
+    end
 end

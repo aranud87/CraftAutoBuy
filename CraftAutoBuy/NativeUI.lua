@@ -614,6 +614,78 @@ local function updateSlots(form)
     reflowSlots()
 end
 
+local function sameNativeRow(a, b)
+    if a.recipeInfo then
+        return b.recipeInfo and a.recipeInfo.recipeID == b.recipeInfo.recipeID
+            and a.recipeInfo.favoritesInstance == b.recipeInfo.favoritesInstance
+    end
+    if a.categoryInfo then
+        return b.categoryInfo and a.categoryInfo.categoryID == b.categoryInfo.categoryID
+            and a.categoryInfo.unlearned == b.categoryInfo.unlearned and a.group == b.group
+    end
+    return (a.topPadding and b.topPadding) or (a.bottomPadding and b.bottomPadding)
+        or (a.isDivider and b.isDivider and a.dividerHeight == b.dividerHeight)
+end
+
+local function sameSearchResults(before, after)
+    if not before or not after or not before.Enumerate or not after.Enumerate then return false end
+    -- Forever rebuilds the tree even when only reagent counts have changed.
+    -- Walk the visible rows in lockstep; collapsed children occupy no space.
+    local nextRow, rows, index = after:Enumerate(nil, nil, true)
+    for _, node in before:Enumerate(nil, nil, true) do
+        local other
+        index, other = nextRow(rows, index)
+        if not other or not sameNativeRow(node:GetData(), other:GetData()) then return false end
+    end
+    return nextRow(rows, index) == nil
+end
+
+local function keepNativeSearchPosition(page, scroll)
+    local list = page.RecipeList
+    local search = list.SearchBox
+    local event = ScrollBoxListMixin and ScrollBoxListMixin.Event and ScrollBoxListMixin.Event.OnDataProviderReassigned
+    if not (search and search.GetText and list.IsVisible and list.HookScript and event and scroll.RegisterCallback
+        and scroll.GetDataProvider and scroll.SetDataProvider and scroll.GetScrollPercentage and scroll.SetScrollPercentage) then return end
+
+    local previous, previousText, previousProfession, restore
+    local function remember()
+        restore = nil
+        local info = page.professionInfo
+        local text = search:GetText()
+        if not info or not info.professionID or not text or text == "" or not list:IsVisible() or not active() then
+            previous = nil
+            return
+        end
+        local provider = scroll:GetDataProvider()
+        local position = scroll:GetScrollPercentage()
+        if not info.openRecipeID and text == previousText and info.professionID == previousProfession
+            and position > 0 and sameSearchResults(previous, provider) then
+            restore = position
+        end
+        previous, previousText, previousProfession = provider, text, info.professionID
+    end
+
+    -- SetDataProvider announces the new tree before resetting the scroll to
+    -- zero. Sample at that instant so wheel and scrollbar edits always win.
+    scroll:RegisterCallback(event, remember, NativeUI)
+    hooksecurefunc(scroll, "SetDataProvider", function(self, provider, retain)
+        local position = restore
+        restore = nil
+        if position and not retain and provider == previous and self:GetScrollPercentage() == 0 then
+            self:SetScrollPercentage(position, true)
+        end
+    end)
+    list:HookScript("OnHide", function() previous, restore = nil, nil end)
+    -- A return from the CAB tab can reveal the existing tree without
+    -- assigning a new provider before the player's first recipe selection.
+    if list.SelectRecipe then
+        hooksecurefunc(list, "SelectRecipe", function()
+            if not previous then remember() end
+        end)
+    end
+    if scroll.GetView and scroll:GetView() then remember() end
+end
+
 function NativeUI.Install()
     if not hooksecurefunc or not ns.API then return false end
     local form = ns.API.GetForm()
@@ -636,6 +708,7 @@ function NativeUI.Install()
     end
     if not installedScrollBoxes[scroll] then
         installedScrollBoxes[scroll] = true
+        keepNativeSearchPosition(page, scroll)
         if ScrollUtil and ScrollUtil.AddInitializedFrameCallback then
             ScrollUtil.AddInitializedFrameCallback(scroll, function(_, row) attachRow(row) end, NativeUI, false)
         elseif scroll.HookScript then

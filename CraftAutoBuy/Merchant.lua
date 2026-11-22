@@ -244,7 +244,7 @@ local function rememberPrices(available)
     -- Use the actual merchant unit, as Blizzard's merchant title does. This is
     -- an observation of a named seller, never a guess based on its profession.
     local vendorName = UnitName and UnitName("npc")
-    if type(vendorName) ~= "string" or vendorName == "" or (issecretvalue and issecretvalue(vendorName)) then
+    if type(vendorName) ~= "string" or (issecretvalue and issecretvalue(vendorName)) or vendorName == "" then
         vendorName = nil
     end
     for itemID, entry in pairs(available) do
@@ -374,6 +374,14 @@ local function readBagLayout(fresh)
     return layout
 end
 
+-- GetTime() does not move within a frame: the layout above is shared by the
+-- quotes of one refresh. Core calls this on BAG_UPDATE_DELAYED, so that a
+-- refresh made earlier in the same frame (money, merchant) cannot outlive
+-- the bag change.
+function Merchant.InvalidateBagLayout()
+    layoutAt = nil
+end
+
 local function basketFits(quantities, fresh)
     if not next(quantities) then return true end
     -- Clients without a container API still rely on the game's space check.
@@ -463,6 +471,8 @@ local function quoteBasket(purchases, available, fresh)
         elseif quantity > 0 then
             local entry = available[itemID]
             local price = entry and entry.info or cache[itemID]
+            -- A saved price that is not a record (edited or damaged file) is no price.
+            if type(price) ~= "table" then price = nil end
             if not entry then result.live = false end
             if not entry or not validInfo(entry.info) then result.unavailable[itemID] = true end
             if not pricedInfo(price) then

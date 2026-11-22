@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version stable 1.3.0 pour WoW Forever.**
+**Version 1.3.1 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -18,7 +18,7 @@ L’infobulle du prix détaille aussi les fournitures nécessaires aux recettes
 intermédiaires. Dans la fenêtre du métier, un changement de recette ou de
 quantité entre l’affichage et le clic demande une nouvelle validation.
 
-Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. Après un `/reload` ou une reconnexion, rouvre le métier concerné avant de te fier à **Max** ou au devis d’achat.
+Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Sous le nom du métier, sa fiche indique la recharge qui suit une fabrication, avec la durée que donne le jeu. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. CAB retient ces recharges pour ce personnage, y compris après un `/reload` ou une reconnexion. Une recharge qu’il n’a pas notée (lancée sans lui, partagée avec une autre recette, ou perdue lors d’un arrêt brutal du jeu) n’est connue qu’une fois son métier ouvert : ouvre-le avant de te fier à **Max** ou au devis d’achat.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
@@ -69,8 +69,12 @@ avec niveaux de qualité et celles sans objet produit ne sont pas inclus.
 Ces favoris restent visibles même sans composants ou sans gain de compétence ; leur quantité et leur couleur
 suivent la prise en compte de la banque. Une recette non réalisable apparaît
 en gris. Les ajouts et retraits se font depuis les favoris natifs du métier.
-La recherche s'applique aussi aux favoris. Elle ignore la casse et les accents,
-et traite l'apostrophe droite et l'apostrophe typographique de la même façon.
+La recherche s'applique aussi aux favoris. Elle ignore la casse, les accents,
+et les espaces et tabulations ordinaires tapées avant ou après le texte. Elle
+traite l'apostrophe droite et l'apostrophe typographique de la même façon, et
+rapproche des touches du clavier les caractères des noms du jeu : l'espace
+insécable devient une espace, les tirets demi-cadratin et cadratin un trait
+d'union, et plusieurs espaces de suite comptent pour une.
 
 La liste utilise un seul niveau de sections : **Favoris**, puis un en-tête
 par métier, par exemple **Alchimie** ou **Cuisine**. Les recettes apparaissent
@@ -270,7 +274,8 @@ tient aussi compte du marchand ouvert, du coût et des prérequis de la recette.
 
 Ouvre ta banque une première fois pour que CraftAutoBuy enregistre son contenu.
 L'onglet **Stock** permet ensuite de consulter les quantités observées, même
-loin de la banque. La recherche s'applique aux sacs et à la banque.
+loin de la banque. La recherche s'applique aux sacs et à la banque ; elle suit
+les mêmes règles que celle de la liste CAB.
 
 - **Composants**, sélectionné par défaut, affiche les ingrédients des recettes
   apprises prises en charge par CAB. Le menu **Métier** peut limiter cette vue
@@ -425,7 +430,7 @@ sont restituées.
 | `/cab config` | Ouvre les réglages, comme `/cab` ou `/cab options`. |
 | `/cab scan` | Relit les recettes du métier que tu as ouvert. |
 | `/cab debug` | Affiche dans la discussion les versions de l’addon et du jeu, le métier, la recette sélectionnée et les compteurs du catalogue. |
-| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ton personnage. Remplace `<ID>` par le numéro entier positif de l’objet. CAB indique le nouveau classement dans la discussion. |
+| `/cab vendor <ID>` | Active ou désactive le classement de l’objet comme fourniture de marchand pour ton personnage. Remplace `<ID>` par le numéro entier positif de l’objet. CAB indique le nouveau classement dans la discussion. Un autre nombre (décimal, nul, négatif ou trop grand) ne change rien et n’affiche rien. |
 
 ## Licence
 
