@@ -1387,7 +1387,8 @@ function ns.CraftBatchActive()
 end
 
 local function castEvent(event, unit, castGUID, spellID)
-    if unit ~= "player" then return end
+    -- The client may hide another unit's cast: test for a secret before comparing.
+    if (issecretvalue and issecretvalue(unit)) or unit ~= "player" then return end
     -- Any successful cast: a recipe with a cooldown of its own starts it now.
     if event == "UNIT_SPELLCAST_SUCCEEDED" and ns.API.NoteRecipeCast then ns.API.NoteRecipeCast(cleanNumber(spellID)) end
     local job = ns.job
@@ -1422,10 +1423,16 @@ end
 function ns.OnEvent(event, ...)
     if event == "ADDON_LOADED" then
         if ... == addonName then
-            CraftAutoBuyDB = CraftAutoBuyDB or {}
-            CraftAutoBuyDB.vendorItems = CraftAutoBuyDB.vendorItems or {}
+            -- An edited or damaged saved file can hold any type: repair it here,
+            -- before the rest of the initialization and every later read.
+            if type(CraftAutoBuyDB) ~= "table" then CraftAutoBuyDB = {} end
+            if type(CraftAutoBuyDB.vendorItems) ~= "table" then CraftAutoBuyDB.vendorItems = {} end
             if CraftAutoBuyDB.autoBuy == nil then CraftAutoBuyDB.autoBuy = true end
             if CraftAutoBuyDB.openAtMerchant == nil then CraftAutoBuyDB.openAtMerchant = false end
+            -- A preference that is not a boolean is off, as the purchase buttons
+            -- already read it: an unreadable value never allows spending.
+            if CraftAutoBuyDB.autoBuy ~= true then CraftAutoBuyDB.autoBuy = false end
+            if CraftAutoBuyDB.openAtMerchant ~= true then CraftAutoBuyDB.openAtMerchant = false end
             -- Saved language preferences must apply before any persistent UI
             -- label is created. Settings resolves the preference once per login.
             if ns.Settings then ns.Settings.Install()
@@ -1435,7 +1442,9 @@ function ns.OnEvent(event, ...)
             initialized = true
             for id in pairs(defaultVendors) do ns.vendorItems[id] = true end
             for id, enabled in pairs(CraftAutoBuyDB.vendorItems) do
-                if validVendorItemID(id) then ns.vendorItems[id] = enabled
+                -- Only an item ID with an explicit choice is a vendor entry;
+                -- anything else leaves the saved list too.
+                if validVendorItemID(id) and type(enabled) == "boolean" then ns.vendorItems[id] = enabled
                 else CraftAutoBuyDB.vendorItems[id] = nil end
             end
             if ns.Catalogue then ns.Catalogue.Load() end
@@ -1532,6 +1541,8 @@ function ns.OnEvent(event, ...)
         -- Without any BAG_UPDATE (other clients, synthetic updates) assume the bags changed.
         local refresh = inventoryChanged or not bagUpdates
         bagUpdates, inventoryChanged = false, false
+        -- An earlier event of this frame may have cached the previous bag layout.
+        if ns.Merchant.InvalidateBagLayout then ns.Merchant.InvalidateBagLayout() end
         if refresh then invalidateCatalogue() end
         finishPending()
         ns.Merchant.Tick(now())

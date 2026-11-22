@@ -77,6 +77,8 @@ ns.Locale.RegisterLocale("enGB", {
     BANK_OVERRIDE_CHANGED = "The quote or recipe changed. Check the action button and click again to confirm.",
     BANK_OVERRIDE_READY_CLICK = "Without bank stock: click Craft to craft using your bags.",
     CATALOG_COMPONENTS = "Reagents:",
+    CATALOG_COOLDOWN = "Cooldown after crafting: %s",
+    CATALOG_COOLDOWN_SINGLE_USE = "One craft, then a %s cooldown.",
     CATALOG_COST = "Vendor cost: %s",
     CATALOG_ESTIMATE = "Estimated vendor cost: %s",
     CATALOG_COST_UNKNOWN = "Vendor cost unknown",

@@ -13,6 +13,10 @@ local restoringScroll, selectionRestored, groupKeys, searchScroll = false, false
 local searchCollapsed = {}
 local ICON = "Interface\\AddOns\\CraftAutoBuy\\Icon.tga"
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+-- The recipe sheet from its top: the cooldown line under the profession name,
+-- then the reagents' title and list, which that line moves down when a
+-- translation wraps (renderCooldown).
+local COOLDOWN_TOP, REAGENT_TITLE_TOP, REAGENT_LIST_TOP = 85, 102, 124
 
 local function view()
     return ns.CatalogueView and ns.CatalogueView.Get() or fallbackView
@@ -630,9 +634,12 @@ function UI.Install()
     widgets.output:SetScript("OnClick", function() end)
     widgets.recipeName = label(detail, "GameFontHighlight", 80, -18, 246, 46)
     widgets.profession = label(detail, "GameFontDisable", 80, -67, 246, 18)
-    widgets.reagentTitle = label(detail, "GameFontNormal", 20, -102, 298, 18, L.CATALOG_COMPONENTS)
+    widgets.cooldown = label(detail, "GameFontHighlightSmall", 80, -COOLDOWN_TOP, 246, 12)
+    widgets.cooldown:SetWordWrap(true)
+    widgets.cooldown:Hide()
+    widgets.reagentTitle = label(detail, "GameFontNormal", 20, -REAGENT_TITLE_TOP, 298, 18, L.CATALOG_COMPONENTS)
     widgets.reagentScroll = CreateFrame("ScrollFrame", nil, detail, "UIPanelScrollFrameTemplate")
-    widgets.reagentScroll:SetPoint("TOPLEFT", detail, "TOPLEFT", 20, -124)
+    widgets.reagentScroll:SetPoint("TOPLEFT", detail, "TOPLEFT", 20, -REAGENT_LIST_TOP)
     widgets.reagentScroll:SetSize(296, 238)
     widgets.reagentContent = CreateFrame("Frame", nil, widgets.reagentScroll)
     widgets.reagentContent:SetSize(296, 238)
@@ -681,6 +688,7 @@ function UI.Install()
     widgets.bankTransfer:SetScript("OnLeave", tooltipHide)
     widgets.bankTransfer:Hide()
     detail.OutputButton, detail.RecipeName, detail.ProfessionName = widgets.output, widgets.recipeName, widgets.profession
+    detail.CooldownText = widgets.cooldown
     detail.ReagentsLabel, detail.CostText, detail.StatusText = widgets.reagentTitle, widgets.cost, widgets.status
     detail.BankWithdrawButton = widgets.bankTransfer
 
@@ -1006,8 +1014,12 @@ local function renderList()
     return visible
 end
 
-local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
-    maximumHeight = maximumHeight or 238
+local function renderReagents(recipe, recipes, id, crafts, maximumHeight, shift)
+    maximumHeight, shift = maximumHeight or 238, shift or 0
+    widgets.reagentTitle:ClearAllPoints()
+    widgets.reagentTitle:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -(REAGENT_TITLE_TOP + shift))
+    widgets.reagentScroll:ClearAllPoints()
+    widgets.reagentScroll:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -(REAGENT_LIST_TOP + shift))
     local count, y = 0, 0
     if recipe then
         local inventory, bank
@@ -1070,7 +1082,7 @@ local function renderReagents(recipe, recipes, id, crafts, maximumHeight)
     if widgets.reagentScroll.ScrollBar then widgets.reagentScroll.ScrollBar:SetShown(y > maximumHeight) end
     widgets.reagentTitle:SetShown(recipe ~= nil)
     widgets.reagentScroll:SetShown(recipe ~= nil)
-    local costY = 124 + math.min(y, maximumHeight) + 10
+    local costY = REAGENT_LIST_TOP + shift + math.min(y, maximumHeight) + 10
     widgets.cost:ClearAllPoints()
     widgets.cost:SetPoint("TOPLEFT", widgets.detail, "TOPLEFT", 20, -costY)
     widgets.costHit:ClearAllPoints()
@@ -1088,6 +1100,33 @@ local function detailBackground(key)
         end
     end
     widgets.detail.Background:SetAtlas(atlas)
+end
+
+-- A recipe with a cooldown of its own allows one craft before that cooldown
+-- starts again, whatever its reagents allow (F5). The line under the profession
+-- says so before any click, with the duration the spell gives, in the game's
+-- own words for a duration. Any other recipe, even one whose Max is 1 for want
+-- of reagents, keeps the usual sheet; so does a duration the game cannot
+-- write. Returns how far a wrapped line moves the reagents down.
+local function renderCooldown(recipe, id)
+    local text
+    if recipe and ns.API.RecipeBaseCooldown and type(SecondsToTime) == "function" then
+        local seconds, singleUse = ns.API.RecipeBaseCooldown(id)
+        if seconds > 0 then
+            local ok, duration = pcall(SecondsToTime, seconds)
+            if ok and type(duration) == "string" and duration ~= "" then
+                local label = singleUse and L.CATALOG_COOLDOWN_SINGLE_USE or L.CATALOG_COOLDOWN
+                text = label:format(duration)
+            end
+        end
+    end
+    widgets.cooldown:SetText(text or "")
+    widgets.cooldown:SetShown(text ~= nil)
+    if not text then return 0 end
+    widgets.cooldown:SetHeight(0)
+    local height = math.max(12, math.ceil(widgets.cooldown:GetStringHeight()))
+    widgets.cooldown:SetHeight(height)
+    return math.max(0, COOLDOWN_TOP + height + 4 - REAGENT_TITLE_TOP)
 end
 
 local function renderBankTransfer(recipe, id, key, quantity)
@@ -1230,7 +1269,8 @@ function UI.Render()
     widgets.cancel:SetShown(canCancel)
     widgets.cancel:SetEnabled(canCancel)
     local transferState=renderBankTransfer(recipe,id,key,crafts)
-    renderReagents(recipe, recipes, id, crafts, transferState and 206 or 238)
+    local cooldownShift = renderCooldown(recipe, id)
+    renderReagents(recipe, recipes, id, crafts, (transferState and 206 or 238) - cooldownShift, cooldownShift)
     -- The cost next to the reagents describes the displayed bank-aware plan.
     -- The action tooltip prices its separate alternative before confirmation.
     local quote = recipe and ns.quote
