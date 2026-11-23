@@ -205,7 +205,7 @@ function UI.CostSummary(quote, displayedReason, plan, contentsShown)
     if not quote then return L.COST_SELECT_RECIPE end
     local lines = {}
     if quote.partial then
-        lines[#lines + 1] = L.ACTION_BUY_HERE .. ": " .. moneyText(quote.totalCost)
+        lines[#lines + 1] = L.COST_BUY_HERE:format(moneyText(quote.totalCost))
     elseif quote.complete then
         lines[#lines + 1] = (quote.live and L.COST_VENDOR_TOTAL or L.COST_VENDOR_ESTIMATE):format(moneyText(quote.totalCost))
     else
@@ -485,7 +485,10 @@ function UI.Install()
         -- page. Do not render missing widgets after that first client error.
         return installed
     end
-    if not ProfessionsFrame then return false end
+    if not ProfessionsFrame then
+        if ns.Sidebar and ns.Sidebar.Install then ns.Sidebar.Install() end
+        return false
+    end
     book = ProfessionsFrame
     panel = CreateFrame("Frame", "CraftAutoBuyPage", book)
     panel:SetSize(650, 510)
@@ -1203,7 +1206,8 @@ function UI.Render()
     if recipe and ns.plan and ns.plan.craftable then
         bankMessage, bankAllowed, alternativePlan, bankQuote, bankReason, prebuy = bankAlternative(recipes, ns.plan)
     end
-    local actionQuote = bankQuote or ns.quote
+    -- Only advertise buying banked supplies when their replacement is available.
+    local actionQuote = bankAllowed and bankQuote or ns.quote
     local partialPurchase = actionQuote and actionQuote.partial == true
     local autoBuy = CraftAutoBuyDB and CraftAutoBuyDB.autoBuy == true
     local purchaseReady = not needsBuy or (autoBuy and ns.Merchant.IsOpen() and ns.quote and ns.quote.canBuy)
@@ -1217,7 +1221,7 @@ function UI.Render()
     widgets.craft.requirementReason, widgets.craft.purchaseOnly = requirementReason, purchaseOnly or prebuy == true or partialPurchase
     widgets.craft.partialPurchase = partialPurchase
     widgets.craft.requirementKind = requirementKind
-    local actionPlan = alternativePlan or ns.plan
+    local actionPlan = bankAllowed and alternativePlan or ns.plan
     widgets.craft.actionIntent = actionPlan and next(actionPlan.purchases or {}) and "buy" or "craft"
     local clickContext = ns.ActionButtons.ClickContext(id, key, crafts, actionPlan, recipes, actionQuote)
     widgets.craft.clickContext = clickContext
@@ -1278,7 +1282,7 @@ function UI.Render()
     local cost = ""
     if quote then
         if quote.partial then
-            cost = L.ACTION_BUY_HERE .. ": " .. shortMoney(quote.totalCost)
+            cost = L.COST_BUY_HERE:format(shortMoney(quote.totalCost))
         elseif quote.complete then
             cost = (quote.live and L.CATALOG_COST or L.CATALOG_ESTIMATE):format(shortMoney(quote.totalCost))
         elseif quote.totalCost > 0 then
@@ -1298,7 +1302,10 @@ function UI.Render()
         elseif ns.plan and not ns.plan.craftable then
             status = L.PLAN_UNAVAILABLE
             for _, err in ipairs(ns.plan.errors or {}) do
-                if err == "craft_limit" then status = requirementReason or L.CRAFT_CHARGES_INSUFFICIENT; break end
+                if err == "craft_limit" then
+                    status = requirementReason or ns.plan.craftLimitReason or L.CRAFT_LIMIT_EXCEEDED
+                    break
+                end
             end
         -- "Vérifier" is disabled while a project exists: ask to reopen its profession.
         elseif needsVerification then status = job and L.PROJECT_PAUSED_REOPEN or L.CATALOG_VERIFY_HELP
@@ -1372,6 +1379,7 @@ end
 function UI.Show()
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then return false end
     if not UI.Install() then return false end
+    if ns.NativeUI and ns.NativeUI.CancelBookRecipeRestore then ns.NativeUI.CancelBookRecipeRestore() end
     if ns.Bootstrap then ns.Bootstrap.Wake() end
     local previousPage
     if ns.StockUI and ns.StockUI.IsActive() then previousPage = ns.StockUI.NativeTabSelected() end

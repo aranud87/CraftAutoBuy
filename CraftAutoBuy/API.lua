@@ -939,16 +939,20 @@ local function setCooldownEnd(id, ends)
     if server and moment then saved[id] = server + (ends - moment) else unsavedEnds = true end
 end
 
+local function singleCraftReason(id)
+    return observedNoCharges[id] and L.CRAFT_ONE_BEFORE_COOLDOWN or L.CRAFT_LIMIT_EXCEEDED
+end
+
 -- For a profession that is not open: none while a remembered cooldown runs,
 -- one craft for a recipe with a cooldown of its own, otherwise no limit.
 local function rememberedLimit(id)
     local ends = rememberedEnd(id)
     if ends then
         local time = now()
-        if not time or time < ends then return 0 end
+        if not time or time < ends then return 0, L.RECIPE_ON_COOLDOWN end
         setCooldownEnd(id, nil)
     end
-    if baseCooldown(id) > 0 then return 1 end
+    if baseCooldown(id) > 0 then return 1, singleCraftReason(id) end
 end
 
 -- A successful cast of a recipe with a cooldown of its own starts that
@@ -995,7 +999,7 @@ local function recipeLimit(id)
     -- cooldown: what the cast noted is kept.
     local time, cast = now(), castAt[id]
     if not (cast and time and time - cast < 2) then setCooldownEnd(id, nil) end
-    if baseCooldown(id) > 0 then return 1, L.CRAFT_CHARGES_INSUFFICIENT end
+    if baseCooldown(id) > 0 then return 1, singleCraftReason(id) end
 end
 
 -- Snapshot on demand for one plan/maximum. Charges can change without a bag
@@ -1003,7 +1007,7 @@ end
 -- A profession that is not open is not asked: its recipes are limited by what
 -- the spells and this session's readings tell (rememberedLimit). Without the
 -- spell cooldown API nothing is known of them, and there is no limit, as before.
-function API.RecipeLimits(key)
+function API.RecipeLimits(key, reasons)
     if not key then return nil end
     local live = C_TradeSkillUI and C_TradeSkillUI.GetRecipeCooldown and API.IsOwnProfession()
     if live then
@@ -1012,8 +1016,9 @@ function API.RecipeLimits(key)
     end
     if not live and type(GetSpellBaseCooldown) ~= "function" then return nil end
     return setmetatable({}, {__index = function(limits, id)
-        local value
-        if live then value = recipeLimit(id) else value = rememberedLimit(id) end
+        local value, reason
+        if live then value, reason = recipeLimit(id) else value, reason = rememberedLimit(id) end
+        if reasons then reasons[id] = reason end
         if value == nil then value = math.huge end
         rawset(limits, id, value)
         return value

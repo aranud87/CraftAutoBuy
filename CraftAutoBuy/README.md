@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version 1.3.1 pour WoW Forever.**
+**Version 1.3.2 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
