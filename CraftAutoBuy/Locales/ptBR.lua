@@ -3,6 +3,7 @@ local _, ns = ...
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("ptBR", {
     CATALOG_FAVORITES = "Favoritos",
+    CATALOG_FAVORITES_FIRST_READ = "Seus favoritos do WoW aparecem aqui depois que você abrir uma vez a profissão correspondente.",
     CATALOG_FILTER_BANK = "Banco",
     CATALOG_FILTER_BANK_HELP = "Inclui no cálculo os reagentes registrados do banco pessoal. Mesmo com a opção desativada, comprar materiais já registrados no banco exige confirmação para o projeto atual. Os favoritos continuam visíveis.",
     CATALOG_FILTER_PROGRESSION = "Progressão",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("ptBR", {
     OPEN_PROFESSION_SELECT_RECIPE = "Abra uma profissão e selecione uma receita.",
     OPEN_PROFESSION_WAIT = "Abra sua profissão e aguarde o carregamento.",
     PLAN_UNAVAILABLE = "Faltam reagentes que não são vendidos por PNJs ou a receita está indisponível.",
+    PLAN_PARTIAL_AMOUNT = "Fabricações possíveis (%d de %d solicitadas).",
     PROFESSION_API_UNAVAILABLE = "API de profissões indisponível.",
     PROFESSION_FALLBACK = "Profissão #%s",
     PROFESSION_OPEN_FAILED = "Não foi possível abrir esta profissão.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("ptBR", {
     BANK_BUY_CHOICE_PROMPT = "Há reagentes disponíveis no banco. Como você quer completar os suprimentos nas suas bolsas?",
     BANK_BUY_WITHOUT_HELP = "Desconta apenas os reagentes que já estão nas suas bolsas.",
     BANK_BUY_COMPLEMENT_HELP = "Desconta os reagentes das bolsas e do banco. Retire os reagentes do banco antes de criar.",
+    SETTINGS_GENERAL = "Geral",
+    TRANSMUTATIONS = "Transmutações",
+    TRANSMUTATION_ALERT = "Alerta de transmutação pronta",
+    TRANSMUTATION_SOUND = "Tocar um som com o alerta",
+    TRANSMUTATION_POPUP = "Mostrar janela de transmutações",
+    TRANSMUTATION_POPUP_HELP = "Desbloqueie a janela para movê-la ou redimensioná-la pela alça no canto inferior direito. Ela continua visível com o CAB fechado.",
+    TRANSMUTATION_OPACITY = "Opacidade da janela",
+    TRANSMUTATION_EMPTY = "Nenhuma transmutação conhecida tem recarga.",
+    TRANSMUTATION_READY = "Pronta",
+    TRANSMUTATION_UNKNOWN = "Desconhecido",
+    TRANSMUTATION_NOTICE = "%s está disponível.",
+    TRANSMUTATION_LOCK = "Bloquear a janela",
+    TRANSMUTATION_VENDOR_READING = "Vendedor: estoque a confirmar",
 })

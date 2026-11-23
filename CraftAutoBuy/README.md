@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version 1.3.3 pour WoW Forever.**
+**Version 1.4.0 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -90,6 +90,18 @@ encore disponibles. L'absence de données natives de favoris pendant leur
 chargement n'est pas interprétée comme une suppression définitive.
 Si ces informations ne sont pas encore disponibles après la mise à jour,
 ouvre le métier correspondant une première fois pour les actualiser.
+CAB mémorise par personnage les favoris déjà lus, indépendamment du catalogue
+et de la langue du client : ils réapparaissent quand le catalogue est
+reconstruit métiers fermés, et un retrait vu par cette version ne revient pas,
+même si un ancien catalogue est restauré. Si tu alternes avec une version
+antérieure de CAB, un favori changé sous cette autre version n'est repris ici
+qu'à la prochaine ouverture du métier concerné avec cette version. D'ici là,
+cette version affiche l'ancien état, et l'autre version le retrouve après
+chaque session de celle-ci.
+Tant que CAB n'a mémorisé aucun favori, même un favori qu'il ne liste pas,
+une ligne grise en tête de liste rappelle d'ouvrir une fois les métiers qui
+n'ont pas encore été lus. Quand rien n'est fabricable, ce rappel suit le
+message de liste vide, sauf si celui-ci nomme déjà les métiers à ouvrir.
 
 Le filtre Banque ne retire aucun composant et ne permet pas la fabrication
 directe depuis la banque. Les fournitures PNJ et les intermédiaires connus
@@ -408,6 +420,33 @@ Saisis **`/cab`** pour ouvrir les réglages :
   titre. Activer l'option chez un vendeur déjà ouvert attend la visite suivante.
 - **Langue** : suit le client en mode Automatique, ou utilise le paquet choisi.
   La préférence est enregistrée par personnage et s'applique après `/reload`.
+
+Dans la section **Transmutations**, l’**Alerte de transmutation**, le son et
+la **Fenêtre de transmutations** sont activés par défaut. Tu peux régler
+chacun séparément. À la fin d’une recharge suivie, le bandeau s’affiche une
+fois pendant dix secondes. Le son, s’il est activé, retentit à son apparition.
+Si la recharge se termine pendant ton absence, l’alerte s’affiche à la
+reconnexion. Sur un personnage qui connaît l’Alchimie, la fenêtre reste
+visible quand CAB est fermé. Elle affiche l’icône de la transmutation et
+le temps restant ou **Prêt**. Clique sur l’icône pour ouvrir la fiche dans CAB,
+même pendant la recharge. Survole l’icône pour lire l’infobulle de la recette,
+ou le petit sac à droite pour voir les quantités nécessaires à une fabrication
+et leur disponibilité en sacs ou en banque. Un **?** indique une quantité
+inconnue. La ligne
+**Marchand** apparaît si CAB connaît une source ou si le marchand ouvert
+propose le composant. **Stock à vérifier** signale que l’offre du marchand
+ouvert reste à confirmer pour une fourniture connue.
+Déverrouille la fenêtre pour la déplacer ou la redimensionner par le coin
+inférieur droit. Élargis-la pour placer plusieurs recettes côte à côte et
+utilise la molette si des lignes débordent. Les blocs de métiers partagent
+la même fenêtre et sont séparés par un espace transparent. CAB mémorise la
+taille, la position, le verrouillage et l’opacité par personnage. Le
+catalogue peut afficher les transmutations apprises avant l’ouverture de
+l’Alchimie. **Inconnu** indique qu’aucune disponibilité n’a encore été
+confirmée. Ouvre ton Alchimie pour la vérifier. Après la fabrication d’une
+barre d’arcanite sur le build Forever 71037, les autres recettes apprises
+qui partagent sa recharge affichent le même décompte. Fer en Or et Mithril en
+Vrai-argent ont chacun leur propre minuteur.
 
 Le mode automatique indique la langue reconnue, par exemple **Automatique
 (Français détecté)**. L'anglais sert de repli si la langue est indisponible ou

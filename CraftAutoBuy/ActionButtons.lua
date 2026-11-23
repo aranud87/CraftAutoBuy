@@ -8,6 +8,17 @@ function ActionButtons.CraftText(quantity)
     return ns.L.ACTION_CRAFT .. " × " .. tostring(quantity or 1)
 end
 
+-- A smaller feasible plan can explain a reagent shortfall without losing
+-- diagnostics for cooldowns, missing recipe data or other plan errors.
+function ActionButtons.MaterialShortfall(plan, maximum, requested, recipes, unknown)
+    local errors = plan and plan.errors
+    if not errors or #errors ~= 1 or errors[1] ~= "insufficient_reagents"
+        or plan.inventoryUnknown or maximum < 1 or maximum >= requested then return nil end
+    if unknown and next(unknown)
+        and ns.Planner.HasUnknownReagentCount(recipes, ns.vendorItems, plan.recipeID, unknown) then return nil end
+    return ns.L.PLAN_PARTIAL_AMOUNT:format(maximum, requested)
+end
+
 -- Keep the rendered action intact through focus loss and the live rescan.
 function ActionButtons.ClickContext(id, key, quantity, plan, recipes, quote)
     local context = {recipeID = id, professionKey = key, quantity = quantity, quote = quote}

@@ -3,6 +3,7 @@ local _, ns = ...
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("ruRU", {
     CATALOG_FAVORITES = "Избранное",
+    CATALOG_FAVORITES_FIRST_READ = "Избранное WoW появится здесь после первого открытия соответствующей профессии.",
     CATALOG_FILTER_BANK = "Банк",
     CATALOG_FILTER_BANK_HELP = "Учитывать в расчёте сохранённые реагенты личного банка. Даже при отключённой опции покупка материалов, уже учтённых в банке, требует подтверждения для текущего проекта. Избранное остаётся видимым.",
     CATALOG_FILTER_PROGRESSION = "Рост навыка",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("ruRU", {
     OPEN_PROFESSION_SELECT_RECIPE = "Откройте профессию и выберите рецепт.",
     OPEN_PROFESSION_WAIT = "Откройте свою профессию и дождитесь загрузки.",
     PLAN_UNAVAILABLE = "Не хватает реагентов, которые нельзя купить у торговца, либо рецепт недоступен.",
+    PLAN_PARTIAL_AMOUNT = "Можно выполнить %d из %d запрошенных изготовлений.",
     PROFESSION_API_UNAVAILABLE = "API профессий недоступен.",
     PROFESSION_FALLBACK = "Профессия №%s",
     PROFESSION_OPEN_FAILED = "Не удалось открыть эту профессию.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("ruRU", {
     BANK_BUY_CHOICE_PROMPT = "Некоторые реагенты есть в банке. Как вы хотите пополнить запасы в сумках?",
     BANK_BUY_WITHOUT_HELP = "Учитывает только реагенты, которые уже есть в сумках.",
     BANK_BUY_COMPLEMENT_HELP = "Учитывает реагенты в сумках и банке. Перед изготовлением заберите реагенты из банка.",
+    SETTINGS_GENERAL = "Общие",
+    TRANSMUTATIONS = "Трансмутации",
+    TRANSMUTATION_ALERT = "Оповещение о готовности трансмутации",
+    TRANSMUTATION_SOUND = "Воспроизводить звук оповещения",
+    TRANSMUTATION_POPUP = "Показывать окно трансмутаций",
+    TRANSMUTATION_POPUP_HELP = "Разблокируйте окно, чтобы переместить его или изменить размер за правый нижний угол. Окно остаётся видимым после закрытия CAB.",
+    TRANSMUTATION_OPACITY = "Непрозрачность окна",
+    TRANSMUTATION_EMPTY = "Нет известных трансмутаций с временем восстановления.",
+    TRANSMUTATION_READY = "Готово",
+    TRANSMUTATION_UNKNOWN = "Неизвестно",
+    TRANSMUTATION_NOTICE = "Доступно: %s.",
+    TRANSMUTATION_LOCK = "Заблокировать окно",
+    TRANSMUTATION_VENDOR_READING = "Торговец: наличие нужно проверить",
 })

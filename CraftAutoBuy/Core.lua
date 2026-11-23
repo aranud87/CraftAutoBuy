@@ -294,6 +294,7 @@ function ns.Refresh()
         if limitReasons[recipeID] and quantity > limits[recipeID] then
             ns.plan.craftLimitReason = limitReasons[recipeID]
         end
+        ns.plan.unknownBagCounts = unknown
         if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(ns.plan, recipes, unknown) end
         ns.quote = ns.PurchaseQuote(ns.plan.purchases)
     else
@@ -531,19 +532,21 @@ function ns.Scan(preserveSelection, target)
 end
 
 function ns.CanEditQuantity()
-    if ns.pendingStart or ns.bankConfirmation or ns.Merchant.IsBusy() then return false end
-    local job = ns.job
-    return not job or (not job.pending and not job.running and not job.awaitingPurchase and job.remaining == job.total)
+    return ns.CanSelectRecipe()
 end
 
 function ns.SetQuantity(value)
     if not ns.CanEditQuantity() then return end
     local quantity = math.max(1, math.min(1000, math.floor(tonumber(value) or 1)))
-    if ns.job and quantity ~= ns.job.remaining then clearBankApproval() end
+    local job = ns.job
+    if job and quantity ~= job.remaining then
+        clearBankApproval()
+        local completed = job.total - job.remaining
+        job.remaining, job.total = quantity, completed + quantity
+    end
     ns.quantity = quantity
-    quantityRecipeID = ns.job and ns.job.recipeID or ns.selectedID
-    quantityProfessionKey = ns.job and ns.job.professionKey or ns.selectedProfessionKey
-    if ns.job then ns.job.remaining, ns.job.total = ns.quantity, ns.quantity end
+    quantityRecipeID = job and job.recipeID or ns.selectedID
+    quantityProfessionKey = job and job.professionKey or ns.selectedProfessionKey
     ns.Refresh()
 end
 
@@ -1472,6 +1475,10 @@ function ns.OnEvent(event, ...)
         if ns.Catalogue then ns.Catalogue.Load() end
         if ns.Catalogue and ns.Catalogue.RefreshMetadata then ns.Catalogue.RefreshMetadata() end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
+        if ns.Transmutations then
+            ns.Transmutations.InvalidateProfessions()
+            if event == "PLAYER_ENTERING_WORLD" then ns.Transmutations.Start() end
+        end
         if ns.API.IsOwnProfession() then scanAttempts, partialAttempts = 0, 0; rescanAt = now() + 0.2 end
         if ns.UI and ns.UI.Install then ns.UI.Install() end
         if ns.StockUI then ns.StockUI.Install() end

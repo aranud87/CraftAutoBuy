@@ -389,6 +389,32 @@ function Planner.Plan(recipes, inventory, vendors, recipeID, crafts, bankCounts,
     return calculate(recipes, inventory, vendors, recipeID, crafts, bankCounts, false, limits, nil, options)
 end
 
+local function reagentProducers(context, vendors, itemID)
+    -- The planner buys vendor ingredients, even when a recipe can make them.
+    return not vendors[itemID] and context.producers[itemID] or nil
+end
+
+function Planner.HasUnknownReagentCount(recipes, vendors, recipeID, unknown)
+    if not unknown or not next(unknown) then return false end
+    local context = preparedContext(Planner.Prepare(recipes))
+    if not context or not context.recipes[recipeID] then return false end
+    local seen, pending = {[recipeID] = true}, {recipeID}
+    while #pending > 0 do
+        local recipe = context.recipes[table.remove(pending)]
+        for _, reagent in ipairs(recipe.reagents) do
+            local itemID = reagent.itemID
+            if unknown[itemID] then return true end
+            for _, producer in ipairs(reagentProducers(context, vendors, itemID) or {}) do
+                if not seen[producer] then
+                    seen[producer] = true
+                    pending[#pending + 1] = producer
+                end
+            end
+        end
+    end
+    return false
+end
+
 -- Returns the maximum feasible executions up to limit (default 1000), plus its
 -- plan. If none is possible, return the failing one-execution plan for an UI's
 -- missing-material list. atLimit warns that the answer is a bounded maximum.
@@ -416,9 +442,7 @@ function Planner.MaxCrafts(recipes, inventory, vendors, recipeID, limit, bankCou
     local function eachProducer(id, visit)
         local recipe = context and context.recipes[id]
         for _, reagent in ipairs(recipe and recipe.reagents or {}) do
-            if not vendors[reagent.itemID] then
-                for _, producer in ipairs(context.producers[reagent.itemID] or {}) do visit(producer) end
-            end
+            for _, producer in ipairs(reagentProducers(context, vendors, reagent.itemID) or {}) do visit(producer) end
         end
     end
     local function stock(itemID)

@@ -3,6 +3,7 @@ local _, ns = ...
 -- English is the fallback for unavailable languages and untranslated keys.
 ns.Locale.RegisterLocale("enUS", {
     CATALOG_FAVORITES = "Favorites",
+    CATALOG_FAVORITES_FIRST_READ = "WoW favorites appear here once you have opened their profession.",
     CATALOG_FILTER_BANK = "Bank",
     CATALOG_FILTER_BANK_HELP = "Include remembered personal-bank reagents in calculations. When unchecked, buying supplies already recorded in the bank still requires confirmation for the current project. Favorites remain visible.",
     CATALOG_FILTER_PROGRESSION = "Skill gains",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("enUS", {
     OPEN_PROFESSION_SELECT_RECIPE = "Open a profession and select a recipe.",
     OPEN_PROFESSION_WAIT = "Open your profession and wait for it to load.",
     PLAN_UNAVAILABLE = "Non-vendor reagents are missing, or the recipe is unavailable.",
+    PLAN_PARTIAL_AMOUNT = "%d of %d requested crafts possible.",
     PROFESSION_API_UNAVAILABLE = "Profession API unavailable.",
     PROFESSION_FALLBACK = "Profession #%s",
     PROFESSION_OPEN_FAILED = "Unable to open this profession.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("enUS", {
     BANK_BUY_CHOICE_PROMPT = "Some reagents are available in your bank. How would you like to get the supplies missing from your bags?",
     BANK_BUY_WITHOUT_HELP = "Counts only the reagents already in your bags.",
     BANK_BUY_COMPLEMENT_HELP = "Counts reagents in your bags and bank. Collect the banked reagents before crafting.",
+    SETTINGS_GENERAL = "General",
+    TRANSMUTATIONS = "Transmutations",
+    TRANSMUTATION_ALERT = "Transmutation ready alert",
+    TRANSMUTATION_SOUND = "Play a sound with the alert",
+    TRANSMUTATION_POPUP = "Show transmutation window",
+    TRANSMUTATION_POPUP_HELP = "Unlock the window to move it or drag its bottom-right handle to resize it. The window stays visible when CAB is closed.",
+    TRANSMUTATION_OPACITY = "Window opacity",
+    TRANSMUTATION_EMPTY = "No known transmutations with a cooldown.",
+    TRANSMUTATION_READY = "Ready",
+    TRANSMUTATION_UNKNOWN = "Unknown",
+    TRANSMUTATION_NOTICE = "%s is ready.",
+    TRANSMUTATION_LOCK = "Lock window",
+    TRANSMUTATION_VENDOR_READING = "Vendor: stock unverified",
 })

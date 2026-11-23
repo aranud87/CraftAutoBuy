@@ -10,6 +10,8 @@ local switching, rendering, installed = false, false, false
 local widgets, rows, categories, reagents, collapsed = {}, {}, {}, {}, {}
 local fallbackView = {includeBank = true, progressionOnly = false, collapsed = collapsed, scroll = 0}
 local restoringScroll, selectionRestored, groupKeys, searchScroll = false, false, {}, 0
+local openedRecipeID
+local favoritesShown = false
 local searchCollapsed = {}
 local ICON = "Interface\\AddOns\\CraftAutoBuy\\Icon.tga"
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -327,7 +329,9 @@ local function restingJobStatus(job, needsBuy)
     -- A click refused while the open profession was unreadable: a scan error
     -- that lasts is shown above; otherwise that cause has ended like the others.
     local scanRefused = ns.scanRefusal ~= nil and current == ns.scanRefusal
-    if not combatPause and not purchasePause and not scanRefused and current ~= L.PROJECT_PAUSED_REOPEN then return current end
+    local stockPause = current == L.INVENTORY_CHANGED_MISSING
+    if not combatPause and not purchasePause and not stockPause and not scanRefused
+        and current ~= L.PROJECT_PAUSED_REOPEN then return current end
     if inCombat then return combatPause and current or L.PROJECT_PAUSED_COMBAT end
     if not professionOpen then return L.PROJECT_PAUSED_REOPEN end
     if needsBuy then return L.PURCHASE_CRAFT_PAUSED end
@@ -392,6 +396,7 @@ end
 local function deactivate(restore, cancelPending)
     if cancelPending and ns.CancelPendingStart then ns.CancelPendingStart() end
     ns.catalogueActive = false
+    openedRecipeID = nil
     if not panel then return end
     panel:Hide()
     restoreBookArt()
@@ -563,7 +568,10 @@ function UI.Install()
     widgets.collapseAll = button(nil, panel, L.CATALOG_COLLAPSE_ALL, 129, 9, -8, function()
         local keys = ns.Catalogue and ns.Catalogue.SectionKeys and ns.Catalogue.SectionKeys() or groupKeys
         for key in pairs(keys) do
-            if key == "favorites" or key:match("^profession:") then setCollapsed(key, true) end
+            -- A Favorites section not shown yet is not folded in advance: the
+            -- favourites a first native read brings would arrive folded. A fold
+            -- the player chose on a shown section is kept through rebuilds.
+            if (key == "favorites" and favoritesShown) or key:match("^profession:") then setCollapsed(key, true) end
         end
         UI.Render()
     end)
@@ -618,6 +626,9 @@ function UI.Install()
     panel.RecipeScroll = widgets.listScroll
     widgets.empty = label(widgets.listContent, "GameFontNormal", 8, -16, 245, 140)
     panel.EmptyText = widgets.empty
+    widgets.favoritesHint = label(widgets.listContent, "GameFontHighlightSmall", 8, 0, 245, 0)
+    widgets.favoritesHint:SetTextColor(.6, .6, .6)
+    widgets.favoritesHint:Hide()
 
     local detail = CreateFrame("Frame", "CraftAutoBuyRecipeDetails", panel)
     detail:SetPoint("TOPLEFT", panel, "TOPLEFT", 305, 0)
@@ -711,7 +722,7 @@ function UI.Install()
     -- focus commits it), then step from it.
     widgets.decrease = button(nil, panel, "-", 18, 305, -482, function()
         widgets.quantity:ClearFocus()
-        ns.SetQuantity((ns.quantity or 1) - 1)
+        ns.SetQuantity((ns.job and ns.job.remaining or ns.quantity or 1) - 1)
     end)
     widgets.quantity = CreateFrame("EditBox", "CraftAutoBuyQuantityInput", panel, "InputBoxTemplate")
     widgets.quantity:SetSize(40, 22)
@@ -732,7 +743,7 @@ function UI.Install()
     widgets.quantity:SetScript("OnTextChanged", function(self, userInput) if userInput then ns.SetQuantity(self:GetText()) end end)
     widgets.increase = button(nil, panel, "+", 18, 375, -482, function()
         widgets.quantity:ClearFocus()
-        ns.SetQuantity((ns.quantity or 1) + 1)
+        ns.SetQuantity((ns.job and ns.job.remaining or ns.quantity or 1) + 1)
     end)
     widgets.craft = button("CraftAutoBuyCreateButton", panel, ns.ActionButtons.CraftText(1), 188, 459, -482, function(self)
         local purchaseOnly, needsVerification, intent, rendered = self.purchaseOnly, self.needsVerification, self.actionIntent, self.clickContext
@@ -836,6 +847,23 @@ local function renderSkillUps(row, recipe, selectable)
     end
 end
 
+local function selectFromClick(_, id, key, reveal)
+    -- Settle the old recipe's typed quantity before changing selection.
+    widgets.quantity:ClearFocus()
+    local restored, previous = selectionRestored, openedRecipeID
+    selectionRestored, openedRecipeID = true, reveal and id or nil
+    if ns.SelectCatalogRecipe(id, key) == false then
+        selectionRestored, openedRecipeID = restored, previous
+        return false
+    end
+    if PlaySound and SOUNDKIT and SOUNDKIT.UI_90_BLACKSMITHING_TREEITEMCLICK then
+        PlaySound(SOUNDKIT.UI_90_BLACKSMITHING_TREEITEMCLICK)
+    end
+    widgets.reagentScroll:SetVerticalScroll(0)
+    saveSelection(ns.selectedID, ns.selectedProfessionKey)
+    return true
+end
+
 local function makeRow(index)
     local row = CreateFrame("Button", nil, widgets.listContent, "InsecureActionButtonTemplate")
     row:SetSize(265, 20)
@@ -859,23 +887,6 @@ local function makeRow(index)
         if row.entry and row.skillUpText then tooltip(self, row.entry.name, row.skillUpText) end
     end)
     row.SkillUps:SetScript("OnLeave", tooltipHide)
-    local function selectFromClick(_, id, key)
-        -- The typed quantity belongs to the recipe being left: settle it before
-        -- the selection changes, or the focused box would carry it to the next.
-        widgets.quantity:ClearFocus()
-        local restored = selectionRestored
-        selectionRestored = true
-        if ns.SelectCatalogRecipe(id, key) == false then
-            selectionRestored = restored
-            return false
-        end
-        if PlaySound and SOUNDKIT and SOUNDKIT.UI_90_BLACKSMITHING_TREEITEMCLICK then
-            PlaySound(SOUNDKIT.UI_90_BLACKSMITHING_TREEITEMCLICK)
-        end
-        widgets.reagentScroll:SetVerticalScroll(0)
-        saveSelection(ns.selectedID, ns.selectedProfessionKey)
-        return true
-    end
     -- Preserve each button's native spell action. The row and its skill-gain
     -- icon both receive the user's click directly, without forwarding a click.
     ns.ActionButtons.BindRecipeProfession(row, selectFromClick)
@@ -926,6 +937,13 @@ local function renderList()
     local y, rowCount, categoryCount = 0, 0, 0
     local visible, roots, professions = {}, {}, {}
     groupKeys = {favorites = true}
+    -- Without any known favourite, a discreet line says where WoW favourites
+    -- come from. It never claims that the character has none, and it is not
+    -- a section: collapsing it would also hide the favourites read later.
+    local favoritesHint = widgets.favoritesHint ~= nil and #favorites == 0 and not searchActive()
+        and ns.Catalogue and ns.Catalogue.FavoritesHint and ns.Catalogue.FavoritesHint() or false
+    if widgets.favoritesHint then widgets.favoritesHint:Hide() end
+    favoritesShown = #favorites > 0
     if #favorites > 0 then
         roots[#roots + 1] = {key = "favorites", name = L.CATALOG_FAVORITES, entries = favorites, favorite = true}
     end
@@ -994,6 +1012,15 @@ local function renderList()
             y = y + (node.favorite and 36 or 20)
         end
     end
+    if favoritesHint and #entries > 0 then
+        local hint = widgets.favoritesHint
+        hint:ClearAllPoints()
+        hint:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 8, -y)
+        hint:SetHeight(0)
+        hint:SetText(L.CATALOG_FAVORITES_FIRST_READ)
+        hint:Show()
+        y = y + math.ceil(hint:GetStringHeight()) + 8
+    end
     for _, node in ipairs(roots) do renderGroup(node) end
     for index = rowCount + 1, #rows do
         rows[index].entry, rows[index].SkillUps.entry = nil, nil
@@ -1011,9 +1038,15 @@ local function renderList()
         local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
         local manual = ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
         local known = ns.Catalogue and ns.Catalogue.HasRecipes and ns.Catalogue.HasRecipes()
-        widgets.empty:SetText(manual or (known and L.CATALOG_NO_RESULTS
+        local text = manual or (known and L.CATALOG_NO_RESULTS
             or (initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
-            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or "")))))
+            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or ""))))
+        -- With nothing craftable, a zero-craft favourite would be the only row.
+        -- A manual-build text that names the professions to open says enough.
+        if favoritesHint and (not manual or manual == L.CATALOG_MANUAL_BUILD) then
+            text = text .. "\n\n" .. L.CATALOG_FAVORITES_FIRST_READ
+        end
+        widgets.empty:SetText(text)
     end
     return visible
 end
@@ -1182,10 +1215,10 @@ function UI.Render()
     local recipes = ns.ActiveRecipes and ns.ActiveRecipes() or (job and job.recipes or ns.recipes or {})
     local recipe = id and recipes[id]
     local key = job and job.professionKey or ns.selectedProfessionKey or ns.professionKey
-    -- Preserve the selection for filter reversal, but expose no stale action
-    -- for a recipe outside the current catalogue. Active work stays visible.
+    -- Keep active work and a directly opened recipe visible even when the
+    -- catalogue filters omit their row.
     if not job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy()
-        and (not id or not key or not visible[key .. ":" .. id]) then recipe = nil end
+        and id ~= openedRecipeID and (not id or not key or not visible[key .. ":" .. id]) then recipe = nil end
     local professionName = ns.Catalogue and ns.Catalogue.GetProfessionName(key) or ""
     widgets.recipeName:SetText(recipe and recipe.name or L.CATALOG_SELECT)
     if selectionRestored and not job and recipe then saveSelection(id, key) end
@@ -1197,6 +1230,7 @@ function UI.Render()
     local count, crafts = ns.maxCrafts or 0, job and job.remaining or ns.quantity or 1
     if not widgets.quantity:HasFocus() then widgets.quantity:SetText(tostring(crafts)) end
     local canEdit = recipe ~= nil and ns.CanEditQuantity() and not ns.pendingStart and not ns.bankConfirmation
+    local pausedInfeasible = job and canEdit and ns.plan and not ns.plan.craftable
     widgets.quantity:SetEnabled(canEdit)
     widgets.decrease:SetEnabled(canEdit and crafts > 1)
     widgets.increase:SetEnabled(canEdit and crafts < 1000)
@@ -1227,7 +1261,7 @@ function UI.Render()
     local clickContext = ns.ActionButtons.ClickContext(id, key, crafts, actionPlan, recipes, actionQuote)
     widgets.craft.clickContext = clickContext
     widgets.craft.craftQuantity = clickContext.batchCount or crafts
-    widgets.craft.costQuote = not bankMessage and ns.quote or nil
+    widgets.craft.costQuote = not bankMessage and not pausedInfeasible and ns.quote or nil
     widgets.craft.costPlan = ns.plan
     widgets.craft.costReason = nil
     -- Merchant advice only helps a craftable plan: an infeasible one is
@@ -1278,7 +1312,7 @@ function UI.Render()
     renderReagents(recipe, recipes, id, crafts, (transferState and 206 or 238) - cooldownShift, cooldownShift)
     -- The cost next to the reagents describes the displayed bank-aware plan.
     -- The action tooltip prices its separate alternative before confirmation.
-    local quote = recipe and ns.quote
+    local quote = recipe and not pausedInfeasible and ns.quote or nil
     widgets.costHit.quote, widgets.costHit.plan = quote, ns.plan
     local cost = ""
     if quote then
@@ -1302,6 +1336,10 @@ function UI.Render()
         if not idle then status = ns.status or ""
         elseif ns.plan and not ns.plan.craftable then
             status = L.PLAN_UNAVAILABLE
+            if pausedInfeasible then
+                status = requirementReason or ns.ActionButtons.MaterialShortfall(
+                    ns.plan, count, crafts, recipes, ns.plan.unknownBagCounts) or status
+            end
             for _, err in ipairs(ns.plan.errors or {}) do
                 if err == "craft_limit" then
                     status = requirementReason or ns.plan.craftLimitReason or L.CRAFT_LIMIT_EXCEEDED
@@ -1385,7 +1423,7 @@ function UI.Show()
     local previousPage
     if ns.StockUI and ns.StockUI.IsActive() then previousPage = ns.StockUI.NativeTabSelected() end
     if not UI.IsActive() then
-        selectionRestored = false
+        selectionRestored = openedRecipeID ~= nil
         returnPage = previousPage or (book.BookPage and book.BookPage:IsShown() and book.BookPage or book.CraftingPage)
     end
     -- Opening CAB while a native project is running makes that project the
@@ -1403,6 +1441,27 @@ function UI.Show()
     displayPage()
     if ns.Refresh then ns.Refresh() else UI.Render() end
     return true
+end
+
+function UI.ShowRecipe(id, key)
+    if (ns.InCombat and ns.InCombat()) or (InCombatLockdown and InCombatLockdown()) then
+        return false, L.ACTION_BLOCKED_COMBAT
+    end
+    if not ns.CanSelectRecipe() or (ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode()) then
+        return false
+    end
+    local recipes = ns.Catalogue and ns.Catalogue.GetRecipes(key)
+    local recipe = recipes and recipes[id]
+    if not recipe then
+        if ns.Bootstrap then ns.Bootstrap.Wake() end
+        return false, L.CATALOG_OPEN_PROFESSIONS
+    end
+    if not ProfessionsFrame and ProfessionsFrame_LoadUI then pcall(ProfessionsFrame_LoadUI) end
+    if not UI.Install() then return false, L.OPEN_PROFESSION end
+    -- Save the explicit selection first, so opening the page restores this
+    -- recipe even if a different one was selected when it last closed.
+    if not selectFromClick(nil, id, recipe.professionKey or key, true) then return false end
+    return UI.Show()
 end
 
 -- A native profession switch can close and reopen the book within the same
