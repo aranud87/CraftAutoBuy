@@ -342,6 +342,9 @@ function NativeCraft.Refresh()
     local buyOnly = ((prebuy or partialPurchase) and (ready or kind == "requirements")) or purchaseOnly(ready, kind, createPlan)
     local idle = not busy() and (not ns.job or matchingJob)
     local canEdit = idle and (not ns.CanEditQuantity or ns.CanEditQuantity())
+    if matchingJob and canEdit and createReason == L.PLAN_UNAVAILABLE then
+        createReason = ns.ActionButtons.MaterialShortfall(plan, maximum, quantity, ns.recipes, unknown) or createReason
+    end
     state.createQuote, state.allQuote = createQuote, nil
     -- The tooltip prices the bags-only alternative only when it has a quote;
     -- otherwise it shows the bank-aware quote, which belongs to the bank plan.

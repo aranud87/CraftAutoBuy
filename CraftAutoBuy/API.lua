@@ -320,6 +320,71 @@ function API.GetRecipeMetadata(recipeID, professionKey, suppliedInfo, context)
     return metadata
 end
 
+local function readRecipeReagents(recipe, slots)
+    local basicType = Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic or 1
+    local itemSlotType = Enum and Enum.TradeskillSlotDataType and Enum.TradeskillSlotDataType.Reagent or 1
+    local byItem = {}
+    for _, slot in ipairs(slots) do
+        if type(slot) ~= "table" or (issecretvalue and issecretvalue(slot))
+            or (issecretvalue and (issecretvalue(slot.required) or (slot.required ~= true and issecretvalue(slot.reagentType))))
+            or (slot.required ~= nil and type(slot.required) ~= "boolean") then
+            return nil, L.LOADING_REAGENTS
+        end
+        -- Basic slots are mandatory even when older exports omit the required flag.
+        local required = slot.required == true or slot.reagentType == basicType
+        if required then
+            if issecretvalue and (issecretvalue(slot.dataSlotType) or issecretvalue(slot.variableQuantities)) then
+                return nil, L.LOADING_REAGENTS
+            end
+            if slot.dataSlotType and slot.dataSlotType ~= itemSlotType then
+                return unsupported(recipe, L.SPECIAL_REAGENT_UNSUPPORTED)
+            end
+            local reagentCount = arraySize(slot.reagents)
+            if not reagentCount or reagentCount == 0 then
+                return nil, L.LOADING_REAGENTS
+            end
+            local variableCount = 0
+            if slot.variableQuantities ~= nil then variableCount = arraySize(slot.variableQuantities) end
+            if variableCount == nil then
+                return nil, L.LOADING_REAGENT_QUANTITIES
+            end
+            if reagentCount ~= 1 or variableCount > 0 then
+                return unsupported(recipe, L.RECIPE_REQUIRES_REAGENT_CHOICE)
+            end
+            local reagent = slot.reagents[1]
+            if type(reagent) ~= "table" or (issecretvalue and (issecretvalue(reagent) or issecretvalue(reagent.currencyID))) then
+                return nil, L.LOADING_REAGENTS
+            end
+            if not positiveInteger(reagent.itemID) or reagent.currencyID then
+                return unsupported(recipe, L.REQUIRED_REAGENT_UNSUPPORTED)
+            end
+            if not positiveInteger(slot.quantityRequired) or not positiveInteger(slot.dataSlotIndex) then
+                return nil, L.LOADING_REAGENT_QUANTITIES
+            end
+            byItem[reagent.itemID] = (byItem[reagent.itemID] or 0) + slot.quantityRequired
+            recipe.craftingReagents[#recipe.craftingReagents + 1] = {
+                reagent = {itemID = reagent.itemID},
+                dataSlotIndex = slot.dataSlotIndex, quantity = slot.quantityRequired,
+            }
+        elseif slot.required == nil and slot.reagentType == nil then
+            return nil, L.REAGENT_TYPE_UNAVAILABLE
+        else
+            -- CAB plans the basic recipe. Native crafting must retain the
+            -- player's optional allocations for this form.
+            recipe.hasOptionalSlots = true
+        end
+    end
+    for itemID, quantity in pairs(byItem) do
+        recipe.reagents[#recipe.reagents + 1] = {itemID = itemID, quantity = quantity}
+    end
+    table.sort(recipe.reagents, function(a, b) return a.itemID < b.itemID end)
+    -- An empty or incomplete schematic must never become an unlimited free recipe.
+    if #recipe.reagents == 0 then
+        return unsupported(recipe, L.RECIPE_NO_VERIFIABLE_REAGENTS)
+    end
+    return recipe
+end
+
 local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
     local recipe = {
         id = recipeID, name = info.name or L.RECIPE_FALLBACK:format(recipeID),
@@ -366,65 +431,7 @@ local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
     end
     recipe.outputCount = schematic.quantityMin
     if not positiveInteger(recipe.outputCount) then return nil, L.RECIPE_YIELD_UNAVAILABLE end
-    local basicType = Enum and Enum.CraftingReagentType and Enum.CraftingReagentType.Basic or 1
-    local itemSlotType = Enum and Enum.TradeskillSlotDataType and Enum.TradeskillSlotDataType.Reagent or 1
-    local byItem = {}
-    for _, slot in ipairs(schematic.reagentSlotSchematics) do
-        if type(slot) ~= "table" or (issecretvalue and issecretvalue(slot))
-            or (issecretvalue and issecretvalue(slot.required))
-            or (slot.required ~= nil and type(slot.required) ~= "boolean") then
-            return nil, L.LOADING_REAGENTS
-        end
-        -- Basic slots are mandatory even when older exports omit the required flag.
-        local required = slot.required == true or slot.reagentType == basicType
-        if required then
-            if slot.dataSlotType and slot.dataSlotType ~= itemSlotType then
-                return unsupported(recipe, L.SPECIAL_REAGENT_UNSUPPORTED)
-            end
-            local reagentCount = arraySize(slot.reagents)
-            if not reagentCount or reagentCount == 0 then
-                return nil, L.LOADING_REAGENTS
-            end
-            local variableCount = 0
-            if slot.variableQuantities ~= nil then variableCount = arraySize(slot.variableQuantities) end
-            if variableCount == nil then
-                return nil, L.LOADING_REAGENT_QUANTITIES
-            end
-            if reagentCount ~= 1 or variableCount > 0 then
-                return unsupported(recipe, L.RECIPE_REQUIRES_REAGENT_CHOICE)
-            end
-            local reagent = slot.reagents[1]
-            if type(reagent) ~= "table" or (issecretvalue and issecretvalue(reagent)) then
-                return nil, L.LOADING_REAGENTS
-            end
-            if not positiveInteger(reagent.itemID) or reagent.currencyID then
-                return unsupported(recipe, L.REQUIRED_REAGENT_UNSUPPORTED)
-            end
-            if not positiveInteger(slot.quantityRequired) or not positiveInteger(slot.dataSlotIndex) then
-                return nil, L.LOADING_REAGENT_QUANTITIES
-            end
-            byItem[reagent.itemID] = (byItem[reagent.itemID] or 0) + slot.quantityRequired
-            recipe.craftingReagents[#recipe.craftingReagents + 1] = {
-                reagent = {itemID = reagent.itemID},
-                dataSlotIndex = slot.dataSlotIndex, quantity = slot.quantityRequired,
-            }
-        elseif slot.required == nil and slot.reagentType == nil then
-            return nil, L.REAGENT_TYPE_UNAVAILABLE
-        else
-            -- CAB plans the basic recipe. Native crafting must retain the
-            -- player's optional allocations for this form.
-            recipe.hasOptionalSlots = true
-        end
-    end
-    for itemID, quantity in pairs(byItem) do
-        recipe.reagents[#recipe.reagents + 1] = {itemID = itemID, quantity = quantity}
-    end
-    table.sort(recipe.reagents, function(a, b) return a.itemID < b.itemID end)
-    -- An empty or incomplete schematic must never become an unlimited free recipe.
-    if #recipe.reagents == 0 then
-        return unsupported(recipe, L.RECIPE_NO_VERIFIABLE_REAGENTS)
-    end
-    return recipe
+    return readRecipeReagents(recipe, schematic.reagentSlotSchematics)
 end
 
 function API.GetRecipe(recipeID)
@@ -894,6 +901,27 @@ end
 -- its full count while another profession was open.
 local cooldownEnds, castAt = {}, {}
 
+-- Forever 71037 SpellCategories (310) and SpellCooldowns.CategoryRecoveryTime,
+-- in seconds, for Alchemy recipes. Refined Scale of Onyxia starts the category
+-- too. Iron to Gold and Mithril to Truesilver each have an individual cooldown.
+local ONYXIA_SCALE = 22430
+local categorySeconds = {
+    [17187] = 169200, [17559] = 82800, [17560] = 82800, [17561] = 82800,
+    [17562] = 82800, [17563] = 82800, [17564] = 82800, [17565] = 82800,
+    [17566] = 82800, [ONYXIA_SCALE] = 7200, [25146] = 600, [1317279] = 169200,
+}
+local transmutationIDs = {[11479] = true, [11480] = true}
+for id in pairs(categorySeconds) do
+    if id ~= ONYXIA_SCALE then transmutationIDs[id] = true end
+end
+local estimatedTransmutations = {}
+
+local function hasCategoryDurationData()
+    local ok, _, build, _, interface = call(GetBuildInfo)
+    return ok and not (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
+        and tonumber(build) == 71037 and interface == 16001
+end
+
 -- The same ends are saved for the character, so that a /reload or a new login
 -- keeps them: this memory starts again with each /reload, and GetTime() counts
 -- from the computer's start, so the saved ends use the server's clock, or the
@@ -907,11 +935,63 @@ end
 
 local function serverTime() return readClock(GetServerTime) or readClock(time) end
 
+-- Only used for the widget when the successful spell has no readable base
+-- cooldown. One source record survives reload without inventing deadlines or
+-- completion notifications for any of the other recipes in the category.
+local categoryCastAt
+local function categoryEstimate(moment, cast, liveReady, liveRunning)
+    if not cast then return end
+    local duration = categorySeconds[cast.recipeID]
+    local server = serverTime()
+    local elapsed = categoryCastAt and moment - categoryCastAt
+    if server then
+        if elapsed and not ordinaryNumber(cast.serverTime) then cast.serverTime = server - elapsed
+        elseif not elapsed and ordinaryNumber(cast.serverTime) then elapsed = server - cast.serverTime end
+    end
+    local expired = elapsed and elapsed >= duration
+    if liveRunning or expired or (liveReady and (not elapsed or elapsed >= 2)) then
+        CraftAutoBuyDB.transmutationCategoryCast, categoryCastAt = nil, nil
+        if expired and not liveRunning then return nil, false, cast.recipeID end
+        return
+    end
+    -- A missing clock after reload leaves the category unknown until a live read.
+    return elapsed and duration - math.max(0, elapsed), true
+end
+
+-- The widget does not read the Onyxia Scale recipe itself. Once a learned
+-- transmutation supplies the real category state, its own timer takes over.
+-- Remember which scale deadline it superseded without changing the planner's
+-- record. A subsequent successful scale cast can start a new projection.
+local supersededScaleEnd
+local function scaleRemaining(moment, saved, liveReady, liveRunning)
+    local ends = cooldownEnds[ONYXIA_SCALE]
+    local savedEnd = saved and saved[ONYXIA_SCALE]
+    if not ends and ordinaryNumber(savedEnd) then return 0 end -- restoration still awaits a clock
+    if not ends or ends <= moment then
+        CraftAutoBuyDB.transmutationScaleEndRead, supersededScaleEnd = nil, nil
+        return 0
+    end
+    local remaining = ends - moment
+    local cast = castAt[ONYXIA_SCALE]
+    local sinceCast = cast and moment - cast or categorySeconds[ONYXIA_SCALE] - remaining
+    if liveRunning or (liveReady and (sinceCast < 0 or sinceCast >= 2)) then
+        supersededScaleEnd = ends
+        CraftAutoBuyDB.transmutationScaleEndRead = savedEnd
+        return 0
+    end
+    local previous = CraftAutoBuyDB.transmutationScaleEndRead
+    if (supersededScaleEnd and math.abs(ends - supersededScaleEnd) < 2)
+        or (ordinaryNumber(previous) and ordinaryNumber(savedEnd) and math.abs(previous - savedEnd) < 2) then
+        return 0
+    end
+    return remaining
+end
+
 -- The saved table, once its entries still running are back in the session's
--- memory. An entry that is over, whose key is not a positive whole number or
--- whose value is not a number, is dropped. Without a readable clock the table
--- is left as it is and read again at the next use. unsavedEnds: an end of this
--- session could not be saved because no clock answered.
+-- memory. Keep elapsed transmutations until the notification reader consumes
+-- them. Other elapsed entries and invalid data are dropped. Without a clock
+-- the table is left as it is and read again at the next use. unsavedEnds marks
+-- an end from this session that could not be saved without a clock.
 local restoredFrom, unsavedEnds
 local function savedEnds()
     if type(CraftAutoBuyDB) ~= "table" then return nil end
@@ -927,7 +1007,7 @@ local function savedEnds()
                 restoredFrom = saved
                 for id, ends in pairs(saved) do
                     local left = positiveInteger(id) and ordinaryNumber(ends) and ends - server
-                    if not (left and left > 0) then saved[id] = nil
+                    if not left or (left <= 0 and not transmutationIDs[id]) then saved[id] = nil
                     elseif not cooldownEnds[id] then cooldownEnds[id] = moment + left end
                 end
             end
@@ -957,6 +1037,34 @@ local function setCooldownEnd(id, ends)
     if server and moment then saved[id] = server + (ends - moment) else unsavedEnds = true end
 end
 
+local function observeCooldown(id, seconds)
+    local moment = now()
+    if not moment then return end
+    estimatedTransmutations[id] = nil
+    setCooldownEnd(id, moment + seconds)
+end
+
+local function observeAvailable(id)
+    if transmutationIDs[id] then
+        local saved = savedEnds()
+        local ends, moment = cooldownEnds[id], now()
+        if not ends and saved and saved ~= restoredFrom and ordinaryNumber(saved[id]) then return end
+        if ends and moment then
+            local estimated = estimatedTransmutations[id]
+            estimatedTransmutations[id] = nil
+            if ends <= moment then return end
+            if not estimated then
+                -- The game can reset a real cooldown before the estimated end.
+                -- Keep the completed deadline until the notification reader runs.
+                setCooldownEnd(id, moment)
+                return
+            end
+            -- A cast estimate alone does not prove availability fell to zero.
+        end
+    end
+    setCooldownEnd(id, nil)
+end
+
 local function singleCraftReason(id)
     return observedNoCharges[id] and L.CRAFT_ONE_BEFORE_COOLDOWN or L.CRAFT_LIMIT_EXCEEDED
 end
@@ -968,7 +1076,7 @@ local function rememberedLimit(id)
     if ends then
         local time = now()
         if not time or time < ends then return 0, L.RECIPE_ON_COOLDOWN end
-        setCooldownEnd(id, nil)
+        if not transmutationIDs[id] then setCooldownEnd(id, nil) end
     end
     if baseCooldown(id) > 0 then return 1, singleCraftReason(id) end
 end
@@ -976,11 +1084,27 @@ end
 -- A successful cast of a recipe with a cooldown of its own starts that
 -- cooldown, whoever launched it (CAB or the native window).
 function API.NoteRecipeCast(id)
-    local seconds = positiveInteger(id) and baseCooldown(id) or 0
+    if not positiveInteger(id) then return end
+    local seconds = baseCooldown(id)
+    if categorySeconds[id] and type(CraftAutoBuyDB) == "table" then
+        if id == ONYXIA_SCALE then
+            CraftAutoBuyDB.transmutationScaleEndRead, supersededScaleEnd = nil, nil
+        end
+        if seconds == 0 and hasCategoryDurationData() then
+            categoryCastAt = now()
+            CraftAutoBuyDB.transmutationCategoryCast = {recipeID = id, serverTime = serverTime()}
+        else
+            CraftAutoBuyDB.transmutationCategoryCast, categoryCastAt = nil, nil
+        end
+    end
     local time = seconds > 0 and now()
     if not time then return end
     castAt[id] = time
-    if (cooldownEnds[id] or 0) < time + seconds then setCooldownEnd(id, time + seconds) end
+    local ends = rememberedEnd(id)
+    if (ends or 0) < time + seconds then
+        if transmutationIDs[id] and (not ends or ends <= time) then estimatedTransmutations[id] = true end
+        setCooldownEnd(id, time + seconds)
+    end
 end
 
 local function recipeLimit(id)
@@ -998,17 +1122,18 @@ local function recipeLimit(id)
         -- Charges left: the end a cast noted must not count the recipe as empty
         -- in the lists of another profession. None left: the cooldown read is
         -- when the recipe can be crafted again.
-        if charges > 0 then setCooldownEnd(id, nil)
+        if charges > 0 then observeAvailable(id)
         elseif ordinaryNumber(cooldown) and cooldown > 0 then
-            local time = now()
-            if time then setCooldownEnd(id, time + cooldown) end
+            observeCooldown(id, cooldown)
         end
-        return charges, charges == 0 and L.RECIPE_ON_COOLDOWN or L.CRAFT_CHARGES_INSUFFICIENT
+        return charges, charges == 0 and L.RECIPE_ON_COOLDOWN or L.CRAFT_CHARGES_INSUFFICIENT, true
     end
     if ordinaryNumber(cooldown) and cooldown > 0 then
-        if positiveInteger(charges) then return charges, L.CRAFT_CHARGES_INSUFFICIENT end
-        local time = now()
-        if time then setCooldownEnd(id, time + cooldown) end
+        if positiveInteger(charges) then
+            if transmutationIDs[id] then observeAvailable(id) end
+            return charges, L.CRAFT_CHARGES_INSUFFICIENT, true
+        end
+        observeCooldown(id, cooldown)
         return 0, L.RECIPE_ON_COOLDOWN
     end
     -- Ready. A cooldown of the recipe's own allows one craft before it starts
@@ -1016,8 +1141,179 @@ local function recipeLimit(id)
     -- two seconds after a noted cast may come before the client starts the
     -- cooldown: what the cast noted is kept.
     local time, cast = now(), castAt[id]
-    if not (cast and time and time - cast < 2) then setCooldownEnd(id, nil) end
+    if not (cast and time and time - cast < 2) then observeAvailable(id) end
     if baseCooldown(id) > 0 then return 1, singleCraftReason(id) end
+end
+
+local function transmutationInfo(id, key)
+    local ok, info = call(C_TradeSkillUI.GetRecipeInfo, id)
+    if not ok or type(info) ~= "table" or (issecretvalue and issecretvalue(info))
+        or not ordinaryBoolean(info.learned) or not info.learned then return end
+    local recipeID = info.recipeID
+    if (issecretvalue and issecretvalue(recipeID)) or (recipeID ~= nil and recipeID ~= id) then return end
+    if C_TradeSkillUI.IsRecipeInSkillLine then
+        local belongsOK, belongs = call(C_TradeSkillUI.IsRecipeInSkillLine, id, key)
+        if not belongsOK or not ordinaryBoolean(belongs) or not belongs then return end
+    end
+    return info
+end
+
+local function readableName(name)
+    return type(name) == "string" and not (issecretvalue and issecretvalue(name)) and name ~= ""
+end
+
+local function transmutationReagents(recipeID)
+    local ok, schematic = call(C_TradeSkillUI and C_TradeSkillUI.GetRecipeSchematic, recipeID, false)
+    if ok and type(schematic) == "table" and not (issecretvalue and issecretvalue(schematic)) then
+        local id, kind, recraft = schematic.recipeID, schematic.recipeType, schematic.isRecraft
+        local itemKind = Enum and Enum.TradeskillRecipeType and Enum.TradeskillRecipeType.Item or 1
+        local readable, slotCount = call(arraySize, schematic.reagentSlotSchematics)
+        if not (issecretvalue and (issecretvalue(id) or issecretvalue(kind) or issecretvalue(recraft)))
+            and (id == nil or id == recipeID) and (kind == nil or kind == itemKind)
+            and (recraft == nil or recraft == false) and readable and slotCount ~= nil then
+            local valid, recipe = call(readRecipeReagents, {supported = true, reagents = {}, craftingReagents = {}},
+                schematic.reagentSlotSchematics)
+            if valid and recipe then return recipe.supported and recipe.reagents or nil end
+        end
+    end
+    local recipes = ns.Catalogue and ns.Catalogue.GetRecipes and ns.Catalogue.GetRecipes(171)
+    local cached = recipes and recipes[recipeID]
+    if cached and cached.supported ~= false then return cached.reagents end
+end
+
+-- Read-only stock of the basic components for one craft. Missing bag or bank
+-- counts are unknown. Vendor availability describes the open vendor, when
+-- readable, or the known source when no complete vendor inventory is available.
+function API.ReadTransmutationReagentStock(recipeID)
+    if not positiveInteger(recipeID) or not transmutationIDs[recipeID] then return nil end
+    local reagents = transmutationReagents(recipeID)
+    local count = arraySize(reagents)
+    if not count or count == 0 then return nil end
+    local merchantOpenOK, merchantOpen = call(ns.Merchant and ns.Merchant.IsOpen)
+    local rows = {}
+    for _, reagent in ipairs(reagents) do
+        if type(reagent) ~= "table" or (issecretvalue and issecretvalue(reagent))
+            or not positiveInteger(reagent.itemID) or not positiveInteger(reagent.quantity) then return nil end
+        local itemID = reagent.itemID
+        local ok, name = call(ns.ItemName, itemID)
+        if not ok or not readableName(name) then name = L.ITEM_FALLBACK:format(tostring(itemID)) end
+        local bankOK, bank = call(ns.Stock and ns.Stock.BankCount, itemID)
+        if not bankOK or not nonnegativeInteger(bank) then bank = nil end
+        local vendorKnown = ns.vendorItems and ns.vendorItems[itemID] == true or nil
+        local merchantOK, merchant = call(ns.Merchant and ns.Merchant.GetReagentSourceStock, itemID, true)
+        if not merchantOK then merchant = vendorKnown end
+        local vendorQuantity = nonnegativeInteger(merchant) and merchant or nil
+        local vendorHere = merchant == "here" or nil
+        local vendor
+        if vendorHere or merchant == true then vendor = true
+        elseif vendorQuantity ~= nil then vendor = vendorQuantity > 0
+        elseif merchant == false then vendor = false end
+        local vendorUnverified = merchantOpenOK and merchantOpen == true
+            and (merchant == nil or merchant == true) or nil
+        rows[#rows + 1] = {
+            itemID = itemID, name = name, needed = reagent.quantity, bags = API.ReadBagCount(itemID), bank = bank,
+            vendor = vendor, vendorKnown = vendorKnown, vendorQuantity = vendorQuantity,
+            vendorHere = vendorHere, vendorUnverified = vendorUnverified,
+        }
+    end
+    return rows
+end
+
+-- The catalogue can identify learned recipes before Alchemy opens. Use the
+-- open personal profession or remembered cooldowns to report availability.
+-- A planner read can see a recipe as available before this pass consumes the
+-- elapsed deadline. Reading it here takes that notification exactly once.
+function API.ReadTransmutationCooldowns(readLive)
+    local saved = savedEnds()
+    local moment = now()
+    if not moment or type(CraftAutoBuyDB) ~= "table" then return {} end
+    local names = CraftAutoBuyDB.transmutationNames
+    if type(names) ~= "table" then
+        names = {}
+        CraftAutoBuyDB.transmutationNames = names
+    end
+    local key
+    if readLive and C_TradeSkillUI and C_TradeSkillUI.GetRecipeCooldown
+        and not (ns.IsProfessionClosed and ns.IsProfessionClosed()) and API.IsOwnProfession() then
+        local active = API.GetProfessionKey()
+        if API.GetProfessionParentKey(active) == 171 then key = active end
+    end
+    local recipes = readLive and ns.Catalogue and ns.Catalogue.GetRecipes(171)
+    local verifiedDurations = hasCategoryDurationData()
+    local cast = verifiedDurations and CraftAutoBuyDB.transmutationCategoryCast
+    if type(cast) ~= "table" or not positiveInteger(cast.recipeID) or not categorySeconds[cast.recipeID] then cast = nil end
+    local liveCategoryReady, liveCategoryRunning
+    local rows = {}
+    for id in pairs(transmutationIDs) do
+        local info = key and transmutationInfo(id, key)
+        local cachedRecipe = recipes and recipes[id]
+        local pendingRestore = saved and saved ~= restoredFrom and ordinaryNumber(saved[id])
+        local blocked, hasCharges = pendingRestore, nil
+        if info then
+            local limit, reason, charged = recipeLimit(id)
+            blocked, hasCharges = limit == 0, charged
+            if categorySeconds[id] then
+                if not blocked then liveCategoryReady = true
+                elseif reason == L.RECIPE_ON_COOLDOWN and (cooldownEnds[id] or moment) > moment then
+                    liveCategoryRunning = true
+                end
+            end
+        end
+        local ends = cooldownEnds[id]
+        local previousName = names[id]
+        local hasCooldown = (info or cachedRecipe) and (hasCharges or baseCooldown(id) > 0
+            or (verifiedDurations and categorySeconds[id]))
+        local remembered = ends or readableName(previousName)
+        if remembered or pendingRestore or hasCooldown or (cast and cast.recipeID == id) then
+            local availabilityKnown = remembered or (info and not blocked)
+            local name = info and info.name or cachedRecipe and cachedRecipe.name
+            if not readableName(name) and not readableName(previousName) then
+                local ok, spellName = call(C_Spell and C_Spell.GetSpellName, id)
+                if ok then name = spellName end
+            end
+            if not readableName(name) then
+                name = readableName(previousName) and previousName or L.RECIPE_FALLBACK:format(id)
+            elseif availabilityKnown then
+                -- A catalogue name alone cannot establish a ready state on the
+                -- next tick, or after reloading the interface.
+                names[id] = name
+            end
+            local remaining = ends and ends - (now() or moment)
+            local finished = remaining and remaining <= 0 and not blocked
+            if finished then
+                estimatedTransmutations[id] = nil
+                setCooldownEnd(id, nil)
+            end
+            rows[#rows + 1] = {
+                id = id, name = name, professionKey = 171, finished = finished,
+                remaining = remaining and remaining > 0 and remaining or (availabilityKnown and not blocked and 0 or nil),
+            }
+        end
+    end
+    -- Complete all live reads before projecting a shared deadline. Only rows
+    -- already identified for this character take part. Inferred time never
+    -- enters recipeCooldowns, RecipeLimits or the completion alert queue.
+    if not verifiedDurations then return rows end
+    moment = now() or moment
+    local estimate, unverified, completedCast = categoryEstimate(moment, cast, liveCategoryReady, liveCategoryRunning)
+    local sharedRemaining = math.max(estimate or 0, scaleRemaining(moment, saved, liveCategoryReady, liveCategoryRunning))
+    for _, row in ipairs(rows) do
+        if categorySeconds[row.id] and row.remaining then sharedRemaining = math.max(sharedRemaining, row.remaining) end
+    end
+    if sharedRemaining > 0 or unverified or completedCast then
+        for _, row in ipairs(rows) do
+            if categorySeconds[row.id] and (sharedRemaining > 0 or unverified) then
+                row.remaining = sharedRemaining > 0 and sharedRemaining or nil
+                row.finished = nil
+            elseif row.id == completedCast then
+                -- Only the successful transmutation owns the estimate.
+                -- Onyxia Scale has no widget row and cannot raise an alert.
+                row.remaining, row.finished = 0, true
+                names[row.id] = row.name
+            end
+        end
+    end
+    return rows
 end
 
 -- Snapshot on demand for one plan/maximum. Charges can change without a bag

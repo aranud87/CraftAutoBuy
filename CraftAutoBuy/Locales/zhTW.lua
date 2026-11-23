@@ -3,6 +3,7 @@ local _, ns = ...
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("zhTW", {
     CATALOG_FAVORITES = "收藏",
+    CATALOG_FAVORITES_FIRST_READ = "開啟一次對應的專業技能後，遊戲中的收藏會顯示在這裡。",
     CATALOG_FILTER_BANK = "銀行",
     CATALOG_FILTER_BANK_HELP = "計算時納入已記錄的個人銀行材料。即使取消勾選，購買銀行中已有記錄的材料仍須為目前製作項目確認。收藏的配方仍會顯示。",
     CATALOG_FILTER_PROGRESSION = "技能提升",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("zhTW", {
     OPEN_PROFESSION_SELECT_RECIPE = "請開啟專業技能並選擇一個配方。",
     OPEN_PROFESSION_WAIT = "請開啟專業技能並等待載入完成。",
     PLAN_UNAVAILABLE = "缺少商人未販售的材料，或配方無法使用。",
+    PLAN_PARTIAL_AMOUNT = "可製作 %d 次，需求為 %d 次。",
     PROFESSION_API_UNAVAILABLE = "專業技能 API 無法使用。",
     PROFESSION_FALLBACK = "專業技能 #%s",
     PROFESSION_OPEN_FAILED = "無法開啟此專業技能。",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("zhTW", {
     BANK_BUY_CHOICE_PROMPT = "銀行中有可用的材料。你想如何補齊背包中缺少的材料？",
     BANK_BUY_WITHOUT_HELP = "只扣除背包中已有的材料。",
     BANK_BUY_COMPLEMENT_HELP = "扣除背包和銀行中已有的材料。製造前請先取出銀行中的材料。",
+    SETTINGS_GENERAL = "一般",
+    TRANSMUTATIONS = "轉化",
+    TRANSMUTATION_ALERT = "轉化就緒提醒",
+    TRANSMUTATION_SOUND = "提醒時播放音效",
+    TRANSMUTATION_POPUP = "顯示轉化視窗",
+    TRANSMUTATION_POPUP_HELP = "解鎖視窗後可移動視窗，或拖曳右下角的控點調整大小。關閉 CAB 後視窗仍會顯示。",
+    TRANSMUTATION_OPACITY = "視窗不透明度",
+    TRANSMUTATION_EMPTY = "沒有已知的轉化配方帶有冷卻時間。",
+    TRANSMUTATION_READY = "就緒",
+    TRANSMUTATION_UNKNOWN = "未知",
+    TRANSMUTATION_NOTICE = "%s 已就緒。",
+    TRANSMUTATION_LOCK = "鎖定視窗",
+    TRANSMUTATION_VENDOR_READING = "商人：庫存待確認",
 })

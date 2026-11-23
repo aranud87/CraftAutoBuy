@@ -10,6 +10,32 @@ local showLanguageMenu
 local lastMenuValue, lastMenuOpen
 local languageInitialized = false
 local languageNotices = {}
+local transmutationChecks, opacityControls = {}, {}
+local MIN_OPACITY, MAX_OPACITY = 25, 100
+
+function Options.GetTransmutationOptions()
+    CraftAutoBuyDB = CraftAutoBuyDB or {}
+    local prefs = CraftAutoBuyDB.transmutations
+    if type(prefs) ~= "table" then
+        prefs = {}
+        CraftAutoBuyDB.transmutations = prefs
+    end
+    if prefs.alert == nil then prefs.alert = true end
+    if prefs.sound == nil then prefs.sound = true end
+    if prefs.popup == nil then prefs.popup = true end
+    if type(prefs.locked) ~= "boolean" then prefs.locked = false end
+    local opacity = prefs.opacity
+    if type(opacity) ~= "number" or opacity ~= opacity or opacity < MIN_OPACITY or opacity > MAX_OPACITY then
+        prefs.opacity = 90
+    end
+    return prefs
+end
+
+local function setTransmutationOption(key, value)
+    Options.GetTransmutationOptions()[key] = value
+    Options.Sync()
+    if ns.Transmutations then ns.Transmutations.Update() end
+end
 
 local function enabled()
     return not CraftAutoBuyDB or CraftAutoBuyDB.autoBuy ~= false
@@ -62,6 +88,16 @@ function Options.Sync()
     if requested == "auto" then requested = ns.Locale.GetClientLocale() end
     local pending = ns.Locale.ResolveLocale(requested) ~= ns.Locale.GetLocale()
     for _, notice in ipairs(languageNotices) do notice:SetText(pending and L.LANGUAGE_RELOAD_REQUIRED or "") end
+    local prefs = Options.GetTransmutationOptions()
+    for _, check in ipairs(transmutationChecks) do
+        check:SetChecked(prefs[check.optionKey] == true)
+        if check.optionKey == "sound" then check:SetEnabled(prefs.alert == true) end
+    end
+    for _, control in ipairs(opacityControls) do
+        control.value:SetText(("%d%%"):format(prefs.opacity))
+        control.minus:SetEnabled(prefs.opacity > MIN_OPACITY)
+        control.plus:SetEnabled(prefs.opacity < MAX_OPACITY)
+    end
     if contextMenu and (lastMenuValue ~= value or lastMenuOpen ~= openValue) then
         lastMenuValue, lastMenuOpen = value, openValue
         if contextMenu.ReinitializeAll then contextMenu:ReinitializeAll() end
@@ -163,24 +199,71 @@ local function button(parent, text, x, y, width, handler)
     return control
 end
 
-local function configure(parent)
-    label(parent, "CraftAutoBuy", "GameFontNormalLarge", 20, -20, 450)
-    label(parent, L.SETTINGS_HELP, "GameFontHighlight", 20, -55, 450)
-    checkbox(parent, 16, -105)
-    label(parent, L.AUTO_BUY_HELP, "GameFontHighlightSmall", 20, -143, 450)
-    openCheckbox(parent, 16, -215)
-    label(parent, L.OPEN_AT_MERCHANT_HELP, "GameFontHighlightSmall", 20, -265, 450)
-    label(parent, L.LANGUAGE, "GameFontNormal", 20, -335, 450)
-    local selector = button(parent, languageLabel(), 20, -360, 450, function(self) showLanguageMenu(self) end)
+local function configureGeneral(parent)
+    label(parent, L.SETTINGS_HELP, "GameFontHighlight", 20, -86, 450)
+    checkbox(parent, 16, -132)
+    label(parent, L.AUTO_BUY_HELP, "GameFontHighlightSmall", 20, -162, 450)
+    openCheckbox(parent, 16, -222)
+    label(parent, L.OPEN_AT_MERCHANT_HELP, "GameFontHighlightSmall", 20, -258, 450)
+    label(parent, L.LANGUAGE, "GameFontNormal", 20, -326, 450)
+    local selector = button(parent, languageLabel(), 20, -348, 450, function(self) showLanguageMenu(self) end)
     selector.optionKey = "language"
     selector:HookScript("OnHide", function()
         if languageMenu and languageMenu.owner == selector then languageMenu:Hide() end
     end)
     languageButtons[#languageButtons + 1] = selector
-    -- The selector stays compact regardless of how many packs are installed.
-    parent:SetHeight(500)
-    label(parent, L.LANGUAGE_HELP, "GameFontHighlightSmall", 20, -405, 450)
+    label(parent, L.LANGUAGE_HELP, "GameFontHighlightSmall", 20, -387, 450)
     languageNotices[#languageNotices + 1] = label(parent, "", "GameFontNormal", 20, -466, 450)
+end
+
+local function transmutationCheckbox(parent, key, text, x, y)
+    local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    check:SetSize(26, 26)
+    check:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    check.optionKey = key
+    label(parent, text, "GameFontHighlight", x + 29, y - 6, 360)
+    check:SetScript("OnClick", function(self) setTransmutationOption(key, self:GetChecked() and true or false) end)
+    transmutationChecks[#transmutationChecks + 1] = check
+end
+
+local function opacityAdjustment(parent, y)
+    label(parent, L.TRANSMUTATION_OPACITY, "GameFontHighlight", 45, y - 6, 285)
+    local function adjust(step)
+        local opacity = Options.GetTransmutationOptions().opacity + step
+        setTransmutationOption("opacity", math.max(MIN_OPACITY, math.min(MAX_OPACITY, opacity)))
+    end
+    local minus = button(parent, "-", 337, y, 26, function() adjust(-5) end)
+    local plus = button(parent, "+", 426, y, 26, function() adjust(5) end)
+    local value = label(parent, "", "GameFontHighlight", 366, y - 6, 57)
+    value:SetJustifyH("CENTER")
+    opacityControls[#opacityControls + 1] = {minus = minus, plus = plus, value = value}
+end
+
+local function configure(parent)
+    parent:SetHeight(500)
+    label(parent, "CraftAutoBuy", "GameFontNormalLarge", 20, -18, 450)
+    local general = CreateFrame("Frame", nil, parent)
+    local transmutations = CreateFrame("Frame", nil, parent)
+    general:SetAllPoints(parent)
+    transmutations:SetAllPoints(parent)
+    configureGeneral(general)
+    transmutationCheckbox(transmutations, "alert", L.TRANSMUTATION_ALERT, 16, -91)
+    transmutationCheckbox(transmutations, "sound", L.TRANSMUTATION_SOUND, 43, -123)
+    transmutationCheckbox(transmutations, "popup", L.TRANSMUTATION_POPUP, 16, -180)
+    label(transmutations, L.TRANSMUTATION_POPUP_HELP, "GameFontHighlightSmall", 45, -215, 400)
+    transmutationCheckbox(transmutations, "locked", L.TRANSMUTATION_LOCK, 16, -267)
+    opacityAdjustment(transmutations, -305)
+
+    local generalTab, transmutationTab
+    local function showTransmutations(show)
+        general:SetShown(not show)
+        transmutations:SetShown(show)
+        generalTab:SetEnabled(show)
+        transmutationTab:SetEnabled(not show)
+    end
+    generalTab = button(parent, L.SETTINGS_GENERAL, 20, -47, 220, function() showTransmutations(false) end)
+    transmutationTab = button(parent, L.TRANSMUTATIONS, 250, -47, 220, function() showTransmutations(true) end)
+    showTransmutations(false)
     parent:SetScript("OnShow", Options.Sync)
 end
 

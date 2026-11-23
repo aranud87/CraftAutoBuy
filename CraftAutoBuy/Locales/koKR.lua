@@ -3,6 +3,7 @@ local _, ns = ...
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("koKR", {
     CATALOG_FAVORITES = "즐겨찾기",
+    CATALOG_FAVORITES_FIRST_READ = "WoW 즐겨찾기는 해당 전문 기술을 한 번 열면 여기에 표시됩니다.",
     CATALOG_FILTER_BANK = "은행",
     CATALOG_FILTER_BANK_HELP = "계산에 저장된 개인 은행 재료를 포함합니다. 선택을 해제해도 은행에 이미 있다고 기록된 재료를 구입하려면 현재 작업에 대한 확인이 필요합니다. 즐겨찾기는 계속 표시됩니다.",
     CATALOG_FILTER_PROGRESSION = "숙련도 향상",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("koKR", {
     OPEN_PROFESSION_SELECT_RECIPE = "전문 기술을 열고 제작법을 선택하세요.",
     OPEN_PROFESSION_WAIT = "전문 기술을 열고 불러올 때까지 기다리세요.",
     PLAN_UNAVAILABLE = "상인이 판매하지 않는 재료가 부족하거나 제작법을 사용할 수 없습니다.",
+    PLAN_PARTIAL_AMOUNT = "요청한 수량 중 %d/%d회 제작할 수 있습니다.",
     PROFESSION_API_UNAVAILABLE = "전문 기술 API를 사용할 수 없습니다.",
     PROFESSION_FALLBACK = "전문 기술 #%s",
     PROFESSION_OPEN_FAILED = "이 전문 기술을 열 수 없습니다.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("koKR", {
     BANK_BUY_CHOICE_PROMPT = "은행에 보관된 재료가 있습니다. 가방에 부족한 재료를 어떻게 준비하시겠습니까?",
     BANK_BUY_WITHOUT_HELP = "가방에 이미 있는 재료만 계산에 포함합니다.",
     BANK_BUY_COMPLEMENT_HELP = "가방과 은행의 재료를 모두 계산에 포함합니다. 제작하기 전에 은행의 재료를 찾아오세요.",
+    SETTINGS_GENERAL = "일반",
+    TRANSMUTATIONS = "변환",
+    TRANSMUTATION_ALERT = "변환 준비 완료 알림",
+    TRANSMUTATION_SOUND = "알림 소리 재생",
+    TRANSMUTATION_POPUP = "변환 창 표시",
+    TRANSMUTATION_POPUP_HELP = "창 잠금을 해제하면 창을 옮기거나 오른쪽 아래 조절점을 끌어 크기를 바꿀 수 있습니다. CAB를 닫아도 창은 표시됩니다.",
+    TRANSMUTATION_OPACITY = "창 불투명도",
+    TRANSMUTATION_EMPTY = "알려진 변환 중 재사용 대기시간이 있는 변환이 없습니다.",
+    TRANSMUTATION_READY = "준비 완료",
+    TRANSMUTATION_UNKNOWN = "알 수 없음",
+    TRANSMUTATION_NOTICE = "%s 사용 가능.",
+    TRANSMUTATION_LOCK = "창 잠금",
+    TRANSMUTATION_VENDOR_READING = "상인: 재고 확인 필요",
 })

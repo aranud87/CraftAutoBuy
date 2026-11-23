@@ -180,16 +180,19 @@ end
 -- true describes a known PNJ source with no complete merchant inventory open.
 -- 'here' and false describe this vendor's actual offer; a number is its stock.
 -- Reading stock must not learn vendors, cache prices, or start a purchase.
-function Merchant.GetReagentSourceStock(itemID)
-    if not ns.vendorItems or ns.vendorItems[itemID] ~= true then return nil end
+function Merchant.GetReagentSourceStock(itemID, includeUnclassified)
+    if not finiteNumber(itemID) or itemID < 1 or itemID ~= math.floor(itemID) then return nil end
+    local known = ns.vendorItems and ns.vendorItems[itemID] == true
+    if not known and includeUnclassified ~= true then return nil end
     if opened and GetMerchantNumItems then
         local count = GetMerchantNumItems()
         local complete = finiteNumber(count) and count > 0 and count == math.floor(count)
         local stock
         for index = 1, complete and count or 0 do
             local offeredID = itemIDAt(index)
-            if not finiteNumber(offeredID) or offeredID < 1 or offeredID ~= math.floor(offeredID) then complete = false end
-            if offeredID == itemID then
+            if not finiteNumber(offeredID) or offeredID < 1 or offeredID ~= math.floor(offeredID) then
+                complete = false
+            elseif offeredID == itemID then
                 local info = itemInfo(index)
                 if info and finiteNumber(info.numAvailable) and info.numAvailable >= 0 then
                     stock = (stock or 0) + math.floor(info.numAvailable)
@@ -201,7 +204,7 @@ function Merchant.GetReagentSourceStock(itemID)
         if stock ~= nil then return stock end
         if complete then return false end
     end
-    return true
+    return known or nil
 end
 
 function Merchant.GetLastVendorName(itemID)

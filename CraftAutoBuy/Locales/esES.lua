@@ -3,6 +3,7 @@ local _, ns = ...
 -- Missing translations use the English fallback.
 ns.Locale.RegisterLocale("esES", {
     CATALOG_FAVORITES = "Favoritos",
+    CATALOG_FAVORITES_FIRST_READ = "Tus favoritos de WoW aparecerán aquí en cuanto abras una vez la profesión correspondiente.",
     CATALOG_FILTER_BANK = "Banco",
     CATALOG_FILTER_BANK_HELP = "Incluye en el cálculo los componentes registrados del banco personal. Aunque esté desactivado, comprar suministros ya registrados en el banco requiere confirmación para el proyecto actual. Los favoritos siguen visibles.",
     CATALOG_FILTER_PROGRESSION = "Progreso",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("esES", {
     OPEN_PROFESSION_SELECT_RECIPE = "Abre una profesión y selecciona una receta.",
     OPEN_PROFESSION_WAIT = "Abre tu profesión y espera a que se cargue.",
     PLAN_UNAVAILABLE = "Faltan componentes que no venden los PNJ o la receta no está disponible.",
+    PLAN_PARTIAL_AMOUNT = "Fabricaciones posibles (%d de %d solicitadas).",
     PROFESSION_API_UNAVAILABLE = "API de profesiones no disponible.",
     PROFESSION_FALLBACK = "Profesión #%s",
     PROFESSION_OPEN_FAILED = "No se puede abrir esta profesión.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("esES", {
     BANK_BUY_CHOICE_PROMPT = "Hay componentes disponibles en el banco. ¿Cómo quieres completar los suministros de tus bolsas?",
     BANK_BUY_WITHOUT_HELP = "Descuenta solo los componentes que ya están en tus bolsas.",
     BANK_BUY_COMPLEMENT_HELP = "Descuenta los componentes de tus bolsas y del banco. Retira los componentes del banco antes de crear.",
+    SETTINGS_GENERAL = "General",
+    TRANSMUTATIONS = "Transmutaciones",
+    TRANSMUTATION_ALERT = "Aviso de transmutación lista",
+    TRANSMUTATION_SOUND = "Reproducir un sonido con el aviso",
+    TRANSMUTATION_POPUP = "Mostrar ventana de transmutaciones",
+    TRANSMUTATION_POPUP_HELP = "Desbloquea la ventana para moverla o cambiar su tamaño con el tirador de la esquina inferior derecha. Sigue visible con CAB cerrado.",
+    TRANSMUTATION_OPACITY = "Opacidad de la ventana",
+    TRANSMUTATION_EMPTY = "No se conocen transmutaciones con tiempo de reutilización.",
+    TRANSMUTATION_READY = "Lista",
+    TRANSMUTATION_UNKNOWN = "Desconocido",
+    TRANSMUTATION_NOTICE = "%s está disponible.",
+    TRANSMUTATION_LOCK = "Bloquear la ventana",
+    TRANSMUTATION_VENDOR_READING = "Vendedor: existencias por confirmar",
 })

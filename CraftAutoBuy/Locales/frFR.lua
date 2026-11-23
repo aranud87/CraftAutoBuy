@@ -6,6 +6,7 @@ local _, ns = ...
 -- to translate the addon without changing its logic.
 ns.Locale.RegisterLocale("frFR", {
     CATALOG_FAVORITES = "Favoris",
+    CATALOG_FAVORITES_FIRST_READ = "Tes favoris WoW apparaissent ici après une première ouverture de leur métier.",
     CATALOG_FILTER_BANK = "Banque",
     CATALOG_FILTER_BANK_HELP = "Inclut la banque personnelle mémorisée dans le calcul. Même décoché, racheter des fournitures déjà connues en banque demande une confirmation pour le projet en cours. Les favoris restent visibles.",
     CATALOG_FILTER_PROGRESSION = "Progression",
@@ -177,6 +178,7 @@ ns.Locale.RegisterLocale("frFR", {
     OPEN_PROFESSION_SELECT_RECIPE = "Ouvre un métier et sélectionne une recette.",
     OPEN_PROFESSION_WAIT = "Ouvre ton métier et attends son chargement.",
     PLAN_UNAVAILABLE = "Il manque des composants non vendus au PNJ, ou la recette est indisponible.",
+    PLAN_PARTIAL_AMOUNT = "Fabrications possibles (%d sur les %d demandées).",
     PROFESSION_API_UNAVAILABLE = "API des métiers indisponible.",
     PROFESSION_FALLBACK = "Métier #%s",
     PROFESSION_OPEN_FAILED = "Impossible d'ouvrir ce métier.",
@@ -313,4 +315,17 @@ ns.Locale.RegisterLocale("frFR", {
     BANK_BUY_CHOICE_PROMPT = "Des composants sont disponibles en banque. Comment souhaites-tu compléter tes sacs ?",
     BANK_BUY_WITHOUT_HELP = "Déduit uniquement les composants déjà dans tes sacs.",
     BANK_BUY_COMPLEMENT_HELP = "Déduit les composants en sacs et en banque. Récupère les composants bancaires avant de fabriquer.",
+    SETTINGS_GENERAL = "Général",
+    TRANSMUTATIONS = "Transmutations",
+    TRANSMUTATION_ALERT = "Alerte de transmutation",
+    TRANSMUTATION_SOUND = "Jouer un son avec l’alerte",
+    TRANSMUTATION_POPUP = "Afficher la fenêtre de transmutations",
+    TRANSMUTATION_POPUP_HELP = "Déverrouillez la fenêtre pour la déplacer ou la redimensionner avec la poignée en bas à droite. Elle reste visible quand CAB est fermé.",
+    TRANSMUTATION_OPACITY = "Opacité de la fenêtre",
+    TRANSMUTATION_EMPTY = "Aucune transmutation à recharge connue.",
+    TRANSMUTATION_READY = "Prêt",
+    TRANSMUTATION_UNKNOWN = "Inconnu",
+    TRANSMUTATION_NOTICE = "%s est disponible.",
+    TRANSMUTATION_LOCK = "Verrouiller la fenêtre",
+    TRANSMUTATION_VENDOR_READING = "Marchand : stock à vérifier",
 })

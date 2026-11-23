@@ -3,6 +3,7 @@ local _, ns = ...
 -- Keep format placeholders and WoW color markup aligned with enUS.
 ns.Locale.RegisterLocale("deDE", {
     CATALOG_FAVORITES = "Favoriten",
+    CATALOG_FAVORITES_FIRST_READ = "WoW-Favoriten erscheinen hier, sobald du ihren Beruf einmal geöffnet hast.",
     CATALOG_FILTER_BANK = "Bank",
     CATALOG_FILTER_BANK_HELP = "Gespeicherte Reagenzien der persönlichen Bank bei der Berechnung berücksichtigen. Auch bei deaktivierter Option erfordert der Kauf bereits in der Bank erfasster Materialien eine Bestätigung für das aktuelle Projekt. Favoriten bleiben sichtbar.",
     CATALOG_FILTER_PROGRESSION = "Fortschritt",
@@ -174,6 +175,7 @@ ns.Locale.RegisterLocale("deDE", {
     OPEN_PROFESSION_SELECT_RECIPE = "Öffne einen Beruf und wähle ein Rezept.",
     OPEN_PROFESSION_WAIT = "Öffne deinen Beruf und warte, bis er geladen ist.",
     PLAN_UNAVAILABLE = "Es fehlen Reagenzien, die nicht beim Händler erhältlich sind, oder das Rezept ist nicht verfügbar.",
+    PLAN_PARTIAL_AMOUNT = "%d von %d angeforderten Herstellungen möglich.",
     PROFESSION_API_UNAVAILABLE = "Berufs-API nicht verfügbar.",
     PROFESSION_FALLBACK = "Beruf #%s",
     PROFESSION_OPEN_FAILED = "Dieser Beruf konnte nicht geöffnet werden.",
@@ -310,4 +312,17 @@ ns.Locale.RegisterLocale("deDE", {
     BANK_BUY_CHOICE_PROMPT = "Einige Reagenzien sind in deiner Bank vorhanden. Wie möchtest du die fehlenden Vorräte in deinen Taschen ergänzen?",
     BANK_BUY_WITHOUT_HELP = "Berücksichtigt nur die Reagenzien, die bereits in deinen Taschen sind.",
     BANK_BUY_COMPLEMENT_HELP = "Berücksichtigt Reagenzien in Taschen und Bank. Hole die Bankreagenzien vor dem Herstellen ab.",
+    SETTINGS_GENERAL = "Allgemein",
+    TRANSMUTATIONS = "Transmutationen",
+    TRANSMUTATION_ALERT = "Meldung bei verfügbarer Transmutation",
+    TRANSMUTATION_SOUND = "Hinweiston abspielen",
+    TRANSMUTATION_POPUP = "Transmutationsfenster anzeigen",
+    TRANSMUTATION_POPUP_HELP = "Das entsperrte Fenster lässt sich verschieben und am Griff unten rechts in der Größe ändern. Es bleibt bei geschlossenem CAB sichtbar.",
+    TRANSMUTATION_OPACITY = "Fensterdeckkraft",
+    TRANSMUTATION_EMPTY = "Keine Transmutationen mit Abklingzeit bekannt.",
+    TRANSMUTATION_READY = "Bereit",
+    TRANSMUTATION_UNKNOWN = "Unbekannt",
+    TRANSMUTATION_NOTICE = "%s ist verfügbar.",
+    TRANSMUTATION_LOCK = "Fenster sperren",
+    TRANSMUTATION_VENDOR_READING = "Händler: Bestand prüfen",
 })

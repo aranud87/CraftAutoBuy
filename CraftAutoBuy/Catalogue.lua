@@ -9,6 +9,13 @@ ns.Catalogue = Catalogue
 local records, loadedDB, rows = {}, nil, {}
 local displayedLimits = {}
 local EMPTY = {}
+-- Native favourites, by spell ID, outside the recipe catalogue: a catalogue
+-- rebuilt after a reset, a locale change or a new data set starts empty, and a
+-- cold passive read cannot tell "not a favourite" from "not known yet".
+-- recipes[id] = true is a favourite, false a removal the client confirmed.
+-- read[key] marks a profession whose own native window was read completely.
+local FAVORITES_SCHEMA = 1
+local favorites = {schema = FAVORITES_SCHEMA, recipes = {}, read = {}}
 local MAX_INTEGER = 2147483647
 local searchText = ns.Locale.SearchText
 
@@ -107,6 +114,107 @@ local function copyRecipes(source, key)
     return result
 end
 
+local function ordinaryBoolean(value)
+    return type(value) == "boolean" and not (issecretvalue and issecretvalue(value))
+end
+
+-- The saved favourites follow the catalogue's character rule. Their spell IDs
+-- do not depend on the client language, so a locale change keeps them.
+local function loadFavorites(guid)
+    local saved = CraftAutoBuyDB.favoriteRecipes
+    local valid = type(saved) == "table" and saved.schema == FAVORITES_SCHEMA and type(saved.recipes) == "table"
+        and (not guid or not saved.character or saved.character == guid)
+    local store = {schema = FAVORITES_SCHEMA, character = guid or (valid and saved.character or nil),
+        recipes = {}, read = {}}
+    if valid then
+        for id, value in pairs(saved.recipes) do
+            if integer(id) and ordinaryBoolean(value) then store.recipes[id] = value end
+        end
+        if type(saved.read) == "table" then
+            for key, value in pairs(saved.read) do
+                if integer(key) and value == true then store.read[key] = true end
+            end
+        end
+    end
+    CraftAutoBuyDB.favoriteRecipes = store
+    return store, valid
+end
+
+-- Before a catalogue can be replaced, complete the memory with the favourites
+-- it already read, for spells the memory does not know yet. A known state,
+-- false included, is never overwritten: nothing in a saved catalogue says
+-- whether it is newer than the memory or an old backup restored by hand, so
+-- only a native read or the native event changes a known state.
+-- Its booleans come from native reads or events: a cold read stored none. A
+-- native record wins over a passive one. Within one origin a removal wins:
+-- before this memory existed, a removal read in the open profession updated
+-- that copy only, while an event or an addition updated every copy.
+-- legacy: the first migration of a save last written by 1.3.x (no memory yet,
+-- and a table without the mark). Its native records whose favourites are all
+-- booleans count as read. Afterwards the memory keeps the beta's own read
+-- marks: a table 1.3.3 rewrote meanwhile can hold records the beta filled
+-- from remembered values, and its reads are resynchronised like its
+-- favourites, at the next native opening.
+local function importFavorites(store, saved, guid, legacy)
+    if type(saved) ~= "table" or saved.schema ~= Catalogue.SCHEMA or type(saved.professions) ~= "table" then return end
+    local owner = guid or store.character
+    if owner and saved.character and saved.character ~= owner then return end
+    -- Without a GUID yet, the memory takes the catalogue's owner, so that the
+    -- first load that knows the character rejects both together.
+    if not owner and type(saved.character) == "string" and saved.character ~= "" then
+        store.character = saved.character
+    end
+    local found = {}
+    for key, entry in pairs(saved.professions) do
+        if integer(key) and type(entry) == "table" and entry.schema == Catalogue.SCHEMA
+            and type(entry.recipes) == "table" then
+            local origin = entry.background == true and "passive" or "native"
+            local allRead, readCount = true, 0
+            for id, recipe in pairs(entry.recipes) do
+                local value
+                if type(recipe) == "table" then value = recipe.favorite end
+                if integer(id) and ordinaryBoolean(value) then
+                    readCount = readCount + 1
+                    if store.recipes[id] == nil then
+                        found[id] = found[id] or {}
+                        if found[id][origin] ~= false then found[id][origin] = value end
+                    end
+                else
+                    allRead = false
+                end
+            end
+            if legacy and entry.background == false and allRead and readCount > 0 then
+                store.read[key] = true
+                if integer(entry.parentKey) then store.read[entry.parentKey] = true end
+            end
+        end
+    end
+    for id, values in pairs(found) do
+        if values.native ~= nil then store.recipes[id] = values.native
+        else store.recipes[id] = values.passive end
+    end
+end
+
+-- Only a value actually read (event payload, native or positive metadata)
+-- updates the saved state; nil leaves the remembered favourite unchanged.
+local function rememberFavorite(id, value)
+    if not integer(id) or not ordinaryBoolean(value) or favorites.recipes[id] == value then return false end
+    favorites.recipes[id] = value
+    return true
+end
+
+-- Every snapshot of one spell (parent and child records) shows the saved state.
+local function applyFavorites()
+    local changed = false
+    for _, entry in pairs(records) do
+        for id, recipe in pairs(entry.recipes) do
+            local value = favorites.recipes[id]
+            if value ~= nil and recipe.favorite ~= value then recipe.favorite, changed = value, true end
+        end
+    end
+    return changed
+end
+
 function Catalogue.Invalidate()
     rows = {}
     displayedLimits = {}
@@ -136,9 +244,38 @@ local function parentKey(key, entry)
     return key
 end
 
+-- Whether a catalogue written by 1.3.x showed the Favorites section: 1.3.x
+-- listed it as soon as one of its recipes was a favourite.
+local function showedFavorites(saved)
+    if type(saved) ~= "table" or type(saved.professions) ~= "table" then return false end
+    for _, entry in pairs(saved.professions) do
+        if type(entry) == "table" and type(entry.recipes) == "table" then
+            for _, recipe in pairs(entry.recipes) do
+                if type(recipe) == "table" and recipe.favorite == true then return true end
+            end
+        end
+    end
+    return false
+end
+
 function Catalogue.Load()
     if type(CraftAutoBuyDB) ~= "table" then CraftAutoBuyDB = {} end
     local saved, guid = CraftAutoBuyDB.catalogue, characterGUID()
+    local migrating
+    favorites, migrating = loadFavorites(guid)
+    migrating = not migrating
+    -- The mark describes the table's format: 1.3.3 rewrites it without the mark.
+    importFavorites(favorites, saved, guid, migrating and type(saved) == "table" and saved.favorites ~= FAVORITES_SCHEMA)
+    -- The 1.3.x Collapse all folded Favorites even while the section was
+    -- absent. At the first migration of a 1.3.x save (no memory yet), a fold
+    -- saved beside a catalogue without any favourite was therefore made in
+    -- advance: drop it, so the first favourites do not arrive folded. A fold
+    -- chosen on a shown section is kept, under 1.3.x as in the beta, and so is
+    -- a beta fold after a 1.3.3 session (UI.lua).
+    local view = CraftAutoBuyDB.catalogueView
+    if migrating and not showedFavorites(saved) and type(view) == "table" and type(view.collapsed) == "table" then
+        view.collapsed.favorites = nil
+    end
     local clientLocale = ns.Locale.GetClientLocale()
     local valid = type(saved) == "table" and saved.schema == Catalogue.SCHEMA
         and type(saved.professions) == "table"
@@ -176,7 +313,8 @@ function Catalogue.Load()
         end
     end
     CraftAutoBuyDB.catalogue = {schema = Catalogue.SCHEMA, clientLocale = clientLocale,
-        character = guid or (valid and saved.character or nil), professions = records}
+        character = guid or (valid and saved.character or nil), favorites = FAVORITES_SCHEMA, professions = records}
+    applyFavorites()
     loadedDB = CraftAutoBuyDB
     Catalogue.Invalidate()
     return Catalogue
@@ -200,6 +338,30 @@ function Catalogue.Record(key, recipes, background)
     -- Preserve the last native observation without preserving old recipes.
     local previous = records[key] and records[key].recipes or EMPTY
     local previousParent = parent ~= key and records[parent] and records[parent].recipes or EMPTY
+    -- A native read is the newest state, for every learned recipe of this
+    -- profession it read, including one CAB cannot list (an enchantment). A
+    -- passive read only fills an unknown spell: an event received while it ran
+    -- is newer than its snapshot. A cold read leaves the value nil either way.
+    -- The profession's favourites count as read only when every learned recipe
+    -- of a native read carried a boolean.
+    local favoritesRead, readCount = not background, 0
+    for id, recipe in pairs(recipes) do
+        -- copyRecipes skips an unsupported record before checking its profession.
+        if integer(id) and type(recipe) == "table" and not (issecretvalue and issecretvalue(recipe))
+            and (recipe.id == nil or recipe.id == id) and (recipe.professionKey == nil or recipe.professionKey == key)
+            and recipe.learned ~= false and recipe.reason ~= L.RECIPE_NOT_LEARNED then
+            if ordinaryBoolean(recipe.favorite) then
+                readCount = readCount + 1
+                if not background or favorites.recipes[id] == nil then rememberFavorite(id, recipe.favorite) end
+            else
+                favoritesRead = false
+            end
+        elseif copied[id] then
+            -- A record rejected here (another spell's ID) shows no favourite
+            -- either, so no later import can take it from the catalogue.
+            copied[id].favorite = nil
+        end
+    end
     for id, recipe in pairs(copied) do
         local old = previous[id] or previousParent[id]
         if old then
@@ -241,6 +403,10 @@ function Catalogue.Record(key, recipes, background)
         nativeBuild = not background and build or nil, nativeInterface = not background and interface or nil,
         learnedCount = learnedCount,
         name = ns.API.ProfessionName(key), recipes = copied}
+    -- Remembered favourites reach the recipes as they enter the catalogue,
+    -- and override an older parent or child copy of the same spell.
+    applyFavorites()
+    if favoritesRead and readCount > 0 then favorites.read[key], favorites.read[parent] = true, true end
     Catalogue.Invalidate()
     return true
 end
@@ -336,6 +502,9 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
         and integer(recipeSpellID)
     local changed = false
     if nativeEvent then
+        -- The payload is remembered even before the recipe has a CAB row, so a
+        -- later scan shows the addition and never revives a removal.
+        rememberFavorite(recipeSpellID, isFavorite)
         -- One spell can be present in both parent and child snapshots. The
         -- event describes every occurrence without requiring contextual APIs.
         for _, entry in pairs(records) do
@@ -351,6 +520,8 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
     for key, entry in pairs(records) do
         for id, recipe in pairs(entry.recipes) do
             local metadata = ns.API.GetRecipeMetadata and ns.API.GetRecipeMetadata(id, key, nil, context) or {}
+            -- metadata.favorite is nil for a cold, foreign or unavailable read.
+            rememberFavorite(id, metadata.favorite)
             if metadata.progressionRead == true then
                 for _, field in ipairs({"canSkillUp", "relativeDifficulty", "numSkillUps"}) do
                     if recipe[field] ~= metadata[field] then recipe[field], changed = metadata[field], true end
@@ -377,8 +548,33 @@ function Catalogue.RefreshMetadata(isFavorite, recipeSpellID)
             end
         end
     end
+    -- A reliable read of one snapshot also updates its other parent or child copy.
+    if applyFavorites() then changed = true end
     if changed then Catalogue.Invalidate() end
     return changed
+end
+
+-- True while the memory holds no favourite at all (not even one CAB cannot
+-- list, such as an enchantment) and a catalogued profession the character
+-- still knows has not been read in its own native window: a cold passive scan
+-- cannot see favourites. The hint explains where they come from; it never
+-- says there are none.
+function Catalogue.FavoritesHint()
+    ensureLoaded()
+    for _, value in pairs(favorites.recipes) do
+        if value == true then return false end
+    end
+    local known, complete = ns.API.GetProfessions()
+    local keys = {}
+    for _, profession in ipairs(known) do keys[profession.key] = true end
+    for key, entry in pairs(records) do
+        local group = parentKey(key, entry)
+        if next(entry.recipes) and (not complete or keys[key] or keys[group])
+            and not favorites.read[key] and not favorites.read[group] then
+            return true
+        end
+    end
+    return false
 end
 
 -- Native recipe rows only display a skill-gain chevron for canSkillUp plus
@@ -459,6 +655,15 @@ local function rebuildRows(includeBank)
     rows[includeBank and "bank" or "bags"] = result
 end
 
+-- A child snapshot is the profession's exact skill line, read in its own
+-- native window: passive reads always use the parent key. The copy the
+-- selection points to comes first, so the recipe sheet and its highlight keep
+-- showing the recipe the player chose, whichever copy that is.
+local function favoriteRank(row)
+    local selected = row.recipeID == ns.selectedID and row.professionKey == ns.selectedProfessionKey
+    return (selected and 2 or 0) + (row.professionKey ~= row.groupProfessionKey and 1 or 0)
+end
+
 local function filteredRows(search, options, favorites)
     ensureLoaded()
     local includeBank = not options or options.includeBank ~= false
@@ -466,11 +671,26 @@ local function filteredRows(search, options, favorites)
     if not rows[cacheKey] then rebuildRows(includeBank) end
     local needle = searchText(ns.Locale.TrimSearch(search))
     local result = {}
+    local favoriteSlots = favorites and {}
     for _, row in ipairs(rows[cacheKey]) do
         local show = favorites and row.favorite or not favorites and row.count > 0
             and (not options or not options.progressionOnly or Catalogue.CanSkillUp(row.recipe))
         if show and (needle == "" or string.find(searchText(row.name .. " " .. row.professionName), needle, 1, true)) then
-            result[#result + 1] = row
+            if favoriteSlots then
+                -- A parent and a child snapshot of one profession can hold the
+                -- same spell: list it once, from the selected copy, otherwise
+                -- from the native child.
+                local slot = tostring(row.groupProfessionKey) .. ":" .. tostring(row.recipeID)
+                local index = favoriteSlots[slot]
+                if not index then
+                    result[#result + 1] = row
+                    favoriteSlots[slot] = #result
+                elseif favoriteRank(row) > favoriteRank(result[index]) then
+                    result[index] = row
+                end
+            else
+                result[#result + 1] = row
+            end
         end
     end
     return result
