@@ -3,7 +3,7 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Version **1.3.1**.
+Version **1.3.2**.
 
 Deposit crafting reagents at your personal bank or withdraw the materials for
 a selected recipe from its CAB tab. Clicking a recipe can open its profession.
@@ -54,7 +54,7 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version **1.3.1**.
+dans **World of Warcraft: Forever**. Version **1.3.2**.
 
 Déposez les composants à la banque personnelle ou retirez les ingrédients
 d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son

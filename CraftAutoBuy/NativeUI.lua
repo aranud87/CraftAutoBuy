@@ -627,6 +627,74 @@ local function sameNativeRow(a, b)
         or (a.isDivider and b.isDivider and a.dividerHeight == b.dividerHeight)
 end
 
+-- Closing the book resets CraftingPage.professionInfo. Its next Init can select
+-- the first row even when the player is reopening the same profession.
+local closedRecipe, pendingRecipe
+
+function NativeUI.CancelBookRecipeRestore()
+    pendingRecipe = nil
+end
+
+local function restoreNativeSelection(page)
+    if not pendingRecipe then return end
+    local profession = page.professionInfo
+    if not profession or not page.RecipeList:IsVisible() then return end
+    local saved = pendingRecipe
+    if profession.openRecipeID or profession.professionID ~= saved.professionID or combatLayout()
+        or ns.catalogueActive or ns.stockActive or ns.job or ns.pendingStart or ns.bankConfirmation
+        or (ns.Merchant and ns.Merchant.IsBusy()) or (ns.BankTransfer and ns.BankTransfer.IsBusy())
+        or (ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode()) then
+        pendingRecipe = nil
+        return
+    end
+    local own, reason = ns.API.IsOwnProfession()
+    if not own then
+        -- A linked/guild/NPC book is an explicit change of source. Never
+        -- carry this pending selection across it to a later personal book.
+        if reason == L.OPEN_OWN_PROFESSION then pendingRecipe = nil end
+        return
+    end
+    local list = page.RecipeList
+    local provider = list.ScrollBox:GetDataProvider()
+    if not provider or not provider.FindElementDataByPredicate then return end
+    pendingRecipe = nil
+    if list:GetPreviousRecipeID() == saved.recipeID then return end
+    -- A changed filter or a collapsed category may have removed the row.
+    -- The current tree also supplies the exact recipeInfo expected by the list.
+    local row = provider:FindElementDataByPredicate(function(node)
+        local info = node:GetData().recipeInfo
+        return info and info.recipeID == saved.recipeID
+    end, true)
+    if row then list:SelectRecipe(row:GetData().recipeInfo, true) end
+end
+
+function NativeUI.RestoreBookRecipe()
+    pendingRecipe = closedRecipe
+    if pendingRecipe then restoreNativeSelection(ProfessionsFrame.CraftingPage) end
+end
+
+local function rememberNativeSelection(book, page, list)
+    if not (book.HookScript and page.Init and list.GetPreviousRecipeID and list.IsVisible
+        and list.SelectRecipe and list.ScrollBox.GetDataProvider) then return end
+    book:HookScript("OnHide", function()
+        closedRecipe, pendingRecipe = nil, nil
+        local profession = book.professionInfo
+        if not profession or not page:IsShown() then return end
+        local id = list:GetPreviousRecipeID()
+        if type(id) == "number" and not (issecretvalue and issecretvalue(id)) and id > 0 then
+            closedRecipe = {professionID = profession.professionID, recipeID = id}
+        end
+    end)
+    if EventRegistry and EventRegistry.RegisterCallback then
+        -- Forever fires this for an actual recipe click before changing the
+        -- selection. Its automatic first-row selection emits no such event.
+        EventRegistry:RegisterCallback("ProfessionsDebug.CraftingRecipeListRecipeClicked", function(_, _, button)
+            if button == "LeftButton" then NativeUI.CancelBookRecipeRestore() end
+        end, page)
+    end
+    hooksecurefunc(page, "Init", restoreNativeSelection)
+end
+
 local function sameSearchResults(before, after)
     if not before or not after or not before.Enumerate or not after.Enumerate then return false end
     -- Forever rebuilds the tree even when only reagent counts have changed.
@@ -708,6 +776,7 @@ function NativeUI.Install()
     end
     if not installedScrollBoxes[scroll] then
         installedScrollBoxes[scroll] = true
+        rememberNativeSelection(ProfessionsFrame, page, page.RecipeList)
         keepNativeSearchPosition(page, scroll)
         if ScrollUtil and ScrollUtil.AddInitializedFrameCallback then
             ScrollUtil.AddInitializedFrameCallback(scroll, function(_, row) attachRow(row) end, NativeUI, false)

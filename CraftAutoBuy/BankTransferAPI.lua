@@ -44,15 +44,19 @@ function Adapter.BlockReason(mode)
         if spell then return "BANK_TRANSFER_CRAFTING" end
     end
     local job = ns.job
+    if job and job.awaitingPurchase then return "BANK_TRANSFER_BUSY" end
     -- A craft confirmation still pending blocks every transfer but one: a
     -- deposit waits only while the batch may still craft. Core keeps the record
     -- after the batch has ended, and a deposit must not wait for a project to be
     -- cancelled. Any other transfer keeps waiting for the record: an item taken
     -- back into the bags would be read as the receipt of the missing craft.
     -- Without Core's answer the record blocks a deposit too, as before.
-    local batchActive = ns.CraftBatchActive
-    if job and (job.running or job.awaitingPurchase
-        or job.pending and (mode ~= "deposit" or type(batchActive) ~= "function" or batchActive())) then
+    if job and job.pending then
+        if job.running or type(ns.CraftBatchActive) ~= "function" or ns.CraftBatchActive() then
+            return "BANK_TRANSFER_WAIT_CRAFT_CONFIRMATION"
+        end
+        if mode ~= "deposit" then return "CRAFT_CONFIRMATION_MISSING" end
+    elseif job and job.running then
         return "BANK_TRANSFER_CRAFTING"
     end
     if ns.pendingStart or ns.bankConfirmation then return "BANK_TRANSFER_BUSY" end
@@ -335,6 +339,8 @@ function Adapter.MessageText(key)
         BANK_TRANSFER_BUSY=L.BANK_TRANSFER_BUSY,
         BANK_TRANSFER_COMBAT=L.BANK_TRANSFER_COMBAT,
         BANK_TRANSFER_CRAFTING=L.BANK_TRANSFER_CRAFTING,
+        BANK_TRANSFER_WAIT_CRAFT_CONFIRMATION=L.BANK_TRANSFER_WAIT_CRAFT_CONFIRMATION,
+        CRAFT_CONFIRMATION_MISSING=L.CRAFT_CONFIRMATION_MISSING,
         BANK_TRANSFER_LOADING=L.BANK_TRANSFER_LOADING,
         BANK_TRANSFER_CURSOR=L.BANK_TRANSFER_CURSOR,
         BANK_TRANSFER_FULL=L.BANK_TRANSFER_FULL,

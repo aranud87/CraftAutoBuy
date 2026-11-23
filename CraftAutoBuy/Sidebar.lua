@@ -13,6 +13,7 @@ local book, tab, stockTab
 local inputRegistered, restoringInput, inputUpdateHooked
 local inputWaiting, inputQueued, inputFailed, timerBroken
 local restoreCatalogue, restoreStock
+local visiblePage, bookToggleHooked
 local hookedMethods = setmetatable({}, {__mode = "k"})
 local hookedFrames = setmetatable({}, {__mode = "k"})
 
@@ -24,6 +25,31 @@ end
 local function inCombat()
     return (ns.InCombat and ns.InCombat()) or (InCombatLockdown and InCombatLockdown())
 end
+
+-- K and the professions micro button both run ToggleProfessionsBook. A direct
+-- profession spell or recipe link can show the same frame without this call.
+local function restoreBookPage()
+    if not book or not book:IsShown() or Sidebar.IsGamepadMode() or inCombat()
+        or ns.pendingStart or ns.bankConfirmation or ns.job
+        or (ns.Merchant and ns.Merchant.IsBusy())
+        or (ns.BankTransfer and ns.BankTransfer.IsBusy()) then return end
+    local page = CraftAutoBuyDB and CraftAutoBuyDB.lastBookPage
+    if page == "catalogue" and ns.UI then ns.UI.Show()
+    elseif page == "stock" and ns.StockUI then ns.StockUI.Show()
+    elseif page == "profession" and ns.NativeUI and ns.NativeUI.RestoreBookRecipe then
+        ns.NativeUI.RestoreBookRecipe()
+    end
+end
+
+local function hookBookToggle()
+    if not bookToggleHooked and type(ToggleProfessionsBook) == "function" and type(hooksecurefunc) == "function" then
+        hooksecurefunc("ToggleProfessionsBook", restoreBookPage)
+        bookToggleHooked = true
+    end
+end
+
+-- The book itself may only be loaded during the first key press.
+hookBookToggle()
 
 local function restoreInput()
     inputQueued = nil
@@ -105,6 +131,7 @@ local function attachNativeTab(nativeTab)
     -- without mistaking RefreshRightTabs for a request to leave the catalogue.
     postHook(nativeTab, "OnClick", function()
         restoreCatalogue, restoreStock, inputFailed = nil, nil, nil
+        if ns.NativeUI and ns.NativeUI.CancelBookRecipeRestore then ns.NativeUI.CancelBookRecipeRestore() end
         local wasCustom = ns.catalogueActive or ns.stockActive
         if ns.UI and ns.UI.NativeTabSelected then ns.UI.NativeTabSelected() end
         if ns.StockUI and ns.StockUI.NativeTabSelected then ns.StockUI.NativeTabSelected() end
@@ -123,6 +150,14 @@ end
 
 function Sidebar.Refresh()
     if not book or not tab then return false end
+    -- Child pages can already be hidden by the time the parent runs OnHide.
+    -- Remember the actual visible page, then commit it only when the book closes.
+    if book:IsShown() then
+        if ns.catalogueActive then visiblePage = "catalogue"
+        elseif ns.stockActive then visiblePage = "stock"
+        elseif book.BookPage and book.BookPage:IsShown() then visiblePage = "overview"
+        elseif book.CraftingPage and book.CraftingPage:IsShown() then visiblePage = "profession" end
+    end
     if Sidebar.IsGamepadMode() then
         tab:Hide(); stockTab:Hide()
         -- Forever's gamepad footer invokes native buttons even when hidden.
@@ -158,6 +193,7 @@ function Sidebar.Refresh()
 end
 
 function Sidebar.Install()
+    hookBookToggle()
     if not ProfessionsFrame or type(CreateFrame) ~= "function" or type(hooksecurefunc) ~= "function" then return false end
     if not tab then
         book = ProfessionsFrame
@@ -184,6 +220,12 @@ function Sidebar.Install()
             end
         end)
         hookVisibility(book)
+        book:HookScript("OnHide", function()
+            if CraftAutoBuyDB and not ns.pendingStart and not Sidebar.IsGamepadMode() then
+                CraftAutoBuyDB.lastBookPage = visiblePage
+            end
+            visiblePage = nil
+        end)
     end
     postHook(book, "RefreshRightTabs", function() Sidebar.Refresh() end)
     postHook(book, "RefreshRightTab", function() Sidebar.Refresh() end)

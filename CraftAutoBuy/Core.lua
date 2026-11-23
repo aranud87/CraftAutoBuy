@@ -272,7 +272,10 @@ function ns.Refresh()
     if recipeID and recipes[recipeID] then
         local inventory, bank, unknown = planningStock(recipes)
         local key = ns.job and ns.job.professionKey or ns.selectedProfessionKey or ns.professionKey
-        local limits = ns.API.RecipeLimits and ns.API.RecipeLimits(key)
+        -- Keep the reason from the same snapshot as the displayed quantity,
+        -- including when the profession that owns this recipe is closed.
+        local limitReasons = {}
+        local limits = ns.API.RecipeLimits and ns.API.RecipeLimits(key, limitReasons)
         ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank, limits)
         ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank, limits)
         local job = ns.job
@@ -287,6 +290,9 @@ function ns.Refresh()
             inventory, bank, unknown = planningStock(recipes)
             ns.maxCrafts = ns.Planner.MaxCrafts(recipes, inventory, ns.vendorItems, recipeID, 1000, bank, limits)
             ns.plan = ns.Planner.Plan(recipes, inventory, ns.vendorItems, recipeID, quantity, bank, limits)
+        end
+        if limitReasons[recipeID] and quantity > limits[recipeID] then
+            ns.plan.craftLimitReason = limitReasons[recipeID]
         end
         if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(ns.plan, recipes, unknown) end
         ns.quote = ns.PurchaseQuote(ns.plan.purchases)
@@ -1635,7 +1641,16 @@ frame:SetScript("OnUpdate", function()
                 or bankComplete and not unconfirmed and (withdrawal and (L.REAGENTS_PURCHASED .. "\n" .. withdrawal) or L.PURCHASE_READY_CLICK)
                 or complete and (unconfirmed and L.BUY_ONLY_READY or L.BUY_ONLY_COMPLETE)
                 or (approvalChanged and L.BANK_OVERRIDE_CHANGED or L.PURCHASE_CRAFT_INCOMPLETE)
-            if complete or partialComplete or (bankComplete and not unconfirmed) then ns.Print(ns.status) end
+            if complete or partialComplete or (bankComplete and not unconfirmed) then
+                local message = ns.status
+                -- The merchant already printed the receipt. Keep the whole
+                -- status on the page and send only the remaining instructions to chat.
+                local receipt = L.REAGENTS_PURCHASED
+                if ns.Merchant.GetStatus() == receipt and message:sub(1, #receipt) == receipt then
+                    message = message:sub(#receipt + 1):gsub("^%s+", "")
+                end
+                if message ~= "" then ns.Print(message) end
+            end
             ns.Refresh()
         elseif readyWithoutPurchase then
             pause(L.PURCHASE_READY_CLICK)

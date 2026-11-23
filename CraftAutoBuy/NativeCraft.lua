@@ -334,7 +334,10 @@ function NativeCraft.Refresh()
     if ns.API.MarkUnknownPurchaseCounts then ns.API.MarkUnknownPurchaseCounts(plan, ns.recipes, unknown) end
     local canCreate, createReason, createQuote, createBank, createAlternative, createPlan, prebuy = quotePlan(plan)
     local ready, reason, kind = craftReadiness(id, createPlan)
-    local actionQuote = createAlternative or createQuote
+    -- A blocked replacement purchase is still priced in the tooltip. The
+    -- disabled button describes the plan that uses the player's bank stock.
+    local actionPlan = canCreate and createPlan or plan
+    local actionQuote = canCreate and createAlternative or createQuote
     local partialPurchase = actionQuote and actionQuote.partial == true
     local buyOnly = ((prebuy or partialPurchase) and (ready or kind == "requirements")) or purchaseOnly(ready, kind, createPlan)
     local idle = not busy() and (not ns.job or matchingJob)
@@ -345,14 +348,14 @@ function NativeCraft.Refresh()
     state.create.plan = createAlternative and createPlan or plan
     state.create.buyOnly = buyOnly
     state.create.partialPurchase = partialPurchase
-    state.create.actionIntent = createPlan and next(createPlan.purchases or {}) and "buy" or "craft"
+    state.create.actionIntent = actionPlan and next(actionPlan.purchases or {}) and "buy" or "craft"
     state.create.requirementReason = buyOnly and reason or nil
     state.create.reason = buyOnly and not canCreate and createReason or (not ready and reason or createReason)
     -- An unacknowledged purchase disables the action: explain why in its tooltip.
     if ns.Merchant.IsBusy() and (not ns.job or matchingJob) then state.create.reason = L.WAIT_PURCHASES_RESUME end
     state.create.bankMessage, state.create.alternativeQuote = createBank, createAlternative
     state.cancel = busy() and true or false
-    local context = ns.ActionButtons.ClickContext(id, ns.professionKey, quantity, createPlan, ns.recipes, actionQuote)
+    local context = ns.ActionButtons.ClickContext(id, ns.professionKey, quantity, actionPlan, ns.recipes, actionQuote)
     context.native = true
     state.create.clickContext = context
     state.create.craftQuantity = context.batchCount or quantity

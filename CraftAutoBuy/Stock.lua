@@ -97,6 +97,17 @@ local function ensureLoaded()
             snapshot.containers = containers
 
         end
+        -- Bags of the bank bag slots that the client counted with the bank at
+        -- the last complete reading (see countedSlotBags). Dropped as a whole
+        -- when unreadable: the comparison is then the plain one again.
+        if type(saved.slotBags) == "table" then
+            local slotBags = {}
+            for id, count in pairs(saved.slotBags) do
+                if not integer(id, 1) or not integer(count, 1) then slotBags = nil; break end
+                slotBags[id] = count
+            end
+            snapshot.slotBags = slotBags
+        end
     end
     CraftAutoBuyDB.stock, loadedDB = snapshot, CraftAutoBuyDB
 end
@@ -209,6 +220,33 @@ local function emptyBagSlots(slotsByBag)
         end
     end
     return empty
+end
+
+-- The client's bank count may also include the bags sitting in those bank bag
+-- slots, which no tab lists; whether it does is not known in advance. Returns,
+-- per item, how many of the slot bags of this reading the client counted on top
+-- of the tabs just read; nil when it counted none, so that nothing changes on a
+-- client that does not count them. Only definite answers count. For a complete
+-- reading of the tabbed bank only: the legacy layout keeps its bank bags
+-- elsewhere, is not read here and records none.
+local function countedSlotBags(counts, slotsByBag)
+    local bagIndex = Enum.BagIndex
+    local holder, first = bagIndex and bagIndex.Characterbanktab, bagIndex and bagIndex.CharacterBankTab_1
+    if not integer(holder, -128) or holder >= 0 or not integer(first) then return nil end
+    local placed, counted = {}, nil
+    for bag in pairs(slotsByBag) do
+        if bag > first then
+            local ok, info = call(C_Container.GetContainerItemInfo, holder, bag - first + 1)
+            if ok and not secret(info) and type(info) == "table" and integer(info.itemID, 1) then
+                placed[info.itemID] = (placed[info.itemID] or 0) + 1
+            end
+        end
+    end
+    for id, bags in pairs(placed) do
+        local extra = math.min(bags, (clientBankCount(id) or 0) - (counts[id] or 0))
+        if extra > 0 then counted = counted or {}; counted[id] = extra end
+    end
+    return counted
 end
 
 -- A missing container or a former filled bag with no slots is ambiguous:
@@ -338,7 +376,8 @@ local function captureContainers()
         if slots > 0 then loadedThisVisit[bag] = true end
     end
     return counts, "complete", held,
-        ns.StockInventory and (capacityKnown and ns.StockInventory.Capacity(capacity) or {known = false, containers = {}}) or nil
+        ns.StockInventory and (capacityKnown and ns.StockInventory.Capacity(capacity) or {known = false, containers = {}}) or nil,
+        mode == "modern" and countedSlotBags(counts, slotsByBag) or nil
 end
 
 local function captureKnownItems()
@@ -422,11 +461,13 @@ end
 -- counts are identical, e.g. to clear a notice left by an unread notification.
 -- Returns updated, read (read is false when the client data are incomplete).
 local function capture(force)
-    local counts, result, held, capacity = captureContainers()
+    local counts, result, held, capacity, slotBags = captureContainers()
     if counts then
         changePending, firstReadPending = false, false
         -- Kept even when the totals are unchanged: a sort moves stacks.
         snapshot.containers = held
+        -- Replaced by every complete reading, like the container memory.
+        snapshot.slotBags = slotBags
         -- Optional presentation metadata is committed only with the same
         -- complete reading as its item counts. It never alters bank evidence.
         local metadataChanged = false
@@ -510,7 +551,8 @@ end
 -- items. Never lower it: a client that forgot its bank reports zero. Returns
 -- raised (the client shows more items than CAB recorded) and lowered (the
 -- client, which still counts some bank items, shows fewer for one of them).
-local function raiseEvidence()
+-- slotBags is given by closedNotification alone, for a reading still complete.
+local function raiseEvidence(slotBags)
     local ids = ingredientIDs()
     -- A first login or catalogue migration may not know any recipes yet.
     -- Vendor supplies still need their late bank deposits preserved for reload.
@@ -520,14 +562,23 @@ local function raiseEvidence()
     for id in pairs(snapshot.counts) do ids[id] = true end
     for id in pairs(snapshot.knownItems) do ids[id] = true end
     local raised, lowered, counting = false, false, false
+    -- Bags the client counted in bank bag slots at the last complete reading
+    -- are in no tab, and it may count them still, even after forgetting its
+    -- tabs: only what its count shows beyond them is in the tabs. Every other
+    -- item, and every decrease, is compared as before. So is everything once a
+    -- reading is to check or incomplete (no slotBags): those bags may have left
+    -- their slots since, even in front of CAB (late replies, rejected reads),
+    -- and the client's whole count is kept, as it always was.
+    slotBags = slotBags or {}
     for id in pairs(ids) do
         local bagOK, bags = call(C_Item and C_Item.GetItemCount, id, false, false, false, false)
         local totalOK, total = call(C_Item and C_Item.GetItemCount, id, true, false, true, false)
         if bagOK and totalOK and integer(bags) and integer(total) and total >= bags then
             local count = total - bags
             local recorded = snapshot.counts[id] or 0
-            if count > 0 then counting = true end
-            if count > recorded then snapshot.counts[id], raised = count, true
+            local inTabs = count - (slotBags[id] or 0)
+            if inTabs > 0 then counting = true end
+            if inTabs > recorded then snapshot.counts[id], raised = count, true
             elseif count < recorded then lowered = true end
         end
     end
@@ -557,7 +608,7 @@ local function closedNotification()
     -- Beyond that window only a real difference reported by the client counts:
     -- more items than recorded, or fewer while it still counts its bank. A client
     -- that forgot its bank reports zero everywhere and changes nothing.
-    local raised, lowered = raiseEvidence()
+    local raised, lowered = raiseEvidence(snapshot.complete and snapshot.slotBags)
     if raised or lowered then markUnverified() end
 end
 

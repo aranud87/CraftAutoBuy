@@ -689,6 +689,7 @@ end
 function StockUI.Show()
     if ns.Sidebar and ns.Sidebar.IsGamepadMode and ns.Sidebar.IsGamepadMode() then return false end
     if not StockUI.Install() then return false end
+    if ns.NativeUI and ns.NativeUI.CancelBookRecipeRestore then ns.NativeUI.CancelBookRecipeRestore() end
     if ns.Bootstrap then ns.Bootstrap.Wake() end
     if ns.CancelPendingStart then ns.CancelPendingStart() end
     local previousPage
