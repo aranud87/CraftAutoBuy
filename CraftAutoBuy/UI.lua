@@ -1009,10 +1009,11 @@ local function renderList()
     if #entries == 0 and #favorites == 0 then
         local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
         local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
+        local manual = ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
         local known = ns.Catalogue and ns.Catalogue.HasRecipes and ns.Catalogue.HasRecipes()
-        widgets.empty:SetText(known and L.CATALOG_NO_RESULTS
+        widgets.empty:SetText(manual or (known and L.CATALOG_NO_RESULTS
             or (initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
-            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or ""))))
+            or (L.CATALOG_EMPTY .. (#missing > 0 and ("\n\n" .. L.CATALOG_OPEN_PROFESSIONS) or "")))))
     end
     return visible
 end

@@ -87,6 +87,8 @@ ns.Locale.RegisterLocale("deDE", {
     CATALOG_EMPTY = "Mit deinen Reagenzien ist kein Rezept herstellbar.",
     CATALOG_SELECT = "Wähle ein Rezept aus der Liste.",
     CATALOG_OPEN_PROFESSIONS = "Öffne jeden Beruf einmal, um diesen Katalog zu vervollständigen.",
+    CATALOG_MANUAL_BUILD = "Das automatische Laden von Rezepten für diese WoW-Version steht noch zur Prüfung aus. Gespeicherte Rezepte bleiben verfügbar.",
+    CATALOG_MANUAL_OPEN = "Öffne diese Berufe, um ihre Rezepte zu aktualisieren: %s.",
     CATALOG_BUY_HELP = "Die Kaufschaltfläche kauft fehlende Reagenzien, wenn der automatische Einkauf aktiviert und der Händler geöffnet ist. Klicke nach Erhalt erneut, um herzustellen. Jedes Zwischenrezept benötigt ebenfalls einen neuen Klick.",
     CATALOG_VERIFY = "Beruf laden",
     CATALOG_VERIFY_HELP = "Lädt die Daten dieses Berufs mit seinem Zauber aus dem Zauberbuch. Falls das Laden nicht verfügbar ist, klicke rechts auf den Berufsreiter und kehre dann zu CAB zurück. Kein Kauf und keine Herstellung.",

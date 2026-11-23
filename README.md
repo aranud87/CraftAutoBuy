@@ -3,7 +3,11 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Version **1.3.2**.
+Version **1.3.3**.
+
+Recipe loading runs in the background on verified Forever builds. After a game
+update awaiting verification, saved recipes remain available. Open the
+professions named by CAB to update their recipes.
 
 Deposit crafting reagents at your personal bank or withdraw the materials for
 a selected recipe from its CAB tab. Clicking a recipe can open its profession.
@@ -54,7 +58,12 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version **1.3.2**.
+dans **World of Warcraft: Forever**. Version **1.3.3**.
+
+Les recettes se chargent en arrière-plan sur les builds Forever vérifiés.
+Après une mise à jour du jeu en attente de vérification, les recettes
+mémorisées restent disponibles. Ouvrez les métiers indiqués par CAB pour
+actualiser leurs recettes.
 
 Déposez les composants à la banque personnelle ou retirez les ingrédients
 d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son

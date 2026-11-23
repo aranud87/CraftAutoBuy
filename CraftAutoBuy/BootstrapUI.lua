@@ -113,13 +113,26 @@ function BootstrapUI.Update(time)
     if not ns.Bootstrap or type(ns.Bootstrap.GetState) ~= "function" then return end
     local state = ns.Bootstrap.GetState()
     if type(state) ~= "table" then return end
-    if state.complete == true then hideAutomatically(); return end
+    if state.complete == true or (state.manual and not state.manualPending) then hideAutomatically(); return end
     if not frame then create() end
     local message = ns.Bootstrap.StatusText()
     if type(message) ~= "string" or message == "" then
         message = L.INITIALIZING_RECIPES:format(state.done or 0, state.total or 0)
     end
     status:SetText(message)
+    if state.manual then
+        title:SetText("CraftAutoBuy")
+        help:Hide()
+        bar:Hide()
+        local statusTop = 16 + height(title, 18) + 10
+        status:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -statusTop)
+        frame:SetHeight(statusTop + height(status, 16) + 12 + 24 + 14)
+        frame:Show()
+        return
+    end
+    title:SetText(L.INITIALIZATION_TITLE)
+    help:Show()
+    bar:Show()
     local helpTop = 16 + height(title, 18) + 10
     help:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -helpTop)
     local statusTop = helpTop + height(help, 24) + 10

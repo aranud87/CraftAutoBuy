@@ -643,7 +643,8 @@ local function renderNow(searchOnly)
     widgets.inventory.frame:SetShown(state.inventory)
     local bankOpen = ns.Stock and ns.Stock.IsBankOpen and ns.Stock.IsBankOpen()
     local initializing = state.content ~= "all" and ns.Bootstrap and ns.Bootstrap.StatusText() or nil
-    local empty = initializing and L.STOCK_INITIALIZING or nil
+    local manual = initializing and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
+    local empty = initializing and not manual and L.STOCK_INITIALIZING or nil
     local bagEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or (search ~= "" and L.STOCK_NO_RESULTS
         or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BAGS or L.STOCK_EMPTY_BAGS))
     local bankEmpty = not data.bankKnown and (bankOpen and L.STOCK_BANK_LOADING or L.STOCK_BANK_UNKNOWN)

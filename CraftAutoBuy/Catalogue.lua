@@ -147,6 +147,7 @@ function Catalogue.Load()
         and saved.clientLocale == clientLocale
         and (not guid or not saved.character or saved.character == guid)
     local known, complete = ns.API.GetProfessions()
+    local mayPrune = ns.API.GetRecipeIndexBuild()
     local knownKeys = {}
     for _, profession in ipairs(known) do knownKeys[profession.key] = true end
     records = {}
@@ -156,7 +157,7 @@ function Catalogue.Load()
             -- destroy saved scans. Rows still excludes unknown skills when the
             -- API reports a complete list; opening a recipe is revalidated live.
             local parent = parentKey(key, type(entry) == "table" and entry or nil)
-            local noLongerKnown = complete and #known > 0 and not knownKeys[key] and not knownKeys[parent]
+            local noLongerKnown = mayPrune and complete and #known > 0 and not knownKeys[key] and not knownKeys[parent]
             if integer(key) and not noLongerKnown and type(entry) == "table"
                 and entry.schema == Catalogue.SCHEMA then
                 local recipes = copyRecipes(entry.recipes, key)
@@ -165,6 +166,8 @@ function Catalogue.Load()
                         parentKey = parent, learnedCount = integer(entry.learnedCount) and entry.learnedCount or nil,
                         background = entry.background == true,
                         backgroundBuild = integer(entry.backgroundBuild) and entry.backgroundBuild or nil,
+                        nativeBuild = integer(entry.nativeBuild) and entry.nativeBuild or nil,
+                        nativeInterface = integer(entry.nativeInterface) and entry.nativeInterface or nil,
                         version = type(entry.version) == "string" and entry.version or "unknown",
                         name = type(entry.name) == "string" and entry.name ~= "" and entry.name or ns.API.ProfessionName(key),
                         recipes = recipes}
@@ -183,13 +186,15 @@ local function ensureLoaded()
     if loadedDB ~= CraftAutoBuyDB or not loadedDB then Catalogue.Load() end
 end
 
--- Only call after API.ScanRecipes has returned a complete, current own scan.
+-- Only call after a complete passive or native own-profession scan.
 -- Replacing the map removes forgotten recipes and old intermediate producers.
 function Catalogue.Record(key, recipes, background)
     ensureLoaded()
     if not integer(key) then return false end
     local copied = copyRecipes(recipes, key)
     if not copied then return false end
+    local indexBuild, build, interface = ns.API.GetRecipeIndexBuild()
+    if background and not indexBuild then return false end
     local parent = parentKey(key)
     -- Optional metadata can be unavailable during a complete schematic read.
     -- Preserve the last native observation without preserving old recipes.
@@ -200,6 +205,22 @@ function Catalogue.Record(key, recipes, background)
         if old then
             for _, field in ipairs({"favorite", "categoryPath"}) do
                 if recipe[field] == nil then recipe[field] = old[field] end
+            end
+        end
+    end
+    -- A verified passive scan covers the entire parent. Replace older child
+    -- snapshots only after that scan succeeds, keeping their native metadata.
+    if background and key == parent then
+        for child, entry in pairs(records) do
+            if child ~= key and parentKey(child, entry) == key then
+                for id, old in pairs(entry.recipes) do
+                    local recipe = copied[id]
+                    if recipe then
+                        if recipe.favorite == nil then recipe.favorite = old.favorite end
+                        if recipe.categoryPath == nil then recipe.categoryPath = old.categoryPath end
+                    end
+                end
+                records[child] = nil
             end
         end
     end
@@ -216,7 +237,8 @@ function Catalogue.Record(key, recipes, background)
     end
     records[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parent,
         background = background == true,
-        backgroundBuild = background and ns.RecipeIndex and ns.RecipeIndex.build or nil,
+        backgroundBuild = background and indexBuild or nil,
+        nativeBuild = not background and build or nil, nativeInterface = not background and interface or nil,
         learnedCount = learnedCount,
         name = ns.API.ProfessionName(key), recipes = copied}
     Catalogue.Invalidate()
@@ -245,18 +267,29 @@ function Catalogue.GetProfessionName(key)
     return records[key] and records[key].name or ns.API.ProfessionName(key)
 end
 
-function Catalogue.MissingProfessions()
+-- Initialization checks the provenance of each record. Browsing and stock
+-- can still use the recipes that are already available.
+function Catalogue.MissingProfessions(currentClient, professions)
     ensureLoaded()
     local missing = {}
     local scanned = {}
+    local indexBuild, build, interface
+    if currentClient then indexBuild, build, interface = ns.API.GetRecipeIndexBuild() end
     for key, entry in pairs(records) do
-        local completeBackground = entry.background and ns.RecipeIndex
-            and entry.backgroundBuild == ns.RecipeIndex.build
-        if next(entry.recipes) or (entry.learnedCount or 0) > 0 or completeBackground then
+        local hasRecipes = next(entry.recipes) or (entry.learnedCount or 0) > 0
+        local verified
+        if currentClient then
+            verified = (entry.background and indexBuild and entry.backgroundBuild == indexBuild)
+                or (not entry.background and hasRecipes and build and entry.nativeBuild == build
+                    and entry.nativeInterface == interface)
+        else
+            verified = hasRecipes or (entry.background and ns.RecipeIndex and entry.backgroundBuild == ns.RecipeIndex.build)
+        end
+        if verified then
             scanned[key], scanned[parentKey(key, entry)] = true, true
         end
     end
-    for _, profession in ipairs(ns.API.GetProfessions()) do
+    for _, profession in ipairs(professions or ns.API.GetProfessions()) do
         if not scanned[profession.key] then
             missing[#missing + 1] = {key = profession.key, name = profession.name, icon = profession.icon}
         end
