@@ -87,6 +87,8 @@ ns.Locale.RegisterLocale("enUS", {
     CATALOG_EMPTY = "No recipes can be crafted with your reagents.",
     CATALOG_SELECT = "Select a recipe from the list.",
     CATALOG_OPEN_PROFESSIONS = "Open each profession once to complete this catalog.",
+    CATALOG_MANUAL_BUILD = "Automatic recipe loading is awaiting verification for this version of WoW. Saved recipes are still available.",
+    CATALOG_MANUAL_OPEN = "Open these professions to update their recipes: %s.",
     CATALOG_BUY_HELP = "The purchase button buys missing reagents if automatic buying is enabled and the merchant is open. Once they arrive, click again to craft. Each intermediate recipe also requires another click.",
     CATALOG_VERIFY = "Load profession",
     CATALOG_VERIFY_HELP = "Load this profession's data using its spell from your spellbook. If loading is unavailable, click its tab on the right, then return to CAB. No buying or crafting.",

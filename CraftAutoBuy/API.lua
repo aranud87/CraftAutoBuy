@@ -515,19 +515,31 @@ local function backgroundKnownProfession(key)
     return nil, L.PROFESSION_NOT_KNOWN
 end
 
+-- The first result identifies the verified data set. The other results
+-- identify the running client even when its data set is unverified.
+function API.GetRecipeIndexBuild()
+    local ok, _, build, _, interface = call(GetBuildInfo)
+    if not ok or (issecretvalue and (issecretvalue(build) or issecretvalue(interface))) then return nil end
+    if type(build) == "string" and build:match("^%d+$") then build = tonumber(build) end
+    if not positiveInteger(build) or not positiveInteger(interface) then return nil end
+    local index = ns.RecipeIndex
+    local compatible = type(index) == "table" and index.compatibleBuilds
+    if type(index) ~= "table" or index.schema ~= 1 or type(index.professions) ~= "table"
+        or not positiveInteger(index.build) or interface ~= index.interface
+        or (build ~= index.build and (type(compatible) ~= "table" or compatible[build] ~= true)) then
+        return nil, build, interface
+    end
+    return index.build, build, interface
+end
+
 local function backgroundSpellIDs(key)
     -- Forever exposes schematics and IsSpellKnown before a profession opens,
     -- but its contextual recipe list is empty and GetRecipeInfo.learned is
     -- false at cold login. Enumerate the pinned client-data index instead.
-    local index = ns.RecipeIndex
-    local ok, _, build, _, interface = call(GetBuildInfo)
-    if not ok or (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
-        or not tonumber(build) or not ordinaryNumber(interface) then return nil, nil, L.RECIPES_LOADING end
-    if type(index) ~= "table" or index.schema ~= 1 or type(index.professions) ~= "table"
-        or tonumber(build) ~= index.build or interface ~= index.interface then
-        return nil, nil, L.CATALOG_VERIFY_HELP, true
-    end
-    local spells = index.professions[key]
+    local indexBuild, clientBuild = API.GetRecipeIndexBuild()
+    if not clientBuild then return nil, nil, L.RECIPES_LOADING end
+    if not indexBuild then return nil, nil, L.CATALOG_VERIFY_HELP, true end
+    local spells = ns.RecipeIndex.professions[key]
     local total = arraySize(spells)
     if total == nil then return nil, nil, L.CATALOG_VERIFY_HELP, true end
     local ids, seen = {}, {}
@@ -536,7 +548,7 @@ local function backgroundSpellIDs(key)
         if not positiveInteger(id) or seen[id] then return nil, nil, L.RECIPES_LOADING end
         ids[index], seen[id] = id, true
     end
-    return ids, seen
+    return ids, seen, nil, nil, indexBuild
 end
 
 function API.BeginBackgroundScan(key)
@@ -548,9 +560,9 @@ function API.BeginBackgroundScan(key)
         or not Enum or not Enum.SpellBookSpellBank or Enum.SpellBookSpellBank.Player == nil then
         return nil, L.PROFESSION_API_UNAVAILABLE
     end
-    local ids, idSet, failure, manual = backgroundSpellIDs(parent)
+    local ids, idSet, failure, manual, indexBuild = backgroundSpellIDs(parent)
     if not ids then return nil, failure, manual end
-    return {professionKey = key, parentProfessionKey = parent, ids = ids,
+    return {professionKey = key, parentProfessionKey = parent, indexBuild = indexBuild, ids = ids,
         idSet = idSet, cursor = 1, progress = 0, total = #ids, recipes = {}, known = {},
         phase = "read", verifyCursor = 1}
 end
@@ -642,12 +654,13 @@ local function completeBackgroundScan(job)
     if not allowed then return failBackgroundScan(job, reason) end
     local parent, why = backgroundKnownProfession(job.professionKey)
     if parent ~= job.parentProfessionKey then return failBackgroundScan(job, why or L.PROFESSION_CHANGED) end
+    if API.GetRecipeIndexBuild() ~= job.indexBuild then return failBackgroundScan(job, L.RECIPES_LOADING) end
     job.complete = true
     return job.recipes, true
 end
 
 function API.StepBackgroundScan(job, limit)
-    if type(job) ~= "table" or not positiveInteger(job.professionKey)
+    if type(job) ~= "table" or not positiveInteger(job.professionKey) or not positiveInteger(job.indexBuild)
         or not nonnegativeInteger(job.total) or not positiveInteger(job.cursor)
         or job.cursor > job.total + 1 or type(job.ids) ~= "table"
         or type(job.idSet) ~= "table" or type(job.recipes) ~= "table"
@@ -656,7 +669,10 @@ function API.StepBackgroundScan(job, limit)
         return nil, false, L.RECIPES_LOADING
     end
     if job.failed then return nil, false, job.failed end
-    if job.complete then return job.recipes, true end
+    if job.complete then
+        if API.GetRecipeIndexBuild() ~= job.indexBuild then return failBackgroundScan(job, L.RECIPES_LOADING) end
+        return job.recipes, true
+    end
     limit = limit == nil and 5 or limit
     if not positiveInteger(limit) then return failBackgroundScan(job, L.RECIPES_LOADING) end
     local allowed, reason = backgroundContext()
@@ -667,8 +683,10 @@ function API.StepBackgroundScan(job, limit)
     end
     -- Validate the index independently of the active profession. No client
     -- calls are made per candidate here; both live passes below share a budget.
-    local ids, idSet = backgroundSpellIDs(job.parentProfessionKey)
-    if not ids or #ids ~= job.total then return failBackgroundScan(job, L.RECIPES_LOADING) end
+    local ids, idSet, _, _, indexBuild = backgroundSpellIDs(job.parentProfessionKey)
+    if not ids or #ids ~= job.total or indexBuild ~= job.indexBuild then
+        return failBackgroundScan(job, L.RECIPES_LOADING)
+    end
     for position, id in ipairs(job.ids) do
         if ids[position] ~= id or not job.idSet[id] or not idSet[id] then
             return failBackgroundScan(job, L.RECIPES_LOADING)

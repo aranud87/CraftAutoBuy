@@ -87,6 +87,8 @@ ns.Locale.RegisterLocale("koKR", {
     CATALOG_EMPTY = "현재 재료로 만들 수 있는 제작법이 없습니다.",
     CATALOG_SELECT = "목록에서 제작법을 선택하세요.",
     CATALOG_OPEN_PROFESSIONS = "각 전문 기술을 한 번씩 열어 목록을 완성하세요.",
+    CATALOG_MANUAL_BUILD = "이 WoW 버전에서는 제조법 자동 불러오기가 아직 검증되지 않았습니다. 저장된 제조법은 계속 사용할 수 있습니다.",
+    CATALOG_MANUAL_OPEN = "다음 전문 기술을 열어 제조법을 갱신하세요: %s.",
     CATALOG_BUY_HELP = "자동 구입을 켜고 상인을 연 상태에서 구입 버튼을 누르면 부족한 재료를 구입합니다. 재료를 받은 뒤 다시 눌러 제작하세요. 중간 재료도 제작법마다 다시 눌러야 합니다.",
     CATALOG_VERIFY = "전문 기술 불러오기",
     CATALOG_VERIFY_HELP = "주문책의 해당 주문으로 전문 기술 데이터를 불러옵니다. 불러올 수 없으면 오른쪽의 해당 탭을 누른 뒤 CAB로 돌아오세요. 구입하거나 제작하지 않습니다.",

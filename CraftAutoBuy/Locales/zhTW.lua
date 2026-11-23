@@ -87,6 +87,8 @@ ns.Locale.RegisterLocale("zhTW", {
     CATALOG_EMPTY = "目前材料無法製造任何配方。",
     CATALOG_SELECT = "請從清單中選擇一個配方。",
     CATALOG_OPEN_PROFESSIONS = "請逐一開啟各專業技能，以補齊此目錄。",
+    CATALOG_MANUAL_BUILD = "此 WoW 版本的配方自動載入功能尚待驗證。已儲存的配方仍可使用。",
+    CATALOG_MANUAL_OPEN = "請開啟下列專業技能以更新其配方：%s。",
     CATALOG_BUY_HELP = "啟用自動購買並開啟商人視窗後，點擊購買按鈕會購買缺少的材料。收到後，再次點擊以製造物品。每種中間材料的配方也需要再次點擊。",
     CATALOG_VERIFY = "載入專業",
     CATALOG_VERIFY_HELP = "使用法術書中的對應法術載入此專業的資料。若無法載入，請點擊右側對應標籤，然後返回 CAB。不購買或製造任何物品。",

@@ -87,6 +87,8 @@ ns.Locale.RegisterLocale("ptBR", {
     CATALOG_EMPTY = "Não há receitas possíveis com seus reagentes.",
     CATALOG_SELECT = "Selecione uma receita na lista.",
     CATALOG_OPEN_PROFESSIONS = "Abra cada profissão uma vez para completar este catálogo.",
+    CATALOG_MANUAL_BUILD = "O carregamento automático de receitas aguarda verificação para esta versão do WoW. As receitas salvas continuam disponíveis.",
+    CATALOG_MANUAL_OPEN = "Abra estas profissões para atualizar suas receitas: %s.",
     CATALOG_BUY_HELP = "O botão de compra permite comprar os reagentes que faltam se a compra automática estiver ativada e o vendedor estiver aberto. Depois de recebê-los, clique novamente para criar. Cada receita intermediária também exige um novo clique.",
     CATALOG_VERIFY = "Carregar profissão",
     CATALOG_VERIFY_HELP = "Carrega os dados desta profissão usando o feitiço dela no grimório. Se não for possível carregar, clique na aba dela à direita e volte ao CAB. Não compra nem cria nada.",

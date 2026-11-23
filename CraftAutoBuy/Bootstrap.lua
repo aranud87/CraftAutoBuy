@@ -7,6 +7,7 @@ local SCHEMA, INTERVAL, RETRY, CHUNK = 1, 0.10, 2, 5
 local state, database, current, total, done = nil, nil, nil, 0, 0
 local professions, missing = {}, {}
 local dirty, waiting, nextStepAt, retryAt, lastReason = true, false, 0, 0, nil
+local manualBuild, manualPending = false, false
 local professionRetry = {}
 local lastKey, lastRecipe, lastProgress, lastTotal
 
@@ -49,14 +50,16 @@ local function ensureState()
     CraftAutoBuyDB.initialization, database = state, CraftAutoBuyDB
     current, total, done, professions, missing = nil, 0, 0, {}, {}
     dirty, waiting, nextStepAt, retryAt, lastReason = true, false, 0, 0, nil
+    manualBuild, manualPending = false, false
     professionRetry = {}
     lastKey, lastRecipe, lastProgress, lastTotal = nil, nil, 0, 0
 end
 
 local function reconcile()
+    local indexBuild, clientBuild = ns.API.GetRecipeIndexBuild()
     local known, complete = ns.API.GetProfessions()
     professions = type(known) == "table" and known or {}
-    local unscanned = ns.Catalogue.MissingProfessions()
+    local unscanned = ns.Catalogue.MissingProfessions(true, professions)
     local wanted = {}
     for _, entry in ipairs(unscanned or {}) do wanted[entry.key] = true end
     missing, total, done = {}, #professions, 0
@@ -72,9 +75,9 @@ local function reconcile()
         end
     end
     if current and not active then current = nil end
-    state.complete = complete == true and #missing == 0
-    -- An unavailable skill list cannot certify an empty installation.
-    if complete ~= true then state.complete = false end
+    manualBuild = clientBuild ~= nil and indexBuild == nil
+    manualPending = manualBuild and (complete ~= true or #missing > 0)
+    state.complete = indexBuild ~= nil and complete == true and #missing == 0
     dirty = false
     return complete == true
 end
@@ -97,16 +100,29 @@ function Bootstrap.IsPending()
     return state.complete ~= true
 end
 
+local function missingNames()
+    local names = {}
+    for _, entry in ipairs(missing) do names[#names + 1] = text(entry.name) or ns.API.ProfessionName(entry.key) end
+    return table.concat(names, ", ")
+end
+
+function Bootstrap.ManualStatusText()
+    ensureState()
+    if not manualBuild then return nil end
+    if #missing == 0 then return L.CATALOG_MANUAL_BUILD end
+    return L.CATALOG_MANUAL_BUILD .. " " .. L.CATALOG_MANUAL_OPEN:format(missingNames())
+end
+
 function Bootstrap.StatusText()
     ensureState()
     if state.complete then return nil end
+    if manualBuild then return Bootstrap.ManualStatusText() end
     if waiting then
-        local names = {}
-        for _, entry in ipairs(missing) do names[#names + 1] = text(entry.name) or ns.API.ProfessionName(entry.key) end
+        local names = missingNames()
         if lastReason == L.CATALOG_VERIFY_HELP then
-            return L.CATALOG_OPEN_PROFESSIONS .. " " .. table.concat(names, ", ")
+            return L.CATALOG_OPEN_PROFESSIONS .. " " .. names
         end
-        return L.INITIALIZATION_WAITING:format(#names > 0 and table.concat(names, ", ") or L.LOADING_PROFESSION)
+        return L.INITIALIZATION_WAITING:format(names ~= "" and names or L.LOADING_PROFESSION)
     end
     return L.INITIALIZING_RECIPES:format(done, total)
 end
@@ -117,6 +133,7 @@ function Bootstrap.GetState()
     local workDone = current and (current.phase == "verify"
         and (current.total + (current.verifyCursor or 1) - 1) or (current.progress or 0)) or 0
     return {complete = state.complete, done = done, total = total, waiting = waiting,
+        manual = manualBuild, manualPending = manualPending,
         workDone = workDone, workTotal = workTotal,
         professionKey = current and current.professionKey or lastKey,
         recipeID = current and current.ids and current.ids[current.cursor] or lastRecipe,
@@ -143,12 +160,22 @@ end
 function Bootstrap.Tick(time)
     ensureState()
     if state.complete and not dirty then return end
-    if busy() then return end
     time = type(time) == "number" and time or clock()
-    if time < nextStepAt then return end
+    if time < nextStepAt or busy() then return end
     nextStepAt = time + INTERVAL
     local previouslyComplete, previousDone = state.complete, done
+    local previousManual, previousPending, previousTotal = manualBuild, manualPending, total
     local completeList = reconcile()
+    if manualBuild then
+        current, waiting, lastReason = nil, false, nil
+        -- Wake on native reads and changes to known professions. Retry only
+        -- while the game still owes us the character's profession list.
+        nextStepAt = completeList and math.huge or time + RETRY
+        if not previousManual or previousPending ~= manualPending or previousDone ~= done or previousTotal ~= total then
+            refresh()
+        end
+        return
+    end
     if state.complete then
         waiting, lastReason, current = false, nil, nil
         if not previouslyComplete or previousDone ~= done then refresh() end
