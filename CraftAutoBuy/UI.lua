@@ -160,6 +160,23 @@ local function itemIcon(itemID)
     return itemID and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID) or QUESTION_MARK
 end
 
+local function renderOutput(recipe)
+    local output = widgets.output
+    output:SetShown(recipe ~= nil)
+    output.itemID = recipe and recipe.outputItemID
+    output.Icon:SetTexture(itemIcon(output.itemID))
+    local minimum = recipe and recipe.outputCount or 1
+    local maximum = recipe and recipe.outputCountMax or minimum
+    local text = ""
+    if maximum > minimum then
+        text = minimum .. "-" .. maximum
+    elseif minimum > 1 then
+        text = tostring(minimum)
+    end
+    if output.Count then output.Count:SetText(text) end
+    if output.CountShadow then output.CountShadow:SetShown(text ~= "") end
+end
+
 local function moneyText(value)
     local copper = math.max(0, math.floor(value or 0))
     return L.MONEY_AMOUNT:format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
@@ -641,8 +658,6 @@ function UI.Install()
     widgets.output:SetPoint("TOPLEFT", detail, "TOPLEFT", 18, -17)
     widgets.output.Icon = widgets.output.Icon or widgets.output.icon
     if not widgets.output.Icon then widgets.output.Icon = texture(widgets.output, nil, "ARTWORK") end
-    if widgets.output.Count then widgets.output.Count:Hide() end
-    if widgets.output.CountShadow then widgets.output.CountShadow:Hide() end
     widgets.output:SetScript("OnEnter", itemTooltip)
     widgets.output:SetScript("OnLeave", tooltipHide)
     widgets.output:SetScript("OnClick", function() end)
@@ -1223,9 +1238,7 @@ function UI.Render()
     widgets.recipeName:SetText(recipe and recipe.name or L.CATALOG_SELECT)
     if selectionRestored and not job and recipe then saveSelection(id, key) end
     widgets.profession:SetText(recipe and professionName or "")
-    widgets.output:SetShown(recipe ~= nil)
-    widgets.output.itemID = recipe and recipe.outputItemID
-    widgets.output.Icon:SetTexture(itemIcon(widgets.output.itemID))
+    renderOutput(recipe)
     detailBackground(key)
     local count, crafts = ns.maxCrafts or 0, job and job.remaining or ns.quantity or 1
     if not widgets.quantity:HasFocus() then widgets.quantity:SetText(tostring(crafts)) end

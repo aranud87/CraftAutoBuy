@@ -75,6 +75,9 @@ local function copyRecipe(id, source, key)
             or L.RECIPE_FALLBACK:format(id), professionKey = key, learned = true, supported = true,
         outputItemID = source.outputItemID, outputCount = source.outputCount,
         canCreateMultiple = source.canCreateMultiple ~= false, reagents = {}}
+    if nonnegativeInteger(source.outputCountMax) and source.outputCountMax >= recipe.outputCount then
+        recipe.outputCountMax = source.outputCountMax
+    end
     -- Schema-one caches without progression fields remain valid. Preserve false
     -- and zero; never derive a skill gain from the number of items produced.
     if type(source.canSkillUp) == "boolean" and not (issecretvalue and issecretvalue(source.canSkillUp)) then
