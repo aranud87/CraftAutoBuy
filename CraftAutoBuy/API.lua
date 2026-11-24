@@ -431,6 +431,9 @@ local function readRecipe(recipeID, info, professionKey, suppliedSchematic)
     end
     recipe.outputCount = schematic.quantityMin
     if not positiveInteger(recipe.outputCount) then return nil, L.RECIPE_YIELD_UNAVAILABLE end
+    if positiveInteger(schematic.quantityMax) and schematic.quantityMax >= recipe.outputCount then
+        recipe.outputCountMax = schematic.quantityMax
+    end
     return readRecipeReagents(recipe, schematic.reagentSlotSchematics)
 end
 

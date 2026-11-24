@@ -3,7 +3,7 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Version **1.4.0**.
+Version **1.4.1**.
 
 Recipe loading runs in the background on verified Forever builds. After a game
 update awaiting verification, saved recipes remain available. Open the
@@ -14,6 +14,7 @@ a selected recipe from its CAB tab. Clicking a recipe can open its profession.
 At a vendor, choose whether to use your bank stock and check the quantities and
 price before buying.
 
+In the CAB tab, the recipe icon shows how many items one craft produces when it makes more than one. Recipes with a variable yield show a range.
 **Craft × N** shows how many executions the next click will request. For
 intermediate recipes, the tooltip names the recipe and the number of crafts in the next batch.
 In the CAB tab, **Max** fills in the planned quantity, up to **1,000 crafts**
@@ -60,7 +61,7 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version **1.4.0**.
+dans **World of Warcraft: Forever**. Version **1.4.1**.
 
 Les recettes se chargent en arrière-plan sur les builds Forever vérifiés.
 Après une mise à jour du jeu en attente de vérification, les recettes
@@ -72,6 +73,7 @@ d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son
 métier. Chez le marchand, choisissez si le devis tient compte de la banque
 et vérifiez les quantités et le prix avant l’achat.
 
+Dans l’onglet CAB, l’icône de la recette affiche le nombre d’objets produits par fabrication quand il dépasse un. Si la quantité varie, l’icône indique une fourchette.
 Le bouton **Créer × N** affiche le nombre de fabrications du prochain clic.
 Pour un intermédiaire, l’infobulle indique la recette et le nombre de fabrications du prochain lot.
 Dans l’onglet CAB, **Max** remplit la quantité prévue, jusqu’à **1 000 fabrications**

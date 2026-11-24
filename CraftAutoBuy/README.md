@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version 1.4.0 pour WoW Forever.**
+**Version 1.4.1 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -21,6 +21,8 @@ quantité entre l’affichage et le clic demande une nouvelle validation.
 Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Sous le nom du métier, sa fiche indique la recharge qui suit une fabrication, avec la durée que donne le jeu. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si tu consultes un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. CAB retient ces recharges pour ce personnage, y compris après un `/reload` ou une reconnexion. Une recharge qu’il n’a pas notée (lancée sans lui, partagée avec une autre recette, ou perdue lors d’un arrêt brutal du jeu) n’est connue qu’une fois son métier ouvert : ouvre-le avant de te fier à **Max** ou au devis d’achat.
 
 **[Télécharger et mettre à jour CraftAutoBuy sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
+
+Dans l’onglet CAB, l’icône du thé de dorépine affiche **4** pour les quatre thés produits par fabrication. Les recettes à rendement variable affichent une fourchette.
 
 Le champ de quantité définit l’objectif final du projet. Le bouton
 **Créer × N** indique la taille du lot qui partira au prochain clic.
