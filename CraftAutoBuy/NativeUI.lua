@@ -171,24 +171,39 @@ local function recipeCount(id)
     return current.counts[id], current.bankMessages[id], current.needsBank[id] == true
 end
 
+local function projectionBatch(id, key)
+    if ns.job then
+        if ns.job.recipeID == id and ns.job.professionKey == key then return ns.job.remaining, ns.quote end
+        return
+    end
+    local crafts = ns.NativeCraft and ns.NativeCraft.GetQuantity(id)
+    if crafts then return crafts, ns.NativeCraft.GetQuote(id) end
+    -- When CAB restores Blizzard's controls, the catalogue can still hold the
+    -- last batch. Read the quantity on the recipe being displayed.
+    local page = ProfessionsFrame and ProfessionsFrame.CraftingPage
+    local input = page and page.CreateMultipleInputBox
+    if input then
+        local value = input:IsShown() and input:GetValue()
+        if type(value) == "number" and not (issecretvalue and issecretvalue(value)) and value >= 1 and value < math.huge then
+            return math.min(LIMIT, math.floor(value))
+        end
+        return 1
+    end
+    if ns.selectedID == id then return ns.quantity, ns.quote end
+end
+
 local function projection(id)
     local current = snapshot()
     if not current or not current.recipes[id] or current.recipes[id].hasOptionalSlots then return nil end
-    if current.projections[id] == nil then
-        local crafts, quote
-        if ns.job and ns.job.recipeID == id and ns.job.professionKey == current.key then
-            crafts = ns.job.remaining
-            quote = ns.quote
-        elseif not ns.job then
-            crafts = ns.NativeCraft and ns.NativeCraft.GetQuantity(id)
-            quote = crafts and ns.NativeCraft.GetQuote(id)
-            if not crafts and ns.selectedID == id then crafts, quote = ns.quantity, ns.quote end
-        end
+    local crafts, quote = projectionBatch(id, current.key)
+    local cached = current.projections[id]
+    if not cached or cached.crafts ~= crafts then
         local inventory, bank = recipeStock(current, id)
-        current.projections[id] = NativeUI.Project(id, current.recipes, inventory, ns.vendorItems, crafts,
-            quote and quote.purchaseQuantities, bank, current.limits) or false
+        cached = {crafts = crafts, data = NativeUI.Project(id, current.recipes, inventory, ns.vendorItems, crafts,
+            quote and quote.purchaseQuantities, bank, current.limits)}
+        current.projections[id] = cached
     end
-    return current.projections[id] or nil
+    return cached.data
 end
 
 local function rowRecipeID(row)
@@ -773,6 +788,16 @@ function NativeUI.Install()
             hooksecurefunc(form, "Init", function(self) updateSlots(self) end)
         end
         if type(form.UpdateAllSlots) == "function" then hooksecurefunc(form, "UpdateAllSlots", updateSlots) end
+        local input = page.CreateMultipleInputBox
+        if input and type(input.SetValue) == "function" then
+            hooksecurefunc(input, "SetValue", function()
+                -- Blizzard can reset the spinner after the final bag update.
+                if not context or ns.job or not input:IsShown() then return end
+                local info = form.GetRecipeInfo and form:GetRecipeInfo()
+                local cached = info and context.projections[info.recipeID]
+                if cached and cached.crafts ~= projectionBatch(info.recipeID, context.key) then updateSlots(form) end
+            end)
+        end
     end
     if not installedScrollBoxes[scroll] then
         installedScrollBoxes[scroll] = true
