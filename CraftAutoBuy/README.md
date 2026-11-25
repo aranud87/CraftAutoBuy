@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version 1.4.1 pour WoW Forever.**
+**Version 1.4.2 pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -188,7 +188,7 @@ ce catalogue. La banque est indépendante : l'initialisation ne lit pas une banq
 fermée et ne remplace pas la première visite nécessaire pour en mémoriser le
 contenu.
 
-La lecture en arrière-plan est prévue pour **Forever 1.60.1, build 70938**.
+La lecture en arrière-plan fonctionne sur **Forever 1.60.1**, builds **70938**, **71037** et **71091**.
 Sur un autre build, ouvre les métiers normalement pour remplir le catalogue.
 L'ouverture normale d'un métier remplace ensuite les données lues en fond par
 son catalogue natif complet.
@@ -198,7 +198,9 @@ son catalogue natif complet.
 Dans les composants, la première quantité est le stock réellement présent en
 sacs ; le nombre après `/` reste le besoin d'une fabrication. Les sources sont
 séparées : **banque en bleu**, **marchand en jaune**, avec le besoin **À acheter**
-pour le lot sélectionné. Les recettes de la liste conservent leur compteur de
+pour le lot sélectionné. Dans la fenêtre du métier, si le jeu ramène la quantité
+à une fabrication après un lot, **À acheter** indique aussitôt ce qui manque
+pour cette fabrication. Les recettes de la liste conservent leur compteur de
 fabrications possibles. Les quantités ne sont plus mélangées entre parenthèses.
 
 Tu peux acheter les fournitures PNJ manquantes **avant** de récupérer les autres
@@ -446,7 +448,7 @@ taille, la position, le verrouillage et l’opacité par personnage. Le
 catalogue peut afficher les transmutations apprises avant l’ouverture de
 l’Alchimie. **Inconnu** indique qu’aucune disponibilité n’a encore été
 confirmée. Ouvre ton Alchimie pour la vérifier. Après la fabrication d’une
-barre d’arcanite sur le build Forever 71037, les autres recettes apprises
+barre d’arcanite sur les builds Forever 71037 et 71091, les autres recettes apprises
 qui partagent sa recharge affichent le même décompte. Fer en Or et Mithril en
 Vrai-argent ont chacun leur propre minuteur.
 

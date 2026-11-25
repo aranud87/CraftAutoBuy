@@ -9,7 +9,7 @@ ns.RecipeIndex = {
     schema = 1, interface = 16001, build = 70938,
     version = "1.60.1.70938",
     -- These client builds use byte-identical source exports (verified by SHA256).
-    compatibleBuilds = { [71037] = true },
+    compatibleBuilds = { [71037] = true, [71091] = true },
     professions = {
         [129] = {
             3275, 3276, 3277, 3278, 7928, 7929, 7934, 7935, 10840, 10841, 18629, 18630,
