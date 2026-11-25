@@ -89,6 +89,7 @@ ns.Locale.RegisterLocale("deDE", {
     CATALOG_SELECT = "Wähle ein Rezept aus der Liste.",
     CATALOG_OPEN_PROFESSIONS = "Öffne jeden Beruf einmal, um diesen Katalog zu vervollständigen.",
     CATALOG_MANUAL_BUILD = "Das automatische Laden von Rezepten für diese WoW-Version steht noch zur Prüfung aus. Gespeicherte Rezepte bleiben verfügbar.",
+    CATALOG_PROVISIONAL_BUILD = "Build %s weicht vom geprüften Build ab. Der Katalog ist vorläufig. Öffne diese Berufe einmal, um auch neue Rezepte zu erfassen: %s.",
     CATALOG_MANUAL_OPEN = "Öffne diese Berufe, um ihre Rezepte zu aktualisieren: %s.",
     CATALOG_BUY_HELP = "Die Kaufschaltfläche kauft fehlende Reagenzien, wenn der automatische Einkauf aktiviert und der Händler geöffnet ist. Klicke nach Erhalt erneut, um herzustellen. Jedes Zwischenrezept benötigt ebenfalls einen neuen Klick.",
     CATALOG_VERIFY = "Beruf laden",

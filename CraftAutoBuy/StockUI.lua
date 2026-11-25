@@ -643,7 +643,7 @@ local function renderNow(searchOnly)
     widgets.inventory.frame:SetShown(state.inventory)
     local bankOpen = ns.Stock and ns.Stock.IsBankOpen and ns.Stock.IsBankOpen()
     local initializing = state.content ~= "all" and ns.Bootstrap and ns.Bootstrap.StatusText() or nil
-    local manual = initializing and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
+    local manual = state.content ~= "all" and ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
     local empty = initializing and not manual and L.STOCK_INITIALIZING or nil
     local bagEmpty = data.bagsKnown == false and L.STOCK_BAGS_LOADING or (search ~= "" and L.STOCK_NO_RESULTS
         or empty or (state.content == "all" and L.STOCK_EMPTY_ALL_BAGS or L.STOCK_EMPTY_BAGS))
@@ -673,7 +673,7 @@ local function renderNow(searchOnly)
     if state.extensionsExpanded then renderExtensions(data, state) end
     local names = {}
     for _, profession in ipairs(data.missing or {}) do names[#names + 1] = profession.name end
-    widgets.missing:SetText(data.bagsKnown == false and L.STOCK_BAGS_LOADING or initializing or (state.content ~= "all" and #names > 0
+    widgets.missing:SetText(manual or (data.bagsKnown == false and L.STOCK_BAGS_LOADING) or initializing or (state.content ~= "all" and #names > 0
         and L.STOCK_MISSING_PROFESSIONS:format(table.concat(names, ", ")) or ""))
 end
 

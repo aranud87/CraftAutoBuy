@@ -89,6 +89,7 @@ ns.Locale.RegisterLocale("enUS", {
     CATALOG_SELECT = "Select a recipe from the list.",
     CATALOG_OPEN_PROFESSIONS = "Open each profession once to complete this catalog.",
     CATALOG_MANUAL_BUILD = "Automatic recipe loading is awaiting verification for this version of WoW. Saved recipes are still available.",
+    CATALOG_PROVISIONAL_BUILD = "Build %s differs from the verified build. The catalog is provisional. Open these professions once to include any new recipes: %s.",
     CATALOG_MANUAL_OPEN = "Open these professions to update their recipes: %s.",
     CATALOG_BUY_HELP = "The purchase button buys missing reagents if automatic buying is enabled and the merchant is open. Once they arrive, click again to craft. Each intermediate recipe also requires another click.",
     CATALOG_VERIFY = "Load profession",

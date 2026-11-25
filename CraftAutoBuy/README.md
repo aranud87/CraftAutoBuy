@@ -1,6 +1,6 @@
 # CraftAutoBuy
 
-**Version 1.4.2 pour WoW Forever.**
+**Version 1.5.0-beta pour WoW Forever.**
 
 Lorsque deux modes d’achat sont possibles, **Acheter** ouvre leur devis :
 **Acheter sans utiliser la banque** tient compte des sacs seuls ;
@@ -188,10 +188,13 @@ ce catalogue. La banque est indépendante : l'initialisation ne lit pas une banq
 fermée et ne remplace pas la première visite nécessaire pour en mémoriser le
 contenu.
 
-La lecture en arrière-plan fonctionne sur **Forever 1.60.1**, builds **70938**, **71037** et **71091**.
-Sur un autre build, ouvre les métiers normalement pour remplir le catalogue.
-L'ouverture normale d'un métier remplace ensuite les données lues en fond par
-son catalogue natif complet.
+La lecture complète en arrière-plan est vérifiée sur **Forever 1.60.1**, builds
+**70938**, **71037** et **71091**. Sur un build plus récent de la même version
+et de la même interface, CAB peut déjà retrouver une partie de tes recettes,
+métiers fermés. Le rappel indique le numéro du build et les métiers dont le
+catalogue est encore provisoire. Ouvre une fois chaque métier indiqué. CAB lit
+alors toute sa liste, y compris les recettes ajoutées par la mise à jour, sans
+que tu aies à les sélectionner une par une.
 
 ## Acheter puis fabriquer
 
@@ -447,7 +450,8 @@ la même fenêtre et sont séparés par un espace transparent. CAB mémorise la
 taille, la position, le verrouillage et l’opacité par personnage. Le
 catalogue peut afficher les transmutations apprises avant l’ouverture de
 l’Alchimie. **Inconnu** indique qu’aucune disponibilité n’a encore été
-confirmée. Ouvre ton Alchimie pour la vérifier. Après la fabrication d’une
+confirmée. Ouvre ton Alchimie pour la vérifier. Le partage des recharges entre
+transmutations est vérifié séparément pour chaque build. Après la fabrication d’une
 barre d’arcanite sur les builds Forever 71037 et 71091, les autres recettes apprises
 qui partagent sa recharge affichent le même décompte. Fer en Or et Mithril en
 Vrai-argent ont chacun leur propre minuteur.

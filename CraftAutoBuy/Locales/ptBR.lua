@@ -89,6 +89,7 @@ ns.Locale.RegisterLocale("ptBR", {
     CATALOG_SELECT = "Selecione uma receita na lista.",
     CATALOG_OPEN_PROFESSIONS = "Abra cada profissão uma vez para completar este catálogo.",
     CATALOG_MANUAL_BUILD = "O carregamento automático de receitas aguarda verificação para esta versão do WoW. As receitas salvas continuam disponíveis.",
+    CATALOG_PROVISIONAL_BUILD = "A versão %s é diferente da versão verificada. O catálogo é provisório. Abra estas profissões uma vez para incluir novas receitas: %s.",
     CATALOG_MANUAL_OPEN = "Abra estas profissões para atualizar suas receitas: %s.",
     CATALOG_BUY_HELP = "O botão de compra permite comprar os reagentes que faltam se a compra automática estiver ativada e o vendedor estiver aberto. Depois de recebê-los, clique novamente para criar. Cada receita intermediária também exige um novo clique.",
     CATALOG_VERIFY = "Carregar profissão",

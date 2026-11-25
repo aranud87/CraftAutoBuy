@@ -494,7 +494,7 @@ function ns.Scan(preserveSelection, target)
         else
             partialScan = nil
             scanAttempts, partialAttempts = 0, 0
-            if ns.Catalogue then ns.Catalogue.Record(ns.professionKey, recipes) end
+            if ns.Catalogue then ns.Catalogue.Record(ns.professionKey, recipes, nil, complete == true) end
         end
         if ns.Bootstrap then ns.Bootstrap.Wake() end
         -- A known catalogue may use the base profession while the freshly
@@ -1490,6 +1490,10 @@ function ns.OnEvent(event, ...)
         ns.Refresh()
     elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DETAILS_UPDATE"
         or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" or event == "NEW_RECIPE_LEARNED" then
+        if event == "NEW_RECIPE_LEARNED" and ns.Bootstrap and ns.Bootstrap.OnRecipeLearned then
+            local recipeID, _, baseRecipeID = ...
+            ns.Bootstrap.OnRecipeLearned(recipeID, baseRecipeID)
+        end
         if event == "TRADE_SKILL_SHOW" then professionClosed = false end
         local closedSource = event == "TRADE_SKILL_DATA_SOURCE_CHANGED" and professionClosed and not ns.API.GetProfessionKey()
         if (event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED")

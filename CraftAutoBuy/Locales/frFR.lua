@@ -92,6 +92,7 @@ ns.Locale.RegisterLocale("frFR", {
     CATALOG_SELECT = "Sélectionne une recette dans la liste.",
     CATALOG_OPEN_PROFESSIONS = "Ouvre chaque métier une fois pour compléter ce catalogue.",
     CATALOG_MANUAL_BUILD = "La lecture automatique des recettes reste à vérifier pour cette version de WoW. Les recettes mémorisées restent disponibles.",
+    CATALOG_PROVISIONAL_BUILD = "Ton client utilise le build %s, différent du build vérifié. Le catalogue est provisoire. Pour y inclure les nouvelles recettes, nous te conseillons d’ouvrir une fois chaque métier indiqué : %s.",
     CATALOG_MANUAL_OPEN = "Ouvre ces métiers pour actualiser leurs recettes : %s.",
     CATALOG_BUY_HELP = "Le bouton d'achat permet d'acheter les composants manquants si l'achat automatique est activé et le vendeur ouvert. Après réception, clique de nouveau pour fabriquer. Chaque recette intermédiaire demande aussi un nouveau clic.",
     CATALOG_VERIFY = "Charger le métier",

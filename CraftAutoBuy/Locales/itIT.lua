@@ -89,6 +89,7 @@ ns.Locale.RegisterLocale("itIT", {
     CATALOG_SELECT = "Seleziona una ricetta nell'elenco.",
     CATALOG_OPEN_PROFESSIONS = "Apri ogni professione una volta per completare questo catalogo.",
     CATALOG_MANUAL_BUILD = "Il caricamento automatico delle ricette è in attesa di verifica per questa versione di WoW. Le ricette salvate restano disponibili.",
+    CATALOG_PROVISIONAL_BUILD = "La build %s è diversa da quella verificata. Il catalogo è provvisorio. Apri una volta queste professioni per includere eventuali nuove ricette: %s.",
     CATALOG_MANUAL_OPEN = "Apri queste professioni per aggiornare le loro ricette: %s.",
     CATALOG_BUY_HELP = "Il pulsante di acquisto compra i reagenti mancanti se l'acquisto automatico è attivo e il mercante è aperto. Dopo averli ricevuti, clicca di nuovo per creare. Anche ogni ricetta intermedia richiede un nuovo clic.",
     CATALOG_VERIFY = "Carica professione",

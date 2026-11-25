@@ -7,6 +7,7 @@ ns.Catalogue = Catalogue
 -- Counts are rebuilt from the current bags only when invalidated. Each recipe
 -- uses its own profession's producers; cross-profession chains are not assumed.
 local records, loadedDB, rows = {}, nil, {}
+local snapshots, provisional = {}, {}
 local displayedLimits = {}
 local EMPTY = {}
 -- Native favourites, by spell ID, outside the recipe catalogue: a catalogue
@@ -247,6 +248,43 @@ local function parentKey(key, entry)
     return key
 end
 
+local function currentSnapshot(entry, indexBuild, build, interface)
+    if entry.background then return indexBuild ~= nil and entry.backgroundBuild == indexBuild end
+    return build ~= nil and entry.nativeBuild == build and entry.nativeInterface == interface
+        and (next(entry.recipes) ~= nil or (entry.learnedCount or 0) > 0 or entry.nativeReadComplete == true)
+end
+
+-- Store partial reads separately. An older full record can contain a learned
+-- recipe outside this index. Keep it intact until the next authoritative read.
+local function rebuildVisibleRecords()
+    records = snapshots
+    if not next(provisional) then return end
+    records = {}
+    for key, entry in pairs(snapshots) do records[key] = entry end
+    for parent, preview in pairs(provisional) do
+        local combined = {}
+        for key, entry in pairs(snapshots) do
+            if parentKey(key, entry) == parent then
+                records[key] = nil
+                for id, old in pairs(entry.recipes) do
+                    if not preview.excluded[id] then
+                        local recipe = {}
+                        for field, value in pairs(old) do recipe[field] = value end
+                        recipe.professionKey = parent
+                        combined[id] = recipe
+                    end
+                end
+            end
+        end
+        for id, recipe in pairs(preview.recipes) do
+            local old = combined[id]
+            if old and not recipe.categoryPath then recipe.categoryPath = old.categoryPath end
+            combined[id] = recipe
+        end
+        records[parent] = {parentKey = parent, name = preview.name, recipes = combined, background = true}
+    end
+end
+
 -- Whether a catalogue written by 1.3.x showed the Favorites section: 1.3.x
 -- listed it as soon as one of its recipes was a favourite.
 local function showedFavorites(saved)
@@ -287,7 +325,7 @@ function Catalogue.Load()
         and saved.clientLocale == clientLocale
         and (not guid or not saved.character or saved.character == guid)
     local known, complete = ns.API.GetProfessions()
-    local mayPrune = ns.API.GetRecipeIndexBuild()
+    local mayPrune, clientBuild, interface = ns.API.GetRecipeIndexBuild()
     local knownKeys = {}
     for _, profession in ipairs(known) do knownKeys[profession.key] = true end
     records = {}
@@ -308,6 +346,7 @@ function Catalogue.Load()
                         backgroundBuild = integer(entry.backgroundBuild) and entry.backgroundBuild or nil,
                         nativeBuild = integer(entry.nativeBuild) and entry.nativeBuild or nil,
                         nativeInterface = integer(entry.nativeInterface) and entry.nativeInterface or nil,
+                        nativeReadComplete = entry.nativeReadComplete == true or nil,
                         version = type(entry.version) == "string" and entry.version or "unknown",
                         name = type(entry.name) == "string" and entry.name ~= "" and entry.name or ns.API.ProfessionName(key),
                         recipes = recipes}
@@ -315,8 +354,33 @@ function Catalogue.Load()
             end
         end
     end
+    snapshots, provisional = records, {}
+    if valid and type(saved.provisional) == "table" then
+        for key, preview in pairs(saved.provisional) do
+            if integer(key) and type(preview) == "table" and integer(preview.clientBuild)
+                and integer(preview.interface) and integer(preview.indexBuild)
+                and not (mayPrune and complete and #known > 0 and not knownKeys[key]) then
+                local recipes = copyRecipes(preview.recipes, key)
+                if recipes then
+                    local excluded = {}
+                    for id, absent in pairs(type(preview.excluded) == "table" and preview.excluded or EMPTY) do
+                        if integer(id) and absent == true then excluded[id] = true end
+                    end
+                    provisional[key] = {clientBuild = preview.clientBuild, interface = preview.interface,
+                        indexBuild = preview.indexBuild, name = ns.API.ProfessionName(key),
+                        needsRescan = preview.needsRescan == true or nil,
+                        recipes = recipes, excluded = excluded}
+                end
+            end
+        end
+        for key, entry in pairs(snapshots) do
+            if currentSnapshot(entry, mayPrune, clientBuild, interface) then provisional[parentKey(key, entry)] = nil end
+        end
+    end
     CraftAutoBuyDB.catalogue = {schema = Catalogue.SCHEMA, clientLocale = clientLocale,
-        character = guid or (valid and saved.character or nil), favorites = FAVORITES_SCHEMA, professions = records}
+        character = guid or (valid and saved.character or nil), favorites = FAVORITES_SCHEMA,
+        professions = snapshots, provisional = provisional}
+    rebuildVisibleRecords()
     applyFavorites()
     loadedDB = CraftAutoBuyDB
     Catalogue.Invalidate()
@@ -327,9 +391,81 @@ local function ensureLoaded()
     if loadedDB ~= CraftAutoBuyDB or not loadedDB then Catalogue.Load() end
 end
 
+function Catalogue.HasProvisionalRead(key, clientBuild, interface, indexBuild)
+    ensureLoaded()
+    local read = provisional[key]
+    return read ~= nil and not read.needsRescan and read.clientBuild == clientBuild
+        and read.interface == interface and read.indexBuild == indexBuild
+end
+
+function Catalogue.InvalidateLearnedRecipe(recipeID, baseRecipeID)
+    local _, _, _, candidates = ns.API.GetRecipeIndexBuild()
+    if not candidates then return end
+    if (issecretvalue and issecretvalue(recipeID)) or not integer(recipeID) then recipeID = nil end
+    if (issecretvalue and issecretvalue(baseRecipeID)) or not integer(baseRecipeID) then baseRecipeID = nil end
+    if not recipeID and not baseRecipeID then return end
+    ensureLoaded()
+    local affected = {}
+    for parent, spells in pairs(ns.RecipeIndex.professions) do
+        for _, id in ipairs(type(spells) == "table" and spells or EMPTY) do
+            if id == recipeID or id == baseRecipeID then
+                affected[parent] = true
+                if provisional[parent] then provisional[parent].needsRescan = true end
+                break
+            end
+        end
+    end
+    return affected
+end
+
+function Catalogue.RecordProvisional(job, recipes)
+    ensureLoaded()
+    local _, build, interface, indexBuild = ns.API.GetRecipeIndexBuild()
+    local key = job.professionKey
+    if not job.provisional or not integer(indexBuild) or job.indexBuild ~= indexBuild
+        or job.clientBuild ~= build or job.interface ~= interface or not integer(key) then return false end
+    local copied = copyRecipes(recipes, key)
+    if not copied then return false end
+    -- If the spell book returned no usable evidence, a blank result at login
+    -- must not become a reusable preview for the rest of this build.
+    if job.total > 0 and not next(recipes) and not next(job.excluded or EMPTY) then return false end
+    local old = provisional[key]
+    local excluded = {}
+    local function explicitlyAbsent(id)
+        if job.excluded and job.excluded[id] then return true end
+        local recipe = recipes[id]
+        if recipe and recipe.supported == false then
+            -- An empty reagent list or a missing item ID can be temporary.
+            return recipe.reason ~= L.RECIPE_NO_VERIFIABLE_REAGENTS and recipe.reason ~= L.REQUIRED_REAGENT_UNSUPPORTED
+        end
+        return false
+    end
+    if old then
+        -- Missing data on this login is not evidence that an observed recipe
+        -- disappeared. Keep it until the client can confirm or reject it.
+        for id, recipe in pairs(old.recipes) do
+            if not copied[id] and not explicitlyAbsent(id) then copied[id] = recipe end
+        end
+    end
+    for other, entry in pairs(snapshots) do
+        if parentKey(other, entry) == key then
+            if currentSnapshot(entry, nil, build, interface) then return true end
+            for id in pairs(entry.recipes) do
+                if explicitlyAbsent(id) or (old and old.excluded[id] and not copied[id]) then excluded[id] = true end
+            end
+        end
+    end
+    provisional[key] = {clientBuild = build, interface = interface, indexBuild = indexBuild,
+        name = ns.API.ProfessionName(key), recipes = copied, excluded = excluded}
+    rebuildVisibleRecords()
+    applyFavorites()
+    Catalogue.Invalidate()
+    return true
+end
+
 -- Only call after a complete passive or native own-profession scan.
 -- Replacing the map removes forgotten recipes and old intermediate producers.
-function Catalogue.Record(key, recipes, background)
+function Catalogue.Record(key, recipes, background, nativeReadComplete)
     ensureLoaded()
     if not integer(key) then return false end
     local copied = copyRecipes(recipes, key)
@@ -376,7 +512,7 @@ function Catalogue.Record(key, recipes, background)
     -- A verified passive scan covers the entire parent. Replace older child
     -- snapshots only after that scan succeeds, keeping their native metadata.
     if background and key == parent then
-        for child, entry in pairs(records) do
+        for child, entry in pairs(snapshots) do
             if child ~= key and parentKey(child, entry) == key then
                 for id, old in pairs(entry.recipes) do
                     local recipe = copied[id]
@@ -385,7 +521,7 @@ function Catalogue.Record(key, recipes, background)
                         if recipe.categoryPath == nil then recipe.categoryPath = old.categoryPath end
                     end
                 end
-                records[child] = nil
+                snapshots[child] = nil
             end
         end
     end
@@ -397,17 +533,20 @@ function Catalogue.Record(key, recipes, background)
     end
     -- A first background read can use the base profession ID. A complete
     -- native child read is authoritative and must not be hidden by that cache.
-    if not background and parent ~= key and records[parent] and records[parent].background then
-        records[parent] = nil
+    if not background and parent ~= key and snapshots[parent] and snapshots[parent].background then
+        snapshots[parent] = nil
     end
-    records[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parent,
+    snapshots[key] = {schema = Catalogue.SCHEMA, version = addonVersion(), parentKey = parent,
         background = background == true,
         backgroundBuild = background and indexBuild or nil,
         nativeBuild = not background and build or nil, nativeInterface = not background and interface or nil,
+        nativeReadComplete = not background and nativeReadComplete == true or nil,
         learnedCount = learnedCount,
         name = ns.API.ProfessionName(key), recipes = copied}
     -- Remembered favourites reach the recipes as they enter the catalogue,
     -- and override an older parent or child copy of the same spell.
+    provisional[parent] = nil
+    rebuildVisibleRecords()
     applyFavorites()
     if favoritesRead and readCount > 0 then favorites.read[key], favorites.read[parent] = true, true end
     Catalogue.Invalidate()
@@ -419,6 +558,9 @@ function Catalogue.GetRecipes(key)
     -- A transient parent-only scan may have saved an empty map before the
     -- child skill line loaded. That marker must not hide a later child scan.
     if records[key] and next(records[key].recipes) then return records[key].recipes end
+    if snapshots[key] and provisional[parentKey(key, snapshots[key])] then
+        return records[parentKey(key, snapshots[key])].recipes
+    end
     -- Vendor discovery enumerates native parent IDs. Recipe selection and
     -- crafting keep their exact child ID; only this parent lookup aggregates.
     local found
@@ -444,13 +586,11 @@ function Catalogue.MissingProfessions(currentClient, professions)
     local scanned = {}
     local indexBuild, build, interface
     if currentClient then indexBuild, build, interface = ns.API.GetRecipeIndexBuild() end
-    for key, entry in pairs(records) do
+    for key, entry in pairs(currentClient and snapshots or records) do
         local hasRecipes = next(entry.recipes) or (entry.learnedCount or 0) > 0
         local verified
         if currentClient then
-            verified = (entry.background and indexBuild and entry.backgroundBuild == indexBuild)
-                or (not entry.background and hasRecipes and build and entry.nativeBuild == build
-                    and entry.nativeInterface == interface)
+            verified = currentSnapshot(entry, indexBuild, build, interface)
         else
             verified = hasRecipes or (entry.background and ns.RecipeIndex and entry.backgroundBuild == ns.RecipeIndex.build)
         end

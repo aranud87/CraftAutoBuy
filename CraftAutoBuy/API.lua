@@ -506,6 +506,15 @@ local function backgroundContext()
     return true
 end
 
+local function explicitProfessionParent(key)
+    local ok, info = call(C_TradeSkillUI.GetProfessionInfoBySkillLineID, key)
+    if ok and type(info) == "table" and not (issecretvalue and issecretvalue(info))
+        and positiveInteger(info.professionID) and info.professionID == key
+        and positiveInteger(info.parentProfessionID) and info.parentProfessionID ~= key then
+        return info.parentProfessionID
+    end
+end
+
 local function backgroundKnownProfession(key)
     if not positiveInteger(key) then return nil, L.PROFESSION_NOT_KNOWN end
     local professions, complete = API.GetProfessions()
@@ -515,41 +524,45 @@ local function backgroundKnownProfession(key)
     end
     -- Only an explicitly addressed relation may resolve a cold child key. A
     -- linked or unrelated active source must never supply its parent instead.
-    local ok, info = call(C_TradeSkillUI.GetProfessionInfoBySkillLineID, key)
-    if ok and type(info) == "table" and not (issecretvalue and issecretvalue(info))
-        and positiveInteger(info.professionID) and info.professionID == key and positiveInteger(info.parentProfessionID) then
+    local parent = explicitProfessionParent(key)
+    if parent then
         for _, profession in ipairs(professions) do
-            if profession.key == info.parentProfessionID then return profession.key end
+            if profession.key == parent then return parent end
         end
     end
     return nil, L.PROFESSION_NOT_KNOWN
 end
 
--- The first result identifies the verified data set. The other results
--- identify the running client even when its data set is unverified.
+-- A newer build on the same Forever patch may use the fourth result as
+-- candidates only. Only the first result certifies a complete data set.
 function API.GetRecipeIndexBuild()
-    local ok, _, build, _, interface = call(GetBuildInfo)
+    local ok, version, build, _, interface = call(GetBuildInfo)
     if not ok or (issecretvalue and (issecretvalue(build) or issecretvalue(interface))) then return nil end
     if type(build) == "string" and build:match("^%d+$") then build = tonumber(build) end
     if not positiveInteger(build) or not positiveInteger(interface) then return nil end
     local index = ns.RecipeIndex
     local compatible = type(index) == "table" and index.compatibleBuilds
     if type(index) ~= "table" or index.schema ~= 1 or type(index.professions) ~= "table"
-        or not positiveInteger(index.build) or interface ~= index.interface
-        or (build ~= index.build and (type(compatible) ~= "table" or compatible[build] ~= true)) then
+        or not positiveInteger(index.build) or interface ~= index.interface then
         return nil, build, interface
     end
-    return index.build, build, interface
+    if build == index.build or (type(compatible) == "table" and compatible[build] == true) then
+        return index.build, build, interface
+    end
+    if type(version) ~= "string" or (issecretvalue and issecretvalue(version))
+        or not version:match("^%d+%.%d+%.%d+$") or index.version ~= version .. "." .. index.build
+        or (compatible ~= nil and type(compatible) ~= "table") then
+        return nil, build, interface
+    end
+    local latest = index.build
+    for verifiedBuild, verified in pairs(compatible or {}) do
+        if not positiveInteger(verifiedBuild) or verified ~= true then return nil, build, interface end
+        latest = math.max(latest, verifiedBuild)
+    end
+    return nil, build, interface, build > latest and index.build or nil
 end
 
-local function backgroundSpellIDs(key)
-    -- Forever exposes schematics and IsSpellKnown before a profession opens,
-    -- but its contextual recipe list is empty and GetRecipeInfo.learned is
-    -- false at cold login. Enumerate the pinned client-data index instead.
-    local indexBuild, clientBuild = API.GetRecipeIndexBuild()
-    if not clientBuild then return nil, nil, L.RECIPES_LOADING end
-    if not indexBuild then return nil, nil, L.CATALOG_VERIFY_HELP, true end
-    local spells = ns.RecipeIndex.professions[key]
+local function backgroundSpellIDs(spells)
     local total = arraySize(spells)
     if total == nil then return nil, nil, L.CATALOG_VERIFY_HELP, true end
     local ids, seen = {}, {}
@@ -558,7 +571,7 @@ local function backgroundSpellIDs(key)
         if not positiveInteger(id) or seen[id] then return nil, nil, L.RECIPES_LOADING end
         ids[index], seen[id] = id, true
     end
-    return ids, seen, nil, nil, indexBuild
+    return ids, seen
 end
 
 function API.BeginBackgroundScan(key)
@@ -570,14 +583,63 @@ function API.BeginBackgroundScan(key)
         or not Enum or not Enum.SpellBookSpellBank or Enum.SpellBookSpellBank.Player == nil then
         return nil, L.PROFESSION_API_UNAVAILABLE
     end
-    local ids, idSet, failure, manual, indexBuild = backgroundSpellIDs(parent)
-    if not ids then return nil, failure, manual end
-    return {professionKey = key, parentProfessionKey = parent, indexBuild = indexBuild, ids = ids,
+    local verified, clientBuild, interface, candidates = API.GetRecipeIndexBuild()
+    if not clientBuild then return nil, L.RECIPES_LOADING end
+    if not verified and not candidates then return nil, L.CATALOG_VERIFY_HELP, true end
+    local index = ns.RecipeIndex
+    local ids, idSet, failure, manual = backgroundSpellIDs(index.professions[parent])
+    if not ids then return nil, failure, manual or (candidates and true) end
+    return {professionKey = key, parentProfessionKey = parent, index = index, indexBuild = verified or candidates,
+        clientBuild = clientBuild, interface = interface, provisional = verified == nil, ids = ids,
+        excluded = candidates and {} or nil,
         idSet = idSet, cursor = 1, progress = 0, total = #ids, recipes = {}, known = {},
         phase = "read", verifyCursor = 1}
 end
 
+local function backgroundMembership(job, id)
+    if not job.provisional and type(C_TradeSkillUI.GetProfessionInfoByRecipeID) ~= "function" then return true end
+    local ok, profession = call(C_TradeSkillUI.GetProfessionInfoByRecipeID, id)
+    if not ok or (issecretvalue and issecretvalue(profession)) then return nil, L.LOADING_PROFESSION end
+    if profession == nil then
+        if job.provisional then return nil, L.LOADING_PROFESSION end
+        return true
+    end
+    if type(profession) ~= "table" or not nonnegativeInteger(profession.professionID)
+        or (issecretvalue and issecretvalue(profession.parentProfessionID))
+        or (profession.parentProfessionID ~= nil and not nonnegativeInteger(profession.parentProfessionID)) then
+        return nil, L.LOADING_PROFESSION
+    end
+    if job.provisional and profession.professionID == 0 then return nil, L.LOADING_PROFESSION end
+    local key = profession.professionID
+    local parent = positiveInteger(profession.parentProfessionID) and profession.parentProfessionID or key
+    if job.provisional and parent == key and key ~= job.parentProfessionKey then
+        -- A missing parent can mean a child skill line. An unresolved line
+        -- cannot disprove an older observation for this profession.
+        parent = explicitProfessionParent(key)
+        if not parent then
+            local roots, complete = API.GetProfessions()
+            if complete then
+                for _, root in ipairs(roots) do
+                    if root.key == key then parent = key; break end
+                end
+            end
+        end
+        if not parent then return nil, L.LOADING_PROFESSION end
+    end
+    if parent == 0 or parent == job.parentProfessionKey then return true end
+    if job.provisional then return nil, L.RECIPE_OTHER_PROFESSION, true end
+    -- A certified index can list a spell under two professions. The client
+    -- identifies which one actually owns this character's recipe.
+    local named = ns.RecipeIndex.professions[parent]
+    for _, candidate in ipairs(type(named) == "table" and named or {}) do
+        if candidate == id then return nil, L.RECIPE_OTHER_PROFESSION, true end
+    end
+    return nil, L.RECIPE_OTHER_PROFESSION
+end
+
 local function backgroundRecipe(job, id)
+    local belongs, why, otherProfession = backgroundMembership(job, id)
+    if not belongs then return nil, why, otherProfession end
     local info
     if type(C_TradeSkillUI.GetRecipeInfo) == "function" then
         local ok, value = call(C_TradeSkillUI.GetRecipeInfo, id)
@@ -604,34 +666,12 @@ local function backgroundRecipe(job, id)
             end
         end
     end
-    if type(C_TradeSkillUI.GetProfessionInfoByRecipeID) == "function" then
-        local ok, profession = call(C_TradeSkillUI.GetProfessionInfoByRecipeID, id)
-        if not ok then return nil, L.LOADING_PROFESSION end
-        if profession ~= nil then
-            if type(profession) ~= "table" or (issecretvalue and issecretvalue(profession))
-                or not nonnegativeInteger(profession.professionID)
-                or (profession.parentProfessionID ~= nil and not nonnegativeInteger(profession.parentProfessionID)) then
-                return nil, L.LOADING_PROFESSION
-            end
-            local parent = positiveInteger(profession.parentProfessionID) and profession.parentProfessionID or profession.professionID
-            if parent > 0 and parent ~= job.parentProfessionKey then
-                -- The index can list one spell under several professions. When
-                -- it also lists this one under the profession the client names,
-                -- the third result lets the scan skip this candidate alone.
-                local named, shared = ns.RecipeIndex.professions[parent], false
-                for _, candidate in ipairs(type(named) == "table" and named or {}) do
-                    if candidate == id then shared = true; break end
-                end
-                return nil, L.RECIPE_OTHER_PROFESSION, shared
-            end
-        end
-    end
     local schematic
     local needsName = not info or type(info.name) ~= "string" or (issecretvalue and issecretvalue(info.name)) or info.name == ""
     do
         local ok, value = call(C_TradeSkillUI.GetRecipeSchematic, id, false)
         if not ok or type(value) ~= "table" or (issecretvalue and issecretvalue(value))
-            or (value.recipeID ~= nil and (not positiveInteger(value.recipeID) or value.recipeID ~= id)) then
+            or ((job.provisional or value.recipeID ~= nil) and (not positiveInteger(value.recipeID) or value.recipeID ~= id)) then
             return nil, L.LOADING_REAGENTS
         end
         schematic = value
@@ -652,9 +692,43 @@ local function backgroundRecipe(job, id)
     return recipe
 end
 
+local function verifyProvisionalRecipe(job, id, known)
+    if not known then
+        job.recipes[id] = nil
+        -- A missing spell-book result is inconclusive on either pass.
+        if known == false and job.known[id] == false then job.excluded[id] = true end
+        return
+    end
+    local belongs, reason, foreign
+    if job.recipes[id] then
+        belongs, reason, foreign = backgroundMembership(job, id)
+        if not belongs then job.recipes[id] = nil end
+    else
+        -- Retry missing evidence once within the same budget as a spell check.
+        job.recipes[id], reason, foreign = backgroundRecipe(job, id)
+    end
+    if foreign then job.excluded[id] = true end
+end
+
 local function failBackgroundScan(job, reason)
-    job.failed, job.recipes = reason or L.RECIPES_LOADING, {}
+    job.failed, job.recipes, job.complete = reason or L.RECIPES_LOADING, {}, nil
+    if job.excluded then job.excluded = {} end
     return nil, false, job.failed
+end
+
+local function backgroundIndexMatches(job)
+    local verified, build, interface, candidates = API.GetRecipeIndexBuild()
+    if (verified or candidates) ~= job.indexBuild or (verified == nil) ~= job.provisional
+        or build ~= job.clientBuild or interface ~= job.interface or ns.RecipeIndex ~= job.index then
+        return false
+    end
+    local spells = job.index.professions[job.parentProfessionKey]
+    if arraySize(spells) ~= job.total then return false end
+    for position = 1, job.total do
+        local id = spells[position]
+        if id ~= job.ids[position] or not job.idSet[id] then return false end
+    end
+    return true
 end
 
 local function completeBackgroundScan(job)
@@ -664,7 +738,7 @@ local function completeBackgroundScan(job)
     if not allowed then return failBackgroundScan(job, reason) end
     local parent, why = backgroundKnownProfession(job.professionKey)
     if parent ~= job.parentProfessionKey then return failBackgroundScan(job, why or L.PROFESSION_CHANGED) end
-    if API.GetRecipeIndexBuild() ~= job.indexBuild then return failBackgroundScan(job, L.RECIPES_LOADING) end
+    if not backgroundIndexMatches(job) then return failBackgroundScan(job, L.RECIPES_LOADING) end
     job.complete = true
     return job.recipes, true
 end
@@ -679,10 +753,7 @@ function API.StepBackgroundScan(job, limit)
         return nil, false, L.RECIPES_LOADING
     end
     if job.failed then return nil, false, job.failed end
-    if job.complete then
-        if API.GetRecipeIndexBuild() ~= job.indexBuild then return failBackgroundScan(job, L.RECIPES_LOADING) end
-        return job.recipes, true
-    end
+    if job.complete then return completeBackgroundScan(job) end
     limit = limit == nil and 5 or limit
     if not positiveInteger(limit) then return failBackgroundScan(job, L.RECIPES_LOADING) end
     local allowed, reason = backgroundContext()
@@ -693,15 +764,7 @@ function API.StepBackgroundScan(job, limit)
     end
     -- Validate the index independently of the active profession. No client
     -- calls are made per candidate here; both live passes below share a budget.
-    local ids, idSet, _, _, indexBuild = backgroundSpellIDs(job.parentProfessionKey)
-    if not ids or #ids ~= job.total or indexBuild ~= job.indexBuild then
-        return failBackgroundScan(job, L.RECIPES_LOADING)
-    end
-    for position, id in ipairs(job.ids) do
-        if ids[position] ~= id or not job.idSet[id] or not idSet[id] then
-            return failBackgroundScan(job, L.RECIPES_LOADING)
-        end
-    end
+    if not backgroundIndexMatches(job) then return failBackgroundScan(job, L.RECIPES_LOADING) end
     local processed = 0
     while processed < limit do
         if job.phase == "read" and job.cursor > job.total then job.phase = "verify" end
@@ -710,9 +773,12 @@ function API.StepBackgroundScan(job, limit)
             return completeBackgroundScan(job)
         end
         local id = job.ids[cursor]
-        local ok, known = call(C_SpellBook and C_SpellBook.IsSpellKnown, id, Enum.SpellBookSpellBank.Player)
+        local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+        if bank == nil then return failBackgroundScan(job, L.PROFESSION_API_UNAVAILABLE) end
+        local ok, known = call(C_SpellBook and C_SpellBook.IsSpellKnown, id, bank)
         if not ok or (issecretvalue and issecretvalue(known)) or type(known) ~= "boolean" then
-            return failBackgroundScan(job, L.RECIPES_LOADING)
+            if not job.provisional then return failBackgroundScan(job, L.RECIPES_LOADING) end
+            known = nil
         end
         if job.phase == "read" then
             job.known[id] = known
@@ -720,13 +786,17 @@ function API.StepBackgroundScan(job, limit)
                 local recipe, failure, shared = backgroundRecipe(job, id)
                 -- A shared candidate the client attributes to its other profession
                 -- is never recorded here, and does not fail this profession's read.
-                if not recipe and not shared then return failBackgroundScan(job, failure) end
+                if not recipe and not shared and not job.provisional then return failBackgroundScan(job, failure) end
                 job.recipes[id] = recipe
             end
             job.cursor = cursor + 1
             job.progress = cursor
         else
-            if known ~= job.known[id] then return failBackgroundScan(job, L.RECIPES_LOADING) end
+            if job.provisional then
+                verifyProvisionalRecipe(job, id, known)
+            elseif known ~= job.known[id] then
+                return failBackgroundScan(job, L.RECIPES_LOADING)
+            end
             job.verifyCursor = cursor + 1
         end
         processed = processed + 1
