@@ -533,6 +533,16 @@ local function backgroundKnownProfession(key)
     return nil, L.PROFESSION_NOT_KNOWN
 end
 
+-- The spell book answers for a recipe whether or not its profession is open.
+-- Returns true or false, or nil when it cannot answer.
+function API.IsRecipeSpellKnown(recipeID)
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    if not positiveInteger(recipeID) or bank == nil then return nil end
+    local ok, known = call(C_SpellBook and C_SpellBook.IsSpellKnown, recipeID, bank)
+    if not ok or (issecretvalue and issecretvalue(known)) or type(known) ~= "boolean" then return nil end
+    return known
+end
+
 -- A newer build on the same Forever patch may use the fourth result as
 -- candidates only. Only the first result certifies a complete data set.
 function API.GetRecipeIndexBuild()

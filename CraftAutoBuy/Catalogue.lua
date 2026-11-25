@@ -250,8 +250,25 @@ end
 
 local function currentSnapshot(entry, indexBuild, build, interface)
     if entry.background then return indexBuild ~= nil and entry.backgroundBuild == indexBuild end
+    -- With a verified index, the passive read proves that a profession has no
+    -- learned recipe. An empty native read alone is only trusted without one.
     return build ~= nil and entry.nativeBuild == build and entry.nativeInterface == interface
-        and (next(entry.recipes) ~= nil or (entry.learnedCount or 0) > 0 or entry.nativeReadComplete == true)
+        and (next(entry.recipes) ~= nil or (entry.learnedCount or 0) > 0
+            or (entry.nativeReadComplete == true and indexBuild == nil))
+end
+
+-- Whether the catalogue shows a recipe of this profession, from any saved
+-- read or from the preview of a newer build, that the spell book still knows
+-- or cannot answer for. A recipe it denies was forgotten with the profession.
+local function showsKnownRecipes(parent)
+    for key, entry in pairs(records) do
+        if parentKey(key, entry) == parent then
+            for id in pairs(entry.recipes) do
+                if not (ns.API.IsRecipeSpellKnown and ns.API.IsRecipeSpellKnown(id) == false) then return true end
+            end
+        end
+    end
+    return false
 end
 
 -- Store partial reads separately. An older full record can contain a learned
@@ -473,6 +490,18 @@ function Catalogue.Record(key, recipes, background, nativeReadComplete)
     local indexBuild, build, interface = ns.API.GetRecipeIndexBuild()
     if background and not indexBuild then return false end
     local parent = parentKey(key)
+    -- A complete scan can contain learned spells without supported item output
+    -- (e.g. enchants). Distinguish it from a transient empty parent scan.
+    local learnedCount = 0
+    for _, recipe in pairs(recipes) do
+        if recipe.learned ~= false then learnedCount = learnedCount + 1 end
+    end
+    -- A ready book can briefly list no learned recipe, before its skill line
+    -- or learned flags load. Such a complete read proves nothing while the
+    -- profession shows known recipes: keep them, the preview and the reminder.
+    if not background and nativeReadComplete == true and learnedCount == 0 and showsKnownRecipes(parent) then
+        return false
+    end
     -- Optional metadata can be unavailable during a complete schematic read.
     -- Preserve the last native observation without preserving old recipes.
     local previous = records[key] and records[key].recipes or EMPTY
@@ -524,12 +553,6 @@ function Catalogue.Record(key, recipes, background, nativeReadComplete)
                 snapshots[child] = nil
             end
         end
-    end
-    -- A complete scan can contain learned spells without supported item output
-    -- (e.g. enchants). Distinguish it from a transient empty parent scan.
-    local learnedCount = 0
-    for _, recipe in pairs(recipes) do
-        if recipe.learned ~= false then learnedCount = learnedCount + 1 end
     end
     -- A first background read can use the base profession ID. A complete
     -- native child read is authoritative and must not be hidden by that cache.
