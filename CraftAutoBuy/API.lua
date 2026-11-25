@@ -904,10 +904,11 @@ end
 -- its full count while another profession was open.
 local cooldownEnds, castAt = {}, {}
 
--- Forever 71037 SpellCategories (310) and SpellCooldowns.CategoryRecoveryTime,
+-- Forever SpellCategories (310) and SpellCooldowns.CategoryRecoveryTime,
 -- in seconds, for Alchemy recipes. Refined Scale of Onyxia starts the category
 -- too. Iron to Gold and Mithril to Truesilver each have an individual cooldown.
 local ONYXIA_SCALE = 22430
+local categoryDurationBuilds = { [71037] = true, [71091] = true }
 local categorySeconds = {
     [17187] = 169200, [17559] = 82800, [17560] = 82800, [17561] = 82800,
     [17562] = 82800, [17563] = 82800, [17564] = 82800, [17565] = 82800,
@@ -922,7 +923,7 @@ local estimatedTransmutations = {}
 local function hasCategoryDurationData()
     local ok, _, build, _, interface = call(GetBuildInfo)
     return ok and not (issecretvalue and (issecretvalue(build) or issecretvalue(interface)))
-        and tonumber(build) == 71037 and interface == 16001
+        and interface == 16001 and categoryDurationBuilds[tonumber(build)] == true
 end
 
 -- The same ends are saved for the character, so that a /reload or a new login

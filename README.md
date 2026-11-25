@@ -3,16 +3,17 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Version **1.4.1**.
+Version **1.4.2**.
 
-Recipe loading runs in the background on verified Forever builds. After a game
+Recipe loading runs in the background on Forever **1.60.1.71091**. After a game
 update awaiting verification, saved recipes remain available. Open the
 professions named by CAB to update their recipes.
 
 Deposit crafting reagents at your personal bank or withdraw the materials for
 a selected recipe from its CAB tab. Clicking a recipe can open its profession.
 At a vendor, choose whether to use your bank stock and check the quantities and
-price before buying.
+price before buying. In the profession window, **To buy** updates when the game
+resets the craft quantity to one after a batch.
 
 In the CAB tab, the recipe icon shows how many items one craft produces when it makes more than one. Recipes with a variable yield show a range.
 **Craft × N** shows how many executions the next click will request. For
@@ -22,7 +23,7 @@ of the selected recipe. The same cap applies when you type the quantity.
 
 For a transmute with a cooldown, such as Iron to Gold, CAB offers at most one craft when it is ready. In the CAB tab, a line under the profession name shows the cooldown that follows a craft, with the duration given by the game. While its known cooldown is running, it counts as zero even when you view another profession. This also applies to intermediate crafts. Recipes with charges use the charge count reported by the open profession. CAB remembers these cooldowns for the character, including after a `/reload` or a new login. A cooldown CAB did not note (started without it, shared with another recipe, or lost when the game closed abruptly) is only known once its profession is open: open it before relying on **Max** or the purchase quote.
 
-The ready alert, its sound, and the floating window are on by default. You can change them in **`/cab` → Transmutations**. The alert appears once per completed cooldown, including when a tracked cooldown finishes while you are logged out. For characters who know Alchemy, the window shows each transmutation’s icon and its time remaining or **Ready**, even when CAB is closed. Hover over the icon for the recipe and over the small bag for the reagents needed for one craft and their availability in your bags, bank or at vendors. Unlock the window to move it or resize it using the bottom-right handle. A wider window fits more recipes side by side, and the mouse wheel scrolls if rows extend below it. Size, position, lock and opacity are saved per character. After you make an Arcanite Bar on Forever build 71037, the other learned recipes that share its cooldown show the same countdown. Iron to Gold and Mithril to Truesilver each keep their own timer. Open Alchemy to check a cooldown marked **Unknown**.
+The ready alert, its sound, and the floating window are on by default. You can change them in **`/cab` → Transmutations**. The alert appears once per completed cooldown, including when a tracked cooldown finishes while you are logged out. For characters who know Alchemy, the window shows each transmutation’s icon and its time remaining or **Ready**, even when CAB is closed. Hover over the icon for the recipe and over the small bag for the reagents needed for one craft and their availability in your bags, bank or at vendors. Unlock the window to move it or resize it using the bottom-right handle. A wider window fits more recipes side by side, and the mouse wheel scrolls if rows extend below it. Size, position, lock and opacity are saved per character. After you make an Arcanite Bar on Forever builds 71037 and 71091, the other learned recipes that share its cooldown show the same countdown. Iron to Gold and Mithril to Truesilver each keep their own timer. Open Alchemy to check a cooldown marked **Unknown**.
 
 ## Download and updates
 
@@ -61,9 +62,9 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version **1.4.1**.
+dans **World of Warcraft: Forever**. Version **1.4.2**.
 
-Les recettes se chargent en arrière-plan sur les builds Forever vérifiés.
+Les recettes se chargent en arrière-plan sur Forever **1.60.1.71091**.
 Après une mise à jour du jeu en attente de vérification, les recettes
 mémorisées restent disponibles. Ouvrez les métiers indiqués par CAB pour
 actualiser leurs recettes.
@@ -71,7 +72,9 @@ actualiser leurs recettes.
 Déposez les composants à la banque personnelle ou retirez les ingrédients
 d’une recette depuis sa fiche CAB. Un clic sur la recette peut ouvrir son
 métier. Chez le marchand, choisissez si le devis tient compte de la banque
-et vérifiez les quantités et le prix avant l’achat.
+et vérifiez les quantités et le prix avant l’achat. Dans la fenêtre du métier,
+**À acheter** se met à jour quand le jeu ramène la quantité à une fabrication
+après un lot.
 
 Dans l’onglet CAB, l’icône de la recette affiche le nombre d’objets produits par fabrication quand il dépasse un. Si la quantité varie, l’icône indique une fourchette.
 Le bouton **Créer × N** affiche le nombre de fabrications du prochain clic.
@@ -81,7 +84,7 @@ de la recette choisie. Ce plafond vaut aussi pour la quantité saisie à la main
 
 Pour une transmutation à recharge comme Fer en Or, CAB propose au plus une fabrication quand elle est prête. Sous le nom du métier, sa fiche indique la recharge qui suit une fabrication, avec la durée que donne le jeu. Tant que sa recharge est connue et en cours, elle compte pour zéro, même si vous consultez un autre métier. Cela vaut aussi pour les intermédiaires. Le métier ouvert fournit le nombre de charges des recettes qui en ont. CAB retient ces recharges pour ce personnage, y compris après un `/reload` ou une reconnexion. Une recharge qu’il n’a pas notée (lancée sans lui, partagée avec une autre recette, ou perdue lors d’un arrêt brutal du jeu) n’est connue qu’une fois son métier ouvert : ouvrez-le avant de vous fier à **Max** ou au devis d’achat.
 
-L’alerte, le son et la fenêtre flottante sont activés par défaut. Vous pouvez les régler dans **`/cab` → Transmutations**. L’alerte apparaît une fois par recharge terminée, y compris à la reconnexion si une recharge suivie a expiré pendant votre absence. Sur un personnage qui connaît l’Alchimie, la fenêtre affiche l’icône de chaque transmutation et le temps restant ou **Prêt**, même quand CAB est fermé. Survolez l’icône pour voir la recette et le petit sac pour connaître les composants requis pour une fabrication et leur disponibilité en sacs, en banque ou chez un marchand. Déverrouillez la fenêtre pour la déplacer ou la redimensionner par le coin inférieur droit. Une fenêtre plus large place davantage de recettes côte à côte. La molette permet de voir les lignes du bas si elles débordent. La taille, la position, le verrouillage et l’opacité sont mémorisés par personnage. Après la fabrication d’une barre d’arcanite sur le build Forever 71037, les autres recettes apprises qui partagent sa recharge affichent le même décompte. Fer en Or et Mithril en Vrai-argent ont chacun leur propre minuteur. Ouvrez l’Alchimie pour vérifier une recharge indiquée **Inconnu**.
+L’alerte, le son et la fenêtre flottante sont activés par défaut. Vous pouvez les régler dans **`/cab` → Transmutations**. L’alerte apparaît une fois par recharge terminée, y compris à la reconnexion si une recharge suivie a expiré pendant votre absence. Sur un personnage qui connaît l’Alchimie, la fenêtre affiche l’icône de chaque transmutation et le temps restant ou **Prêt**, même quand CAB est fermé. Survolez l’icône pour voir la recette et le petit sac pour connaître les composants requis pour une fabrication et leur disponibilité en sacs, en banque ou chez un marchand. Déverrouillez la fenêtre pour la déplacer ou la redimensionner par le coin inférieur droit. Une fenêtre plus large place davantage de recettes côte à côte. La molette permet de voir les lignes du bas si elles débordent. La taille, la position, le verrouillage et l’opacité sont mémorisés par personnage. Après la fabrication d’une barre d’arcanite sur les builds Forever 71037 et 71091, les autres recettes apprises qui partagent sa recharge affichent le même décompte. Fer en Or et Mithril en Vrai-argent ont chacun leur propre minuteur. Ouvrez l’Alchimie pour vérifier une recharge indiquée **Inconnu**.
 
 - **Catalogue CAB :** recettes fabricables de vos métiers, favoris, recherche
   et filtres Banque/Progression.
