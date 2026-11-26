@@ -1,11 +1,14 @@
-"""Check the live EU Forever build and retain recipe-index evidence for maintenance.
+"""Compare live WoW Forever recipe data across the five regional deployments.
 
-Print one JSON summary. Exit 0 for identical, changed or unchanged, 2 for a
-retryable upstream failure, and 1 for a local error. No addon files are written.
+Print one JSON summary with a builds entry for each version/configuration
+and its regions. updated_regions records first sightings and rollouts, even
+when recipe data is cached. Exit 0 on success, 2 for pending upstream data,
+or 1 for a local error. No addon files are written.
 """
 import argparse
 import csv
 from datetime import datetime, timezone
+from functools import cache
 import hashlib
 import http.client
 import json
@@ -20,6 +23,7 @@ import generate_recipe_index as gen
 
 VERSIONS_URL = "https://eu.version.battle.net/v2/products/wowf/versions"
 BUILDS_URL = "https://wago.tools/api/builds"
+REGIONS = ("eu", "us", "tw", "kr", "cn")
 STATE_DIR = gen.ROOT / ".tools/reviews/recipe-build-watch"
 NETWORK_ERRORS = (OSError, http.client.HTTPException)
 ATTENTION_AFTER = 3
@@ -38,7 +42,7 @@ def fetch(url):
         raise Pending(f"{url}: {error}") from error
 
 
-def live_build():
+def live_builds():
     try:
         lines = fetch(VERSIONS_URL).decode("utf-8-sig").splitlines()
     except UnicodeError as error:
@@ -46,30 +50,44 @@ def live_build():
     if not lines:
         raise Pending("Empty Blizzard versions manifest")
     headers = [field.partition("!")[0] for field in lines[0].split("|")]
-    rows = csv.DictReader((line for line in lines[1:] if not line.startswith("#")),
-                          fieldnames=headers, delimiter="|")
-    europe = [row for row in rows if row.get("Region") == "eu"]
-    if len(europe) != 1:
-        raise Pending("Expected one EU region in the Blizzard wowf manifest")
-    row = europe[0]
-    version, config = row.get("VersionsName") or "", row.get("BuildConfig") or ""
-    if not (re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\.[1-9][0-9]*", version)
-            and row.get("BuildId") == version.rsplit(".", 1)[1] and re.fullmatch(r"[0-9a-f]{32}", config)):
-        raise Pending("Invalid EU version or build configuration in the Blizzard manifest")
-    return version, config
+    if not {"Region", "BuildConfig", "BuildId", "VersionsName"}.issubset(headers) or len(headers) != len(set(headers)):
+        raise Pending("Invalid Blizzard versions manifest header")
+    by_region = {region: [] for region in REGIONS}
+    for row in csv.DictReader((line for line in lines[1:] if not line.startswith("#")),
+                              fieldnames=headers, delimiter="|"):
+        if row.get("Region") in by_region:
+            by_region[row["Region"]].append(row)
+    builds, issues = {}, {}
+    for region, rows in by_region.items():
+        if len(rows) != 1:
+            issues[region] = f"Expected one {region} row in the Blizzard manifest, found {len(rows)}"
+            continue
+        row = rows[0]
+        version, config = row.get("VersionsName") or "", row.get("BuildConfig") or ""
+        if not (re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\.[1-9][0-9]*", version)
+                and row.get("BuildId") == version.rsplit(".", 1)[1] and re.fullmatch(r"[0-9a-f]{32}", config)):
+            issues[region] = f"Invalid {region} version or build configuration in the Blizzard manifest"
+            continue
+        builds.setdefault((version, config), []).append(region)
+    return builds, issues
 
 
-def require_wago_build(version, config):
+def wago_builds():
     try:
         catalogue = json.loads(fetch(BUILDS_URL))
     except ValueError as error:
         raise Pending("Unreadable Wago build catalogue") from error
     builds = catalogue.get("wowf") if isinstance(catalogue, dict) else None
-    if not isinstance(builds, list) or not any(
-        isinstance(entry, dict) and entry.get("product") == "wowf" and entry.get("version") == version
-        and entry.get("build_config") == config for entry in builds
-    ):
-        raise Pending("Wago has not listed the live EU wowf build configuration yet")
+    if not isinstance(builds, list):
+        raise Pending("Missing wowf entries in the Wago build catalogue")
+    configs = {}
+    for entry in builds:
+        if isinstance(entry, dict) and entry.get("product") == "wowf" and isinstance(entry.get("version"), str):
+            config = entry.get("build_config")
+            if not isinstance(config, str) or not re.fullmatch(r"[0-9a-f]{32}", config):
+                config = None
+            configs.setdefault(entry["version"], set()).add(config)
+    return configs
 
 
 def write_bytes(path, data):
@@ -188,44 +206,56 @@ def cached_report(path, version, config, baseline):
 def summary(report, path, status):
     changed = report["changed_sources"]
     return {"status": status, "result": report["status"], "version": report["version"], "report": str(path),
+            "blizzard_build_config": report["blizzard_build_config"],
             "identical_exports": len(report["sources"]) - len(changed), "changed_sources": changed,
             "index_accepts_build": report["version"] in (gen.VERSION, *gen.COMPATIBLE_VERSIONS),
             "recipe_changes": report["recipe_changes"], "next_step": report["next_step"]}
 
 
-def record_pending(directory, version, config, checked, reason):
+def record_pending(directory, version, config, checked, reason, regions, legacy_path=None):
     path = directory / "last-pending.json"
-    previous = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    source = path if path.is_file() else legacy_path
+    previous = json.loads(source.read_text(encoding="utf-8")) if source and source.is_file() else {}
     matches = (previous.get("reason") == reason and previous.get("version") == version
                and previous.get("blizzard_build_config") == config)
     count = previous.get("pending_count", 1) + 1 if matches else 1
     first = previous.get("first_pending_utc", previous.get("checked_utc", checked)) if matches else checked
-    pending = {"status": "pending", "region": "eu", "product": "wowf", "version": version,
+    pending = {"status": "pending", "regions": regions, "product": "wowf", "version": version,
                "blizzard_build_config": config, "first_pending_utc": first, "checked_utc": checked,
                "reason": reason, "pending_count": count, "needs_attention": count >= ATTENTION_AFTER}
     write_json(path, pending)
     return {**pending, "report": str(path)}
 
 
-def watch(state_dir, refresh=False):
-    state_dir.mkdir(parents=True, exist_ok=True)
-    directory = state_dir
-    version = config = None
-    checked = datetime.now(timezone.utc).isoformat()
+def watch_build(state_dir, version, config, regions, checked, baseline, get_catalogue, get_reference,
+                conflicting, refresh):
+    version_dir = state_dir / version
+    directory = version_dir / config
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "report.json"
+    pending_path = directory / "last-pending.json"
+    legacy_pending = version_dir / "last-pending.json"
     try:
-        version, config = live_build()
-        (state_dir / "last-pending.json").unlink(missing_ok=True)
-        directory = state_dir / version
-        directory.mkdir(exist_ok=True)
-        baseline = {"capture_schema": 2, "version": gen.VERSION, "source_hashes": gen.SOURCE_HASHES,
-                    "generator_sha256": hashlib.sha256(Path(gen.__file__).read_bytes()).hexdigest()}
-        path = directory / "report.json"
-        pending_path = directory / "last-pending.json"
-        prior = None if refresh or pending_path.is_file() else cached_report(path, version, config, baseline)
-        if prior:
-            return summary(prior, path, "unchanged")
-        require_wago_build(version, config)
-        rows = baseline_rows(state_dir)
+        # Wago's CSV URLs select a version, not its BuildConfig. Even a cache
+        # hit cannot resolve conflicting live configurations for that version.
+        if conflicting:
+            raise Pending("The live regions use different configurations of this version; Wago CSVs select by version only")
+        if not refresh and not pending_path.is_file():
+            prior = cached_report(path, version, config, baseline)
+            if prior:
+                return summary(prior, path, "unchanged")
+            # The EU-only watcher stored its evidence directly under the version.
+            legacy_path = version_dir / "report.json"
+            if not path.exists() and not legacy_pending.is_file():
+                prior = cached_report(legacy_path, version, config, baseline)
+                if prior:
+                    return summary(prior, legacy_path, "unchanged")
+        configs = get_catalogue().get(version, set())
+        if config not in configs:
+            raise Pending("Wago has not listed this live wowf build configuration yet")
+        if configs != {config}:
+            raise Pending("Wago lists multiple configurations of this version; its CSVs select by version only")
+        rows = get_reference()
         with TemporaryDirectory(dir=directory, prefix="stage-") as stage:
             exports = Path(stage) / "exports"
             exports.mkdir()
@@ -246,7 +276,7 @@ def watch(state_dir, refresh=False):
             # failed or concurrent capture cannot replace another run's evidence.
             destination = directory / Path(stage).name.replace("stage-", "exports-", 1)
             exports.rename(destination)
-            report = {"version": version, "blizzard_build_config": config, "region": "eu", "product": "wowf",
+            report = {"version": version, "blizzard_build_config": config, "regions": regions, "product": "wowf",
                       "versions_url": VERSIONS_URL, "wago_catalogue_url": BUILDS_URL,
                       "checked_utc": checked, "baseline": baseline, "status": result,
                       "exports": destination.name, "sources": sources, "changed_sources": changed,
@@ -255,7 +285,55 @@ def watch(state_dir, refresh=False):
             pending_path.unlink(missing_ok=True)
         return summary(report, path, result)
     except Pending as error:
-        return record_pending(directory, version, config, checked, str(error))
+        return record_pending(directory, version, config, checked, str(error), regions,
+                              legacy_path=None if path.exists() else legacy_pending)
+
+
+def watch(state_dir, refresh=False):
+    state_dir.mkdir(parents=True, exist_ok=True)
+    checked = datetime.now(timezone.utc).isoformat()
+    try:
+        builds, issues = live_builds()
+    except Pending as error:
+        return {**record_pending(state_dir, None, None, checked, str(error), list(REGIONS)), "builds": []}
+    (state_dir / "last-pending.json").unlink(missing_ok=True)
+    baseline = {"capture_schema": 2, "version": gen.VERSION, "source_hashes": gen.SOURCE_HASHES,
+                "generator_sha256": hashlib.sha256(Path(gen.__file__).read_bytes()).hexdigest()}
+    get_catalogue = cache(wago_builds)
+    get_reference = cache(lambda: baseline_rows(state_dir))
+    configs_by_version = {}
+    for version, config in builds:
+        configs_by_version.setdefault(version, set()).add(config)
+
+    # A region can join a build already compared for another region. Remember
+    # the last valid deployment independently from the reusable DB2 evidence.
+    deployments_path = state_dir / "last-deployments.json"
+    deployments = json.loads(deployments_path.read_text(encoding="utf-8")) if deployments_path.is_file() else {}
+    results = []
+    for (version, config), regions in builds.items():
+        try:
+            result = watch_build(state_dir, version, config, regions, checked, baseline, get_catalogue, get_reference,
+                                 len(configs_by_version[version]) > 1, refresh)
+        except (OSError, ValueError, KeyError, csv.Error) as error:
+            result = {"status": "error", "reason": str(error), "version": version, "blizzard_build_config": config}
+        changed_regions = [region for region in regions if deployments.get(region) != [version, config]]
+        for region in regions:
+            deployments[region] = [version, config]
+            (state_dir / "regions" / region / "last-pending.json").unlink(missing_ok=True)
+        results.append({**result, "regions": regions, "updated_regions": changed_regions})
+    for region, reason in issues.items():
+        directory = state_dir / "regions" / region
+        directory.mkdir(parents=True, exist_ok=True)
+        result = record_pending(directory, None, None, checked, reason, [region])
+        results.append({**result, "updated_regions": []})
+    if any(result["updated_regions"] for result in results):
+        write_json(deployments_path, deployments)
+    # Preserve the original flat summary when all five regions use one build.
+    if len(results) == 1:
+        return {**results[0], "builds": results}
+    statuses = {result["status"] for result in results}
+    status = next(value for value in ("error", "pending", "changed", "identical", "unchanged") if value in statuses)
+    return {"status": status, "builds": results}
 
 
 def main():
