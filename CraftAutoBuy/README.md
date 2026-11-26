@@ -443,11 +443,14 @@ inconnue. La ligne
 **Marchand** apparaît si CAB connaît une source ou si le marchand ouvert
 propose le composant. **Stock à vérifier** signale que l’offre du marchand
 ouvert reste à confirmer pour une fourniture connue.
-Déverrouille la fenêtre pour la déplacer ou la redimensionner par le coin
-inférieur droit. Élargis-la pour placer plusieurs recettes côte à côte et
-utilise la molette si des lignes débordent. Les blocs de métiers partagent
-la même fenêtre et sont séparés par un espace transparent. CAB mémorise la
-taille, la position, le verrouillage et l’opacité par personnage. Le
+Déverrouille la fenêtre pour la déplacer ou pour tirer la poignée de son coin
+inférieur droit. Cette poignée règle combien de recettes se placent côte à
+côte. La hauteur suit le nombre de lignes, et près du bas de l’écran la
+fenêtre remonte pour les montrer. Si les lignes dépassent la hauteur de
+l’écran, une barre de défilement apparaît et la molette fait défiler des
+lignes entières.
+CAB mémorise le nombre de colonnes, la position, le verrouillage et
+l’opacité par personnage. Le
 catalogue peut afficher les transmutations apprises avant l’ouverture de
 l’Alchimie. **Inconnu** indique qu’aucune disponibilité n’a encore été
 confirmée. Ouvre ton Alchimie pour la vérifier. Le partage des recharges entre
