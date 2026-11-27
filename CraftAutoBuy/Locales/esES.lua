@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("esES", {
     CATALOG_COLLAPSE_ALL = "Contraer todo",
     CATALOG_EXPAND_ALL = "Expandir todo",
     CATALOG_NO_RESULTS = "Ninguna receta que se pueda fabricar coincide con los filtros o la búsqueda.",
+    CATALOG_SEARCH_NO_RESULTS = "Sin resultados",
     CATALOG_BANK_EXCLUDED = "Banco excluido del cálculo.",
     CATALOG_UNCATEGORIZED = "Sin categoría",
     INITIALIZATION_HIDE_BUTTON = "Ocultar",

@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("zhTW", {
     CATALOG_COLLAPSE_ALL = "全部收合",
     CATALOG_EXPAND_ALL = "全部展開",
     CATALOG_NO_RESULTS = "沒有符合目前篩選或搜尋條件的可製作配方。",
+    CATALOG_SEARCH_NO_RESULTS = "無搜尋結果",
     CATALOG_BANK_EXCLUDED = "計算時不納入銀行材料。",
     CATALOG_UNCATEGORIZED = "未分類",
     INITIALIZATION_HIDE_BUTTON = "隱藏",

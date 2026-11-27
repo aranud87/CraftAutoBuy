@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("zhCN", {
     CATALOG_COLLAPSE_ALL = "全部折叠",
     CATALOG_EXPAND_ALL = "全部展开",
     CATALOG_NO_RESULTS = "没有符合当前筛选或搜索条件的可制作配方。",
+    CATALOG_SEARCH_NO_RESULTS = "无搜索结果",
     CATALOG_BANK_EXCLUDED = "计算时不计入银行材料。",
     CATALOG_UNCATEGORIZED = "未分类",
     INITIALIZATION_HIDE_BUTTON = "隐藏",

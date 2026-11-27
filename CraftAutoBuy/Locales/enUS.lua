@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("enUS", {
     CATALOG_COLLAPSE_ALL = "Collapse all",
     CATALOG_EXPAND_ALL = "Expand all",
     CATALOG_NO_RESULTS = "No craftable recipes match the current filters or search.",
+    CATALOG_SEARCH_NO_RESULTS = "No results",
     CATALOG_BANK_EXCLUDED = "Bank excluded from the calculation.",
     CATALOG_UNCATEGORIZED = "Uncategorized",
     INITIALIZATION_HIDE_BUTTON = "Hide",

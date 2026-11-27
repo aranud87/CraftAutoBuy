@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("koKR", {
     CATALOG_COLLAPSE_ALL = "모두 접기",
     CATALOG_EXPAND_ALL = "모두 펼치기",
     CATALOG_NO_RESULTS = "현재 필터나 검색 조건에 맞는 제작 가능한 제조법이 없습니다.",
+    CATALOG_SEARCH_NO_RESULTS = "검색 결과 없음",
     CATALOG_BANK_EXCLUDED = "계산에서 은행을 제외합니다.",
     CATALOG_UNCATEGORIZED = "분류 없음",
     INITIALIZATION_HIDE_BUTTON = "숨기기",

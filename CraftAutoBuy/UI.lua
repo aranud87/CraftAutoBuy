@@ -946,6 +946,7 @@ local function renderList()
     widgets.progressionFilter:SetChecked(state.progressionOnly == true)
     widgets.bankFilter:SetEnabled(not ns.job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy())
     local search = widgets.search:GetText()
+    local searching = searchActive()
     local entries = ns.Catalogue and ns.Catalogue.Rows(search, state) or {}
     local favorites = ns.Catalogue and ns.Catalogue.Favorites and ns.Catalogue.Favorites(search, state) or {}
     local selectable
@@ -957,7 +958,7 @@ local function renderList()
     -- Without any known favourite, a discreet line says where WoW favourites
     -- come from. It never claims that the character has none, and it is not
     -- a section: collapsing it would also hide the favourites read later.
-    local favoritesHint = #favorites == 0 and not searchActive()
+    local favoritesHint = #favorites == 0 and not searching
         and ns.Catalogue and ns.Catalogue.FavoritesHint and ns.Catalogue.FavoritesHint() or false
     local manual = ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
     local listHint = manual ~= L.CATALOG_MANUAL_BUILD and manual or (favoritesHint and L.CATALOG_FAVORITES_FIRST_READ)
@@ -1048,11 +1049,15 @@ local function renderList()
     for index = categoryCount + 1, #categories do categories[index]:Hide() end
     widgets.listContent:SetHeight(math.max(464, y))
     restoringScroll = true
-    local offset = searchActive() and searchScroll or state.scroll or 0
+    local offset = searching and searchScroll or state.scroll or 0
     widgets.listScroll:SetVerticalScroll(math.min(offset, math.max(0, y - 464)))
     restoringScroll = false
-    widgets.empty:SetShown(#entries == 0 and #favorites == 0)
-    if #entries == 0 and #favorites == 0 then
+    local empty = #entries == 0 and #favorites == 0
+    widgets.empty:SetShown(empty)
+    if empty and searching then
+        widgets.empty:SetHeight(140)
+        widgets.empty:SetText(L.CATALOG_SEARCH_NO_RESULTS)
+    elseif empty then
         local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
         local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
         local known = ns.Catalogue and ns.Catalogue.HasRecipes and ns.Catalogue.HasRecipes()

@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("ruRU", {
     CATALOG_COLLAPSE_ALL = "Свернуть всё",
     CATALOG_EXPAND_ALL = "Развернуть всё",
     CATALOG_NO_RESULTS = "Нет доступных для изготовления рецептов, соответствующих фильтрам или поиску.",
+    CATALOG_SEARCH_NO_RESULTS = "Нет результатов",
     CATALOG_BANK_EXCLUDED = "Банк не учитывается в расчёте.",
     CATALOG_UNCATEGORIZED = "Без категории",
     INITIALIZATION_HIDE_BUTTON = "Скрыть",

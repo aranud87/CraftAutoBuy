@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("deDE", {
     CATALOG_COLLAPSE_ALL = "Alle einklappen",
     CATALOG_EXPAND_ALL = "Alle ausklappen",
     CATALOG_NO_RESULTS = "Keine herstellbaren Rezepte entsprechen den aktuellen Filtern oder der Suche.",
+    CATALOG_SEARCH_NO_RESULTS = "Keine Ergebnisse",
     CATALOG_BANK_EXCLUDED = "Bank wird bei der Berechnung nicht berücksichtigt.",
     CATALOG_UNCATEGORIZED = "Ohne Kategorie",
     INITIALIZATION_HIDE_BUTTON = "Ausblenden",

@@ -11,6 +11,7 @@ ns.Locale.RegisterLocale("itIT", {
     CATALOG_COLLAPSE_ALL = "Comprimi tutto",
     CATALOG_EXPAND_ALL = "Espandi tutto",
     CATALOG_NO_RESULTS = "Nessuna ricetta realizzabile corrisponde ai filtri o alla ricerca.",
+    CATALOG_SEARCH_NO_RESULTS = "Nessun risultato",
     CATALOG_BANK_EXCLUDED = "Banca esclusa dal calcolo.",
     CATALOG_UNCATEGORIZED = "Senza categoria",
     INITIALIZATION_HIDE_BUTTON = "Nascondi",
