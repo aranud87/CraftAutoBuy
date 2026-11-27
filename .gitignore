@@ -5,6 +5,12 @@
 !/README.md
 !/CraftAutoBuy/
 
+# Version the build watcher with its pinned recipe-index generator.
+!/scripts/
+/scripts/*
+!/scripts/generate_recipe_index.py
+!/scripts/watch_recipe_build.py
+
 # Keep temporary files out of the addon if a tool creates any there.
 **/__pycache__/
 *.py[cod]

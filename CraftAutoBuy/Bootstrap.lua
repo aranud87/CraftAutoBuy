@@ -9,6 +9,8 @@ local professions, missing = {}, {}
 local dirty, waiting, nextStepAt, retryAt, lastReason = true, false, 0, 0, nil
 local manualBuild, manualPending = false, false
 local professionRetry = {}
+local provisionalBuild, scanFinished, nativeReview = nil, false, {}
+local provisionalFailures = {}
 local lastKey, lastRecipe, lastProgress, lastTotal
 
 local function text(value)
@@ -52,32 +54,41 @@ local function ensureState()
     dirty, waiting, nextStepAt, retryAt, lastReason = true, false, 0, 0, nil
     manualBuild, manualPending = false, false
     professionRetry = {}
+    provisionalBuild, scanFinished, nativeReview, provisionalFailures = nil, false, {}, {}
     lastKey, lastRecipe, lastProgress, lastTotal = nil, nil, 0, 0
 end
 
 local function reconcile()
-    local indexBuild, clientBuild = ns.API.GetRecipeIndexBuild()
+    local indexBuild, clientBuild, interface, candidates = ns.API.GetRecipeIndexBuild()
     local known, complete = ns.API.GetProfessions()
     professions = type(known) == "table" and known or {}
     local unscanned = ns.Catalogue.MissingProfessions(true, professions)
+    provisionalBuild = candidates and clientBuild or nil
+    nativeReview = provisionalBuild and unscanned or {}
     local wanted = {}
     for _, entry in ipairs(unscanned or {}) do wanted[entry.key] = true end
     missing, total, done = {}, #professions, 0
     local active
     for _, entry in ipairs(professions) do
         if wanted[entry.key] then
-            missing[#missing + 1] = entry
             state.professions[entry.key] = nil
-            if current and current.professionKey == entry.key then active = true end
+            if provisionalBuild and (professionRetry[entry.key] == math.huge
+                or ns.Catalogue.HasProvisionalRead(entry.key, clientBuild, interface, candidates)) then
+                done = done + 1
+            else
+                missing[#missing + 1] = entry
+                if current and current.professionKey == entry.key then active = true end
+            end
         else
             done = done + 1
             state.professions[entry.key] = true
         end
     end
     if current and not active then current = nil end
-    manualBuild = clientBuild ~= nil and indexBuild == nil
+    manualBuild = clientBuild ~= nil and indexBuild == nil and candidates == nil
     manualPending = manualBuild and (complete ~= true or #missing > 0)
-    state.complete = indexBuild ~= nil and complete == true and #missing == 0
+    scanFinished = (indexBuild ~= nil or candidates ~= nil) and complete == true and #missing == 0
+    state.complete = scanFinished and #nativeReview == 0
     dirty = false
     return complete == true
 end
@@ -95,19 +106,32 @@ function Bootstrap.Wake()
     nextStepAt = 0
 end
 
-function Bootstrap.IsPending()
-    ensureState()
-    return state.complete ~= true
+function Bootstrap.OnRecipeLearned(recipeID, baseRecipeID)
+    local affected = ns.Catalogue.InvalidateLearnedRecipe(recipeID, baseRecipeID)
+    if not affected or not next(affected) then return end
+    Bootstrap.Wake()
+    for key in pairs(affected) do
+        professionRetry[key], provisionalFailures[key] = nil, nil
+        if current and current.provisional and current.professionKey == key then current.restartRequested = true end
+    end
 end
 
-local function missingNames()
+function Bootstrap.IsPending()
+    ensureState()
+    return not scanFinished
+end
+
+local function missingNames(entries)
     local names = {}
-    for _, entry in ipairs(missing) do names[#names + 1] = text(entry.name) or ns.API.ProfessionName(entry.key) end
+    for _, entry in ipairs(entries or missing) do names[#names + 1] = text(entry.name) or ns.API.ProfessionName(entry.key) end
     return table.concat(names, ", ")
 end
 
 function Bootstrap.ManualStatusText()
     ensureState()
+    if provisionalBuild and scanFinished and #nativeReview > 0 then
+        return L.CATALOG_PROVISIONAL_BUILD:format(tostring(provisionalBuild), missingNames(nativeReview))
+    end
     if not manualBuild then return nil end
     if #missing == 0 then return L.CATALOG_MANUAL_BUILD end
     return L.CATALOG_MANUAL_BUILD .. " " .. L.CATALOG_MANUAL_OPEN:format(missingNames())
@@ -116,7 +140,7 @@ end
 function Bootstrap.StatusText()
     ensureState()
     if state.complete then return nil end
-    if manualBuild then return Bootstrap.ManualStatusText() end
+    if manualBuild or (provisionalBuild and scanFinished) then return Bootstrap.ManualStatusText() end
     if waiting then
         local names = missingNames()
         if lastReason == L.CATALOG_VERIFY_HELP then
@@ -133,7 +157,8 @@ function Bootstrap.GetState()
     local workDone = current and (current.phase == "verify"
         and (current.total + (current.verifyCursor or 1) - 1) or (current.progress or 0)) or 0
     return {complete = state.complete, done = done, total = total, waiting = waiting,
-        manual = manualBuild, manualPending = manualPending,
+        manual = manualBuild, manualPending = manualPending, provisional = provisionalBuild ~= nil,
+        scanFinished = scanFinished, needsNativeReview = #nativeReview > 0,
         workDone = workDone, workTotal = workTotal,
         professionKey = current and current.professionKey or lastKey,
         recipeID = current and current.ids and current.ids[current.cursor] or lastRecipe,
@@ -150,6 +175,10 @@ local function waitForData(time, reason, key, manual)
     local changed = not waiting or lastReason ~= reason
     key = key or (current and current.professionKey)
     if key then
+        if provisionalBuild then
+            provisionalFailures[key] = (provisionalFailures[key] or 0) + 1
+            manual = manual or provisionalFailures[key] >= 3
+        end
         -- An unavailable index for this build/profession needs a native scan.
         professionRetry[key] = manual and math.huge or time + RETRY
     else retryAt = time + RETRY end
@@ -159,11 +188,11 @@ end
 
 function Bootstrap.Tick(time)
     ensureState()
-    if state.complete and not dirty then return end
+    if scanFinished and not dirty then return end
     time = type(time) == "number" and time or clock()
     if time < nextStepAt or busy() then return end
     nextStepAt = time + INTERVAL
-    local previouslyComplete, previousDone = state.complete, done
+    local previouslyFinished, previousDone, previousReview = scanFinished, done, #nativeReview
     local previousManual, previousPending, previousTotal = manualBuild, manualPending, total
     local completeList = reconcile()
     if manualBuild then
@@ -176,9 +205,9 @@ function Bootstrap.Tick(time)
         end
         return
     end
-    if state.complete then
+    if scanFinished then
         waiting, lastReason, current = false, nil, nil
-        if not previouslyComplete or previousDone ~= done then refresh() end
+        if not previouslyFinished or previousDone ~= done or previousReview ~= #nativeReview then refresh() end
         return
     end
     if time < retryAt then return end
@@ -212,13 +241,18 @@ function Bootstrap.Tick(time)
     lastKey, lastRecipe = current.professionKey, current.ids and current.ids[current.cursor]
     lastProgress, lastTotal = current.progress or 0, current.total or 0
     local ok, recipes, complete, reason = pcall(ns.API.StepBackgroundScan, current, CHUNK)
+    -- The synchronous learning event can also arrive inside a game API call.
+    if current.restartRequested then current = nil; return end
     lastProgress = current.progress or lastProgress
     lastRecipe = current.ids and current.ids[current.cursor] or lastRecipe
     if not ok then waitForData(time, L.RECIPES_LOADING); return end
     if complete == true and type(recipes) == "table" then
         local key = current.professionKey
-        if not ns.Catalogue.Record(key, recipes, true) then waitForData(time, L.RECIPES_LOADING); return end
-        professionRetry[key] = nil
+        local recorded
+        if current.provisional then recorded = ns.Catalogue.RecordProvisional(current, recipes)
+        else recorded = ns.Catalogue.Record(key, recipes, true) end
+        if not recorded then waitForData(time, L.RECIPES_LOADING); return end
+        professionRetry[key], provisionalFailures[key] = nil, nil
         current, waiting, lastReason = nil, false, nil
         reconcile()
         refresh()

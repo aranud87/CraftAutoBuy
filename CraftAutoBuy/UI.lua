@@ -642,10 +642,12 @@ function UI.Install()
     end
     panel.RecipeScroll = widgets.listScroll
     widgets.empty = label(widgets.listContent, "GameFontNormal", 8, -16, 245, 140)
+    widgets.empty:SetWordWrap(true)
     panel.EmptyText = widgets.empty
-    widgets.favoritesHint = label(widgets.listContent, "GameFontHighlightSmall", 8, 0, 245, 0)
-    widgets.favoritesHint:SetTextColor(.6, .6, .6)
-    widgets.favoritesHint:Hide()
+    widgets.catalogueHint = label(widgets.listContent, "GameFontHighlightSmall", 8, 0, 245, 0)
+    widgets.catalogueHint:SetWordWrap(true)
+    widgets.catalogueHint:SetTextColor(.6, .6, .6)
+    widgets.catalogueHint:Hide()
 
     local detail = CreateFrame("Frame", "CraftAutoBuyRecipeDetails", panel)
     detail:SetPoint("TOPLEFT", panel, "TOPLEFT", 305, 0)
@@ -944,6 +946,7 @@ local function renderList()
     widgets.progressionFilter:SetChecked(state.progressionOnly == true)
     widgets.bankFilter:SetEnabled(not ns.job and not ns.pendingStart and not ns.bankConfirmation and not ns.Merchant.IsBusy())
     local search = widgets.search:GetText()
+    local searching = searchActive()
     local entries = ns.Catalogue and ns.Catalogue.Rows(search, state) or {}
     local favorites = ns.Catalogue and ns.Catalogue.Favorites and ns.Catalogue.Favorites(search, state) or {}
     local selectable
@@ -955,9 +958,11 @@ local function renderList()
     -- Without any known favourite, a discreet line says where WoW favourites
     -- come from. It never claims that the character has none, and it is not
     -- a section: collapsing it would also hide the favourites read later.
-    local favoritesHint = widgets.favoritesHint ~= nil and #favorites == 0 and not searchActive()
+    local favoritesHint = #favorites == 0 and not searching
         and ns.Catalogue and ns.Catalogue.FavoritesHint and ns.Catalogue.FavoritesHint() or false
-    if widgets.favoritesHint then widgets.favoritesHint:Hide() end
+    local manual = ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
+    local listHint = manual ~= L.CATALOG_MANUAL_BUILD and manual or (favoritesHint and L.CATALOG_FAVORITES_FIRST_READ)
+    widgets.catalogueHint:Hide()
     favoritesShown = #favorites > 0
     if #favorites > 0 then
         roots[#roots + 1] = {key = "favorites", name = L.CATALOG_FAVORITES, entries = favorites, favorite = true}
@@ -1027,12 +1032,12 @@ local function renderList()
             y = y + (node.favorite and 36 or 20)
         end
     end
-    if favoritesHint and #entries > 0 then
-        local hint = widgets.favoritesHint
+    if listHint and (#entries > 0 or #favorites > 0) then
+        local hint = widgets.catalogueHint
         hint:ClearAllPoints()
         hint:SetPoint("TOPLEFT", widgets.listContent, "TOPLEFT", 8, -y)
         hint:SetHeight(0)
-        hint:SetText(L.CATALOG_FAVORITES_FIRST_READ)
+        hint:SetText(listHint)
         hint:Show()
         y = y + math.ceil(hint:GetStringHeight()) + 8
     end
@@ -1044,14 +1049,17 @@ local function renderList()
     for index = categoryCount + 1, #categories do categories[index]:Hide() end
     widgets.listContent:SetHeight(math.max(464, y))
     restoringScroll = true
-    local offset = searchActive() and searchScroll or state.scroll or 0
+    local offset = searching and searchScroll or state.scroll or 0
     widgets.listScroll:SetVerticalScroll(math.min(offset, math.max(0, y - 464)))
     restoringScroll = false
-    widgets.empty:SetShown(#entries == 0 and #favorites == 0)
-    if #entries == 0 and #favorites == 0 then
+    local empty = #entries == 0 and #favorites == 0
+    widgets.empty:SetShown(empty)
+    if empty and searching then
+        widgets.empty:SetHeight(140)
+        widgets.empty:SetText(L.CATALOG_SEARCH_NO_RESULTS)
+    elseif empty then
         local missing = ns.Catalogue and ns.Catalogue.MissingProfessions() or {}
         local initializing = ns.Bootstrap and ns.Bootstrap.StatusText()
-        local manual = ns.Bootstrap and ns.Bootstrap.ManualStatusText and ns.Bootstrap.ManualStatusText()
         local known = ns.Catalogue and ns.Catalogue.HasRecipes and ns.Catalogue.HasRecipes()
         local text = manual or (known and L.CATALOG_NO_RESULTS
             or (initializing and (initializing .. "\n\n" .. L.STOCK_INITIALIZING)
@@ -1061,7 +1069,9 @@ local function renderList()
         if favoritesHint and (not manual or manual == L.CATALOG_MANUAL_BUILD) then
             text = text .. "\n\n" .. L.CATALOG_FAVORITES_FIRST_READ
         end
+        widgets.empty:SetHeight(manual and 0 or 140)
         widgets.empty:SetText(text)
+        if manual then widgets.listContent:SetHeight(math.max(464, 16 + math.ceil(widgets.empty:GetStringHeight()))) end
     end
     return visible
 end

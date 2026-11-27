@@ -113,7 +113,10 @@ function BootstrapUI.Update(time)
     if not ns.Bootstrap or type(ns.Bootstrap.GetState) ~= "function" then return end
     local state = ns.Bootstrap.GetState()
     if type(state) ~= "table" then return end
-    if state.complete == true or (state.manual and not state.manualPending) then hideAutomatically(); return end
+    if state.complete == true or (state.provisional and state.scanFinished) or (state.manual and not state.manualPending) then
+        hideAutomatically()
+        return
+    end
     if not frame then create() end
     local message = ns.Bootstrap.StatusText()
     if type(message) ~= "string" or message == "" then

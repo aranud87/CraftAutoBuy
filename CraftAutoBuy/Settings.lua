@@ -12,12 +12,15 @@ local languageInitialized = false
 local languageNotices = {}
 local transmutationChecks, opacityControls = {}, {}
 local MIN_OPACITY, MAX_OPACITY = 25, 100
+-- Geometry format of the transmutation window. A new profile starts with it;
+-- Transmutations.lua converts the size saved by an earlier version once.
+Options.TRANSMUTATION_LAYOUT = 2
 
 function Options.GetTransmutationOptions()
     CraftAutoBuyDB = CraftAutoBuyDB or {}
     local prefs = CraftAutoBuyDB.transmutations
     if type(prefs) ~= "table" then
-        prefs = {}
+        prefs = {layout = Options.TRANSMUTATION_LAYOUT}
         CraftAutoBuyDB.transmutations = prefs
     end
     if prefs.alert == nil then prefs.alert = true end
