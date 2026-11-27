@@ -3,7 +3,7 @@
 **[Download on CurseForge / Télécharger sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 Crafting planner and inventory overview for **World of Warcraft: Forever**.
-Version **1.5.0-beta**.
+Version **1.5.0**.
 
 On a newer Forever **1.60.1** build with the same interface, CAB can show a
 provisional catalogue while your profession windows are closed. It displays the
@@ -63,7 +63,7 @@ for CAB to read the slot again.
 **[Téléchargement et mises à jour sur CurseForge](https://www.curseforge.com/wow/addons/craftautobuy)**
 
 CraftAutoBuy facilite la préparation des crafts et la consultation du stock
-dans **World of Warcraft: Forever**. Version **1.5.0-beta**.
+dans **World of Warcraft: Forever**. Version **1.5.0**.
 
 Sur un nouveau build de Forever **1.60.1** qui conserve la même interface,
 CAB peut afficher un catalogue provisoire quand vos métiers sont fermés.
